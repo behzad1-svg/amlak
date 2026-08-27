@@ -39,27 +39,27 @@ const STAGES = [
 
 const initialCustomers = [
   { id: 1, name: "محمد رضایی", phone: "09121234567", email: "m.rezaei@email.com", type: "خریدار", stage: "INITIAL_CONTACT", temp: "داغ", area: "سعادت‌آباد", budget: "۳ تا ۴ میلیارد", src: "سایت", nextFollowUp: "امروز" },
-  { id: 2, name: "سعید رحیمی", phone: "09382201190", email: "", type: "خریدار", stage: "INITIAL_CONTACT", temp: "گرم", area: "شهرک صنعتی", budget: "۲ میلیارد", src: "اینستاگرام", nextFollowUp: "فردا" },
-  { id: 3, name: "فرهاد یوسفی", phone: "09170042231", email: "", type: "مستاجر", stage: "INITIAL_CONTACT", temp: "سرد", area: "کوی زیتون", budget: "ماهی ۱۰ میلیون", src: "دیوار", nextFollowUp: "۲ روز بعد" },
-  { id: 4, name: "رضا احمدی", phone: "09128871120", email: "", type: "خریدار", stage: "QUALIFIED", temp: "گرم", area: "شهرک غرب", budget: "۵ میلیارد", src: "معرفی مشتری", nextFollowUp: "عقب‌افتاده" },
+  { id: 2, name: "سعید رحیمی", phone: "09382201190", email: "", type: "خریدار", stage: "INITIAL_CONTACT", temp: "گرم", area: "شهرک صنعتی", budget: " میلیارد", src: "اینستاگرام", nextFollowUp: "فردا" },
+  { id: 3, name: "فرهاد یوسفی", phone: "09170042231", email: "", type: "مستاجر", stage: "INITIAL_CONTACT", temp: "سرد", area: "کوی زیتون", budget: "ماهی ۱ میلیون", src: "دیوار", nextFollowUp: "۲ روز بعد" },
+  { id: 4, name: "رضا احمدی", phone: "09128871120", email: "", type: "خریدار", stage: "QUALIFIED", temp: "گرم", area: "شهرک غرب", budget: " میلیارد", src: "معرفی مشتری", nextFollowUp: "عقب‌افتاده" },
   { id: 5, name: "مریم حسینی", phone: "09354418820", email: "", type: "مستاجر", stage: "QUALIFIED", temp: "گرم", area: "بندرگاه", budget: "ماهی ۸ میلیون", src: "تماس مستقیم", nextFollowUp: "امروز" },
   { id: 6, name: "احسان پایدار", phone: "09125503391", email: "", type: "خریدار", stage: "VIEWING", temp: "داغ", area: "کوی زیتون", budget: "۴ میلیارد", src: "اینستاگرام", nextFollowUp: "امروز" },
 ];
 
 const matches = [
-  { pct: 96, file: "فایل #۴۵۲۱", desc: "مناسب برای محمد رضایی", ago: "۲ ساعت پیش" },
+  { pct: 96, file: "فایل #۵۲۱", desc: "مناسب برای محمد رضایی", ago: "۲ ساعت پیش" },
   { pct: 92, file: "فایل #۳۴۱۲", desc: "مناسب برای علی احمدی", ago: "۳ ساعت پیش" },
   { pct: 89, file: "فایل #۲۲۱۰", desc: "مناسب برای سارا کریمی", ago: "۵ ساعت پیش" },
 ];
 
 const todayPriorities = [
-  { time: "۰۹:۳۰", tag: "تماس", tagTone: "accent", name: "محمد رضایی", desc: "درباره فایل #۴۵۲۱ صحبت شد" },
+  { time: "۰۹:۳", tag: "تماس", tagTone: "accent", name: "محمد رضایی", desc: "درباره فایل #۴۵۲۱ صحبت شد" },
   { time: "۱۱:۰۰", tag: "پیگیری", tagTone: "gold", name: "مالک فایل #۴۵۲۱", desc: "پیگیری کاهش قیمت" },
-  { time: "۱۵:۰۰", tag: "بازدید", tagTone: "success", name: "بازدید فایل #۲۲۱۰", desc: "همراه: آقای احمدی" },
+  { time: "۵:۰۰", tag: "بازدید", tagTone: "success", name: "بازدید فایل #۲۲۰", desc: "همراه: آقای احمدی" },
 ];
 
 const properties = [
-  { title: "آپارتمان ۱۲۰ متری، کوی زیتون", type: "آپارتمان", dealType: "SALE", price: "۳.۲ میلیارد", status: "فعال", beds: 3, match: 4 },
+  { title: "آپارتمان ۲۰ متری، کوی زیتون", type: "آپارتمان", dealType: "SALE", price: "۳.۲ میلیارد", status: "فعال", beds: 3, match: 4 },
   { title: "ویلایی حیاط‌دار، بندرگاه", type: "ویلا", dealType: "SALE", price: "۵.۸ میلیارد", status: "رزرو شده", beds: 4, match: 2 },
   { title: "اداری ۶۰ متری، خیابان معلم", type: "اداری", dealType: "RENT", price: "رهن ۲۰۰م / اجاره ۹م", status: "فعال", beds: 0, match: 6 },
 ];
@@ -154,7 +154,7 @@ export default function SajCRM() {
               <>
                 <div>
                   <h1 className="text-xl font-extrabold" style={{ color: T.text }}>سلام بهزاد 👋</h1>
-                  <p className="text-sm mt-1" style={{ color: T.textMuted }}>امروز شنبه، ۲۵ مرداد ۱۴۰۳ — این‌هفته ۳ بازدید، ۴ پیگیری و ۵ Match جدید داری.</p>
+                  <p className="text-sm mt-1" style={{ color: T.textMuted }}>امروز شنبه، ۲۵ مرداد ۱۴۰۳ — این‌هفته ۳ بازدید،  پیگیری و ۵ Match جدید داری.</p>
                 </div>
                 <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
                   {[
