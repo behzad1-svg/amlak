@@ -1,0 +1,75 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+model User {
+  id            String   @id @default(uuid())
+  email         String   @unique
+  password      String
+  fullName      String
+  role          String   @default("agent")
+  tokenVersion  Int      @default(0)
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+  activities    Activity[]
+  
+  @@map("users")
+}
+
+model Customer {
+  id            String   @id @default(uuid())
+  name          String
+  phone         String
+  email         String?
+  type          String
+  stage         String   @default("NEW")
+  temp          String   @default("cold")
+  area          String?
+  budget        String?
+  source        String   @default("website")
+  nextFollowUp  String?
+  lostReason    String?
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+  activities    Activity[]
+  
+  @@map("customers")
+}
+
+model Property {
+  id            String   @id @default(uuid())
+  title         String
+  type          String
+  dealType      String
+  price         String
+  status        String   @default("active")
+  beds          Int      @default(0)
+  area          Int?
+  address       String?
+  description   String?
+  matchedCustomers Int   @default(0)
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+  
+  @@map("properties")
+}
+
+model Activity {
+  id            String   @id @default(uuid())
+  type          String
+  description   String
+  customerId    String
+  customer      Customer @relation(fields: [customerId], references: [id])
+  userId        String
+  user          User     @relation(fields: [userId], references: [id])
+  scheduledAt   DateTime?
+  completedAt   DateTime?
+  createdAt     DateTime @default(now())
+  
+  @@map("activities")
+}
