@@ -4,7 +4,7 @@ import React, { useState, useEffect } from "react";
 import {
   Home, Users, Building2, CalendarClock, Handshake, Inbox as InboxIcon,
   FileText, BarChart3, Bell, Settings, Search, Phone, MapPin,
-  Clock, ChevronLeft, TrendingUp, Target, X, Archive, Plus, Mail
+  Clock, ChevronLeft, Target, X, Archive, Plus, Mail
 } from "lucide-react";
 
 type Customer = {
@@ -52,7 +52,6 @@ const STAGES = [
   { key: "CONTRACT", label: "قرارداد" },
 ];
 
-// داده‌های ساختگی برای Matchها (در فاز بعدی از دیتابیس خوانده می‌شوند)
 const matches = [
   { pct: 96, file: "فایل #۴۵۲۱", desc: "مناسب برای محمد رضایی", ago: "۲ ساعت پیش" },
   { pct: 92, file: "فایل #۳۴۱", desc: "مناسب برای علی احمدی", ago: "۳ ساعت پیش" },
@@ -88,11 +87,21 @@ export default function SajCRM() {
   const [customers, setCustomers] = useState<Customer[]>([]);
   const [loading, setLoading] = useState(true);
   const [selectedCustomer, setSelectedCustomer] = useState<Customer | null>(null);
-  const [dragId, setDragId] = useState<string | null>(null);
-  const [dragOverStage, setDragOverStage] = useState<string | null>(null);
   const [showArchive, setShowArchive] = useState(false);
+  
+  // State برای مودال افزودن مشتری
+  const [isAddModalOpen, setIsAddModalOpen] = useState(false);
+  const [newCustomer, setNewCustomer] = useState({
+    name: "", phone: "", type: "BUYER", stage: "NEW", temp: "WARM", 
+    source: "DIRECT_CALL", area: "", budget: "", nextFollowUp: new Date().toISOString().slice(0, 16)
+  });
+  const [submitting, setSubmitting] = useState(false);
 
   useEffect(() => {
+    fetchCustomers();
+  }, []);
+
+  const fetchCustomers = () => {
     fetch('/api/customers')
       .then(res => res.json())
       .then(data => {
@@ -100,7 +109,40 @@ export default function SajCRM() {
         setLoading(false);
       })
       .catch(() => setLoading(false));
-  }, []);
+  };
+
+  const handleAddCustomer = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setSubmitting(true);
+    try {
+      const res = await fetch('/api/customers', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          ...newCustomer,
+          nextFollowUpAt: newCustomer.nextFollowUp ? new Date(newCustomer.nextFollowUp).toISOString() : null,
+        }),
+      });
+      
+      const data = await res.json();
+      
+      if (res.ok) {
+        setIsAddModalOpen(false);
+        setNewCustomer({
+          name: "", phone: "", type: "BUYER", stage: "NEW", temp: "WARM", 
+          source: "DIRECT_CALL", area: "", budget: "", nextFollowUp: new Date().toISOString().slice(0, 16)
+        });
+        fetchCustomers();
+      } else {
+        alert(data.error || "خطا در ثبت مشتری");
+      }
+    } catch (error) {
+      console.error(error);
+      alert("خطا در ارتباط با سرور");
+    } finally {
+      setSubmitting(false);
+    }
+  };
 
   if (loading) {
     return <div className="flex items-center justify-center h-screen" style={{ background: T.bg, color: T.text }}>در حال بارگذاری...</div>;
@@ -140,14 +182,13 @@ export default function SajCRM() {
 
         {/* Main Content */}
         <div className="flex-1 min-w-0">
-          {/* Header */}
           <header className="flex items-center justify-between px-5 md:px-8 h-16 border-b sticky top-0 z-10" style={{ background: "rgba(255,255,255,0.85)", backdropFilter: "blur(6px)", borderColor: T.borderSoft }}>
             <div className="hidden sm:flex items-center gap-2 px-3 py-2 rounded-xl w-72" style={{ background: T.surface, border: `1px solid ${T.border}` }}>
               <Search size={16} style={{ color: T.textFaint }} />
               <span className="text-sm" style={{ color: T.textFaint }}>جستجوی مشتری، ملک، لید...</span>
             </div>
             <div className="flex items-center gap-3">
-              <button className="relative p-2 rounded-lg" style={{ background: T.surface }}><Bell size={17} style={{ color: T.textMuted }} /><span className="absolute -top-1 -left-1 w-4 h-4 rounded-full text-[10px] flex items-center justify-center font-bold" style={{ background: T.accent, color: T.onAccent }}></span></button>
+              <button className="relative p-2 rounded-lg" style={{ background: T.surface }}><Bell size={17} style={{ color: T.textMuted }} /><span className="absolute -top-1 -left-1 w-4 h-4 rounded-full text-[10px] flex items-center justify-center font-bold" style={{ background: T.accent, color: T.onAccent }}>۳</span></button>
               <div className="w-9 h-9 rounded-full flex items-center justify-center font-bold text-sm" style={{ background: T.goldSoft, color: T.gold }}>ب</div>
             </div>
           </header>
@@ -155,56 +196,38 @@ export default function SajCRM() {
           <main className="p-5 md:p-8 space-y-6">
             {active === "today" && (
               <>
-                {/* Welcome Section */}
-                <div>
-                  <h1 className="text-xl font-extrabold" style={{ color: T.text }}>سلام بهزاد 👋</h1>
-                  <p className="text-sm mt-1" style={{ color: T.textMuted }}>امروز شنبه، ۲۵ مرداد ۴۰۳ — این‌هفته {viewings.length} بازدید، {todayFollowUps.length} پیگیری و {matches.length} Match جدید داری.</p>
+                <div className="flex items-center justify-between">
+                  <div>
+                    <h1 className="text-xl font-extrabold" style={{ color: T.text }}>سلام بهزاد 👋</h1>
+                    <p className="text-sm mt-1" style={{ color: T.textMuted }}>امروز شنبه، ۲۵ مرداد ۱۴۰۳ — این‌هفته {viewings.length} بازدید، {todayFollowUps.length} پیگیری و {matches.length} Match جدید داری.</p>
+                  </div>
+                  <button onClick={() => setIsAddModalOpen(true)} className="flex items-center gap-2 px-4 py-2.5 rounded-xl text-sm font-bold transition-colors" style={{ background: T.accent, color: T.onAccent }}>
+                    <Plus size={16} /> افزودن مشتری جدید
+                  </button>
                 </div>
 
                 {/* KPI Cards */}
                 <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-                  <Card>
-                    <Clock size={18} style={{ color: T.accent }} />
-                    <div className="text-2xl font-extrabold mt-3" style={{ color: T.text }}>{overdue.length}</div>
-                    <div className="text-xs mt-1" style={{ color: T.textMuted }}>عقب‌افتاده</div>
-                  </Card>
-                  <Card>
-                    <CalendarClock size={18} style={{ color: T.gold }} />
-                    <div className="text-2xl font-extrabold mt-3" style={{ color: T.text }}>{todayFollowUps.length}</div>
-                    <div className="text-xs mt-1" style={{ color: T.textMuted }}>پیگیری امروز</div>
-                  </Card>
-                  <Card>
-                    <Users size={18} style={{ color: T.success }} />
-                    <div className="text-2xl font-extrabold mt-3" style={{ color: T.text }}>{viewings.length}</div>
-                    <div className="text-xs mt-1" style={{ color: T.textMuted }}>بازدید</div>
-                  </Card>
-                  <Card>
-                    <Target size={18} style={{ color: T.gold }} />
-                    <div className="text-2xl font-extrabold mt-3" style={{ color: T.text }}>{matches.length}</div>
-                    <div className="text-xs mt-1" style={{ color: T.textMuted }}>Match جدید</div>
-                  </Card>
+                  <Card><Clock size={18} style={{ color: T.accent }} /><div className="text-2xl font-extrabold mt-3" style={{ color: T.text }}>{overdue.length}</div><div className="text-xs mt-1" style={{ color: T.textMuted }}>عقب‌افتاده</div></Card>
+                  <Card><CalendarClock size={18} style={{ color: T.gold }} /><div className="text-2xl font-extrabold mt-3" style={{ color: T.text }}>{todayFollowUps.length}</div><div className="text-xs mt-1" style={{ color: T.textMuted }}>پیگیری امروز</div></Card>
+                  <Card><Users size={18} style={{ color: T.success }} /><div className="text-2xl font-extrabold mt-3" style={{ color: T.text }}>{viewings.length}</div><div className="text-xs mt-1" style={{ color: T.textMuted }}>بازدید</div></Card>
+                  <Card><Target size={18} style={{ color: T.gold }} /><div className="text-2xl font-extrabold mt-3" style={{ color: T.text }}>{matches.length}</div><div className="text-xs mt-1" style={{ color: T.textMuted }}>Match جدید</div></Card>
                 </div>
 
                 {/* Matches and Priorities Grid */}
                 <div className="grid lg:grid-cols-2 gap-6">
-                  {/* Matches */}
                   <Card>
                     <SectionTitle icon={Target} title="Matchهای جدید" />
                     <div className="space-y-3">
                       {matches.map((m, i) => (
                         <div key={i} className="flex items-center gap-3 p-3 rounded-xl" style={{ background: T.surfaceRaised }}>
                           <div className="w-11 h-11 rounded-full flex items-center justify-center text-xs font-extrabold shrink-0" style={{ border: `2px solid ${T.success}`, color: T.success }}>{m.pct}%</div>
-                          <div className="flex-1">
-                            <div className="text-sm font-bold" style={{ color: T.text }}>{m.file}</div>
-                            <div className="text-xs" style={{ color: T.textMuted }}>{m.desc}</div>
-                          </div>
+                          <div className="flex-1"><div className="text-sm font-bold" style={{ color: T.text }}>{m.file}</div><div className="text-xs" style={{ color: T.textMuted }}>{m.desc}</div></div>
                           <span className="text-[11px]" style={{ color: T.textFaint }}>{m.ago}</span>
                         </div>
                       ))}
                     </div>
                   </Card>
-
-                  {/* Today's Priorities */}
                   <Card>
                     <SectionTitle icon={CalendarClock} title="اولویت‌های امروز" />
                     <div className="space-y-3">
@@ -212,22 +235,16 @@ export default function SajCRM() {
                         <div key={i} className="flex items-center justify-between p-3 rounded-xl" style={{ background: T.surfaceRaised }}>
                           <div className="flex items-center gap-3">
                             <Badge tone="gold">پیگیری</Badge>
-                            <div>
-                              <div className="text-sm font-bold" style={{ color: T.text }}>{c.name}</div>
-                              <div className="text-xs mt-0.5" style={{ color: T.textMuted }}>{c.area || "نامشخص"} — {c.type}</div>
-                            </div>
+                            <div><div className="text-sm font-bold" style={{ color: T.text }}>{c.name}</div><div className="text-xs mt-0.5" style={{ color: T.textMuted }}>{c.area || "نامشخص"} — {c.type}</div></div>
                           </div>
                           <ChevronLeft size={16} style={{ color: T.textFaint }} />
                         </div>
                       ))}
-                      {todayFollowUps.length === 0 && (
-                        <div className="text-sm text-center py-4" style={{ color: T.textFaint }}>پیگیری امروز ندارید</div>
-                      )}
+                      {todayFollowUps.length === 0 && <div className="text-sm text-center py-4" style={{ color: T.textFaint }}>پیگیری امروز ندارید</div>}
                     </div>
                   </Card>
                 </div>
 
-                {/* Recent Customers Table */}
                 <Card>
                   <SectionTitle icon={Users} title="پیگیری‌های نزدیک" />
                   <div className="overflow-x-auto">
@@ -260,32 +277,26 @@ export default function SajCRM() {
 
             {active === "customers" && (
               <>
-                <div className="flex items-center justify-between">
+                <div className="flex items-center justify-between mb-4">
                   <div />
-                  <button onClick={() => setShowArchive((v) => !v)} className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-bold" style={{ background: T.surface, border: `1px solid ${T.border}`, color: T.textMuted }}>
-                    <Archive size={13} /> {showArchive ? "برگشت به کانبان" : `بایگانی (${customers.filter((c) => c.stage === "LOST").length})`}
-                  </button>
+                  <div className="flex gap-2">
+                    <button onClick={() => setIsAddModalOpen(true)} className="flex items-center gap-2 px-4 py-2 rounded-xl text-sm font-bold" style={{ background: T.accent, color: T.onAccent }}><Plus size={15} /> افزودن مشتری</button>
+                    <button onClick={() => setShowArchive((v) => !v)} className="flex items-center gap-1.5 px-3 py-2 rounded-lg text-xs font-bold" style={{ background: T.surface, border: `1px solid ${T.border}`, color: T.textMuted }}>
+                      <Archive size={13} /> {showArchive ? "برگشت به کانبان" : `بایگانی`}
+                    </button>
+                  </div>
                 </div>
                 {showArchive ? (
                   <div className="space-y-2">
                     {customers.filter((c) => c.stage === "LOST").length === 0 && <div className="text-sm text-center py-8" style={{ color: T.textFaint }}>هنوز مشتری‌ای بایگانی نشده</div>}
                     {customers.filter((c) => c.stage === "LOST").map((c) => (
-                      <Card key={c.id}>
-                        <div className="flex items-center justify-between">
-                          <div>
-                            <div className="text-sm font-bold" style={{ color: T.text }}>{c.name}</div>
-                            <div className="text-xs mt-1" style={{ color: T.textMuted }}>دلیل: {c.lostReason || "—"}</div>
-                          </div>
-                          <Badge tone="muted">از دست رفته</Badge>
-                        </div>
-                      </Card>
+                      <Card key={c.id}><div className="flex items-center justify-between"><div><div className="text-sm font-bold" style={{ color: T.text }}>{c.name}</div><div className="text-xs mt-1" style={{ color: T.textMuted }}>دلیل: {c.lostReason || "—"}</div></div><Badge tone="muted">از دست رفته</Badge></div></Card>
                     ))}
                   </div>
                 ) : (
                   <div className="flex gap-4 overflow-x-auto pb-2">
                     {STAGES.map((s) => {
                       const inStage = customers.filter((c) => c.stage === s.key);
-                      const isOver = dragOverStage === s.key;
                       return (
                         <div key={s.key} className="w-64 shrink-0">
                           <div className="flex items-center justify-between rounded-xl px-3 py-2.5 mb-3" style={{ background: T.surfaceRaised }}>
@@ -299,7 +310,6 @@ export default function SajCRM() {
                                 <div className="text-xs mt-1 flex items-center gap-1" style={{ color: T.textMuted }}><MapPin size={10} /> {c.area || "نامشخص"}</div>
                               </button>
                             ))}
-                            <button className="w-full text-xs py-2 rounded-xl border border-dashed" style={{ color: T.textFaint, borderColor: T.border }}>+ افزودن مشتری</button>
                           </div>
                         </div>
                       );
@@ -318,7 +328,69 @@ export default function SajCRM() {
         </div>
       </div>
 
-      {/* Customer Detail Modal */}
+      {/* Add Customer Modal */}
+      {isAddModalOpen && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4" style={{ background: "rgba(0,0,0,0.6)" }}>
+          <div className="w-full max-w-md rounded-2xl p-6 max-h-[90vh] overflow-y-auto" style={{ background: T.surface, border: `1px solid ${T.border}` }}>
+            <div className="flex items-center justify-between mb-5">
+              <h3 className="font-bold text-lg" style={{ color: T.text }}>افزودن مشتری جدید</h3>
+              <button onClick={() => setIsAddModalOpen(false)}><X size={20} style={{ color: T.textFaint }} /></button>
+            </div>
+            <form onSubmit={handleAddCustomer} className="space-y-4">
+              <div>
+                <label className="block text-xs font-bold mb-1" style={{ color: T.textMuted }}>نام و نام خانوادگی *</label>
+                <input required type="text" value={newCustomer.name} onChange={e => setNewCustomer({...newCustomer, name: e.target.value})} className="w-full px-3 py-2 rounded-lg text-sm border focus:outline-none focus:ring-2" style={{ borderColor: T.border, background: T.bgSoft, color: T.text }} />
+              </div>
+              <div className="grid grid-cols-2 gap-4">
+                <div>
+                  <label className="block text-xs font-bold mb-1" style={{ color: T.textMuted }}>شماره تماس *</label>
+                  <input required type="tel" value={newCustomer.phone} onChange={e => setNewCustomer({...newCustomer, phone: e.target.value})} className="w-full px-3 py-2 rounded-lg text-sm border focus:outline-none" style={{ borderColor: T.border, background: T.bgSoft, color: T.text }} />
+                </div>
+                <div>
+                  <label className="block text-xs font-bold mb-1" style={{ color: T.textMuted }}>نوع نیاز</label>
+                  <select value={newCustomer.type} onChange={e => setNewCustomer({...newCustomer, type: e.target.value})} className="w-full px-3 py-2 rounded-lg text-sm border focus:outline-none" style={{ borderColor: T.border, background: T.bgSoft, color: T.text }}>
+                    <option value="BUYER">خریدار</option>
+                    <option value="SELLER">فروشنده</option>
+                    <option value="TENANT">مستاجر</option>
+                  </select>
+                </div>
+              </div>
+              <div className="grid grid-cols-2 gap-4">
+                <div>
+                  <label className="block text-xs font-bold mb-1" style={{ color: T.textMuted }}>مرحله</label>
+                  <select value={newCustomer.stage} onChange={e => setNewCustomer({...newCustomer, stage: e.target.value})} className="w-full px-3 py-2 rounded-lg text-sm border focus:outline-none" style={{ borderColor: T.border, background: T.bgSoft, color: T.text }}>
+                    {STAGES.map(s => <option key={s.key} value={s.key}>{s.label}</option>)}
+                  </select>
+                </div>
+                <div>
+                  <label className="block text-xs font-bold mb-1" style={{ color: T.textMuted }}>دما (اهمیت)</label>
+                  <select value={newCustomer.temp} onChange={e => setNewCustomer({...newCustomer, temp: e.target.value})} className="w-full px-3 py-2 rounded-lg text-sm border focus:outline-none" style={{ borderColor: T.border, background: T.bgSoft, color: T.text }}>
+                    <option value="HOT">داغ 🔥</option>
+                    <option value="WARM">گرم 🌤️</option>
+                    <option value="COLD">سرد ❄️</option>
+                  </select>
+                </div>
+              </div>
+              <div>
+                <label className="block text-xs font-bold mb-1" style={{ color: T.textMuted }}>منطقه مورد نظر</label>
+                <input type="text" value={newCustomer.area} onChange={e => setNewCustomer({...newCustomer, area: e.target.value})} className="w-full px-3 py-2 rounded-lg text-sm border focus:outline-none" style={{ borderColor: T.border, background: T.bgSoft, color: T.text }} />
+              </div>
+              <div>
+                <label className="block text-xs font-bold mb-1" style={{ color: T.textMuted }}>پیگیری بعدی *</label>
+                <input required type="datetime-local" value={newCustomer.nextFollowUp} onChange={e => setNewCustomer({...newCustomer, nextFollowUp: e.target.value})} className="w-full px-3 py-2 rounded-lg text-sm border focus:outline-none" style={{ borderColor: T.border, background: T.bgSoft, color: T.text }} />
+              </div>
+              <div className="pt-2 flex gap-3">
+                <button type="button" onClick={() => setIsAddModalOpen(false)} className="flex-1 py-2.5 rounded-xl text-sm font-bold" style={{ background: T.surfaceRaised, color: T.textMuted }}>انصراف</button>
+                <button type="submit" disabled={submitting} className="flex-1 py-2.5 rounded-xl text-sm font-bold" style={{ background: T.accent, color: T.onAccent, opacity: submitting ? 0.7 : 1 }}>
+                  {submitting ? 'در حال ثبت...' : 'ثبت مشتری'}
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* Customer Detail Modal (Existing) */}
       {selectedCustomer && (
         <div className="fixed inset-0 z-30 flex justify-end" style={{ background: "rgba(0,0,0,0.5)" }}>
           <div className="w-full max-w-sm h-full overflow-y-auto p-5 border-r" style={{ background: T.bgSoft, borderColor: T.border }}>
@@ -331,7 +403,6 @@ export default function SajCRM() {
               <div>
                 <div className="font-bold" style={{ color: T.text }}>{selectedCustomer.name}</div>
                 <div className="text-xs flex items-center gap-1 mt-1" style={{ color: T.textMuted }}><Phone size={11} /> {selectedCustomer.phone}</div>
-                {selectedCustomer.email && <div className="text-xs flex items-center gap-1 mt-1" style={{ color: T.textMuted }}><Mail size={11} /> {selectedCustomer.email}</div>}
               </div>
             </div>
             <div className="mb-2"><Badge tone="gold">{STAGES.find(s => s.key === selectedCustomer.stage)?.label}</Badge></div>
