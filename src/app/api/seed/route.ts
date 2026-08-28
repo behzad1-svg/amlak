@@ -3,17 +3,67 @@ import { prisma } from '@/lib/prisma';
 
 export async function GET() {
   try {
+    // ۱. اطمینان از وجود یک کاربر پیش‌فرض (برای جلوگیری از خطای Foreign Key)
+    let defaultAgent = await prisma.user.findFirst({ where: { role: 'OWNER' } });
+    if (!defaultAgent) {
+      defaultAgent = await prisma.user.create({
+        data: { 
+          name: 'مدیر سیستم', 
+          phone: '09123456789', 
+          passwordHash: 'temp_hash', 
+          role: 'OWNER' 
+        }
+      });
+    }
+
+    // ۲. پاک کردن داده‌های قدیمی
     await prisma.customer.deleteMany({});
+
+    // ۳. درج داده‌های جدید با فرمت صحیح Enumها و تاریخ
     await prisma.customer.createMany({
       data: [
-        { name: "محمد رضایی", phone: "09121234567", type: "خریدار", stage: "INITIAL_CONTACT", temp: "داغ", area: "سعادت‌آباد", budget: "۳ میلیارد", source: "سایت", nextFollowUp: "امروز" },
-        { name: "سعید رحیمی", phone: "09382201190", type: "خریدار", stage: "VIEWING", temp: "گرم", area: "شهرک صنعتی", budget: "۲ میلیارد", source: "اینستاگرام", nextFollowUp: "فردا" },
-        { name: "مریم حسینی", phone: "09354418820", type: "مستاجر", stage: "QUALIFIED", temp: "سرد", area: "بندرگاه", budget: "ماهی ۸ میلیون", source: "تماس", nextFollowUp: "امروز" }
+        {
+          name: "محمد رضایی",
+          phone: "09121234567",
+          type: "BUYER", // Enum صحیح
+          stage: "INITIAL_CONTACT",
+          temperature: "HOT", // Enum صحیح
+          preferredArea: "سعادت‌آباد",
+          budgetMin: 3000000000,
+          source: "WEBSITE", // Enum صحیح
+          nextFollowUpAt: new Date(), // تاریخ امروز
+          assignedAgentId: defaultAgent.id,
+        },
+        {
+          name: "سعید رحیمی",
+          phone: "09382201190",
+          type: "BUYER",
+          stage: "VIEWING",
+          temperature: "WARM",
+          preferredArea: "شهرک صنعتی",
+          budgetMin: 2000000000,
+          source: "INSTAGRAM",
+          nextFollowUpAt: new Date(Date.now() + 86400000), // تاریخ فردا
+          assignedAgentId: defaultAgent.id,
+        },
+        {
+          name: "مریم حسینی",
+          phone: "09354418820",
+          type: "TENANT", // Enum صحیح
+          stage: "QUALIFIED",
+          temperature: "COLD",
+          preferredArea: "بندرگاه",
+          budgetMax: 8000000,
+          source: "DIRECT_CALL", // Enum صحیح
+          nextFollowUpAt: new Date(),
+          assignedAgentId: defaultAgent.id,
+        }
       ],
     });
+
     return NextResponse.json({ message: "Database seeded successfully!" });
   } catch (error) {
-    console.error(error);
-    return NextResponse.json({ error: "Failed" }, { status: 500 });
+    console.error("Seed error:", error);
+    return NextResponse.json({ error: "Failed to seed database" }, { status: 500 });
   }
 }
