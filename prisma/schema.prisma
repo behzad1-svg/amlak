@@ -1,6 +1,3 @@
-// املاک ساج — Prisma schema (v3: سرنخ و مشتری یکی شدن، pipeline واحد)
-// استک: PostgreSQL + Prisma، یک اپ Next.js واحد
-
 generator client {
   provider = "prisma-client-js"
 }
@@ -10,105 +7,20 @@ datasource db {
   url      = env("DATABASE_URL")
 }
 
-enum UserRole {
-  OWNER
-  AGENT
-}
-
-enum CustomerType {
-  BUYER
-  SELLER
-  TENANT
-}
-
-enum CustomerTemperature {
-  HOT
-  WARM
-  COLD
-}
-
-enum PropertyType {
-  APARTMENT
-  VILLA
-  OFFICE
-  LAND
-  SHOP
-}
-
-enum PropertyDealType {
-  SALE
-  RENT
-}
-
-enum PropertyStatus {
-  ACTIVE
-  RESERVED
-  SOLD
-  RENTED
-}
-
-enum PropertyVisibility {
-  TEAM_VISIBLE
-  RESTRICTED
-}
-
-enum ViewingStatus {
-  SCHEDULED
-  DONE
-  CANCELED
-}
-
-enum CustomerPipelineStage {
-  NEW
-  INITIAL_CONTACT
-  QUALIFIED
-  VIEWING
-  CONTRACT
-  LOST
-}
-
-enum LostReasonCategory {
-  CUSTOMER_WITHDREW
-  PRICE_REJECTED
-  NO_RESPONSE
-  NO_SUITABLE_PROPERTY
-  OTHER
-}
-
-enum NotificationPriority {
-  LOW
-  NORMAL
-  HIGH
-}
-
-enum CustomerSource {
-  INSTAGRAM
-  DIVAR
-  DIRECT_CALL
-  REFERRAL
-  SIGN_BOARD
-  WEBSITE
-  OTHER
-}
-
-enum NotificationType {
-  MATCH_SUGGESTION
-  FOLLOW_UP_OVERDUE
-  VIEWING_REMINDER
-  ACCESS_GRANTED
-}
-
-enum ActivityType {
-  CALL
-  MESSAGE
-  MEETING
-  NOTE
-  APPRAISAL
-  ADVERTISED
-  VIEWING_DONE
-  STAGE_CHANGE
-  OTHER
-}
+enum UserRole { OWNER AGENT }
+enum CustomerType { BUYER SELLER TENANT }
+enum CustomerTemperature { HOT WARM COLD }
+enum PropertyType { APARTMENT VILLA OFFICE LAND SHOP }
+enum PropertyDealType { SALE RENT }
+enum PropertyStatus { ACTIVE RESERVED SOLD RENTED }
+enum PropertyVisibility { TEAM_VISIBLE RESTRICTED }
+enum ViewingStatus { SCHEDULED DONE CANCELED }
+enum CustomerPipelineStage { NEW INITIAL_CONTACT QUALIFIED VIEWING CONTRACT LOST }
+enum LostReasonCategory { CUSTOMER_WITHDREW PRICE_REJECTED NO_RESPONSE NO_SUITABLE_PROPERTY OTHER }
+enum NotificationPriority { LOW NORMAL HIGH }
+enum CustomerSource { INSTAGRAM DIVAR DIRECT_CALL REFERRAL SIGN_BOARD WEBSITE OTHER }
+enum NotificationType { MATCH_SUGGESTION FOLLOW_UP_OVERDUE VIEWING_REMINDER ACCESS_GRANTED }
+enum ActivityType { CALL MESSAGE MEETING NOTE APPRAISAL ADVERTISED VIEWING_DONE STAGE_CHANGE OTHER }
 
 model User {
   id           String   @id @default(cuid())
@@ -135,45 +47,44 @@ model User {
 }
 
 model Customer {
-  id              String               @id @default(cuid())
-  name            String
-  phone           String
-  type            CustomerType
-  stage           CustomerPipelineStage @default(NEW)
-  temperature     CustomerTemperature  @default(WARM)
-  source          CustomerSource?
-  notes           String?
+  id                       String                @id @default(cuid())
+  name                     String
+  phone                    String
+  type                     CustomerType
+  stage                    CustomerPipelineStage @default(NEW)
+  temperature              CustomerTemperature   @default(WARM)
+  source                   CustomerSource?
+  notes                    String?
 
-  preferredType     PropertyType?
-  preferredDealType PropertyDealType?
-  preferredArea     String?
-  preferredBeds     Int?
-  preferredSizeMin  Float?
-  preferredSizeMax  Float?
-  budgetMin         Int?
-  budgetMax         Int?
+  preferredType            PropertyType?
+  preferredDealType        PropertyDealType?
+  preferredArea            String?
+  preferredBeds            Int?
+  preferredSizeMin         Float?
+  preferredSizeMax         Float?
+  budgetMin                BigInt?               // ✅ اصلاح شد به BigInt
+  budgetMax                BigInt?               // ✅ اصلاح شد به BigInt
 
-  nextFollowUpAt  DateTime?
-  needsManagerReview       Boolean   @default(false)
+  nextFollowUpAt           DateTime?
+  needsManagerReview       Boolean               @default(false)
   managerReviewReason      String?
   managerReviewRequestedAt DateTime?
 
-  lostReasonCategory LostReasonCategory?
-  lostReasonDetail   String?
-  lostAt             DateTime?
+  lostReasonCategory       LostReasonCategory?
+  lostReasonDetail         String?
+  lostAt                   DateTime?
+  deletedAt                DateTime?
 
-  deletedAt DateTime?
+  assignedAgentId          String
+  assignedAgent            User                  @relation("CustomerAgent", fields: [assignedAgentId], references: [id])
+  createdAt                DateTime              @default(now())
+  updatedAt                DateTime              @updatedAt
 
-  assignedAgentId String
-  assignedAgent   User                 @relation("CustomerAgent", fields: [assignedAgentId], references: [id])
-  createdAt       DateTime             @default(now())
-  updatedAt       DateTime             @updatedAt
-
-  ownedProperties Property[]           @relation("PropertyOwner")
-  viewings        Viewing[]
-  deals           Deal[]
-  tasks           Task[]
-  activities      Activity[]
+  ownedProperties          Property[]            @relation("PropertyOwner")
+  viewings                 Viewing[]
+  deals                    Deal[]
+  tasks                    Task[]
+  activities               Activity[]
 
   @@index([assignedAgentId])
   @@index([stage])
@@ -182,46 +93,46 @@ model Customer {
 }
 
 model Property {
-  id          String             @id @default(cuid())
-  title       String
-  type        PropertyType
-  dealType    PropertyDealType
+  id                    String             @id @default(cuid())
+  title                 String
+  type                  PropertyType
+  dealType              PropertyDealType
 
-  salePriceToman     Int?
-  depositToman        Int?
-  monthlyRentToman    Int?
+  salePriceToman        BigInt?            // ✅ اصلاح شد به BigInt
+  depositToman          BigInt?            // ✅ اصلاح شد به BigInt
+  monthlyRentToman      BigInt?            // ✅ اصلاح شد به BigInt
 
-  status      PropertyStatus     @default(ACTIVE)
-  sizeSqm     Float?
-  beds        Int?
-  builtYear   Int?
-  floor       Int?
-  totalFloors Int?
-  hasParking  Boolean            @default(false)
-  hasStorage  Boolean            @default(false)
-  region      String
-  address     String?
-  images      String[]           @default([])
+  status                PropertyStatus     @default(ACTIVE)
+  sizeSqm               Float?
+  beds                  Int?
+  builtYear             Int?
+  floor                 Int?
+  totalFloors           Int?
+  hasParking            Boolean            @default(false)
+  hasStorage            Boolean            @default(false)
+  region                String
+  address               String?
+  images                String[]           @default([])
 
-  isAdvertised        Boolean   @default(false)
-  nextOwnerFollowUpAt DateTime?
+  isAdvertised          Boolean            @default(false)
+  nextOwnerFollowUpAt   DateTime?
 
-  ownerId     String
-  owner       Customer           @relation("PropertyOwner", fields: [ownerId], references: [id])
+  ownerId               String
+  owner                 Customer           @relation("PropertyOwner", fields: [ownerId], references: [id])
 
-  listedById  String
-  listedBy    User               @relation("PropertyLister", fields: [listedById], references: [id])
+  listedById            String
+  listedBy              User               @relation("PropertyLister", fields: [listedById], references: [id])
 
-  visibility  PropertyVisibility @default(TEAM_VISIBLE)
-  accessList  PropertyAccess[]
+  visibility            PropertyVisibility @default(TEAM_VISIBLE)
+  accessList            PropertyAccess[]
 
-  createdAt   DateTime           @default(now())
-  updatedAt   DateTime           @updatedAt
-  deletedAt   DateTime?
+  createdAt             DateTime           @default(now())
+  updatedAt             DateTime           @updatedAt
+  deletedAt             DateTime?
 
-  viewings Viewing[]
-  deals    Deal[]
-  activities Activity[]
+  viewings              Viewing[]
+  deals                 Deal[]
+  activities            Activity[]
 
   @@index([listedById])
   @@index([region])
@@ -297,20 +208,20 @@ model Viewing {
 }
 
 model Deal {
-  id         String    @id @default(cuid())
-  customerId String
-  customer   Customer  @relation(fields: [customerId], references: [id])
-  propertyId String
-  property   Property  @relation(fields: [propertyId], references: [id])
-  agentId    String
-  agent      User      @relation("DealAgent", fields: [agentId], references: [id])
+  id                   String    @id @default(cuid())
+  customerId           String
+  customer             Customer  @relation(fields: [customerId], references: [id])
+  propertyId           String
+  property             Property  @relation(fields: [propertyId], references: [id])
+  agentId              String
+  agent                User      @relation("DealAgent", fields: [agentId], references: [id])
 
-  dealSalePriceToman   Int?
-  dealDepositToman     Int?
-  dealMonthlyRentToman Int?
+  dealSalePriceToman   BigInt?   // ✅ اصلاح شد به BigInt
+  dealDepositToman     BigInt?   // ✅ اصلاح شد به BigInt
+  dealMonthlyRentToman BigInt?   // ✅ اصلاح شد به BigInt
 
-  createdAt  DateTime  @default(now())
-  updatedAt  DateTime  @updatedAt
+  createdAt            DateTime  @default(now())
+  updatedAt            DateTime  @updatedAt
 
   @@index([customerId, propertyId])
   @@index([agentId])
@@ -350,20 +261,20 @@ model Notification {
 }
 
 model Activity {
-  id         String       @id @default(cuid())
-  type       ActivityType
-  agentId    String
-  agent      User         @relation(fields: [agentId], references: [id])
-  customerId String?
-  customer   Customer?    @relation(fields: [customerId], references: [id])
-  propertyId String?
-  property   Property?    @relation(fields: [propertyId], references: [id])
-  description String?
+  id              String       @id @default(cuid())
+  type            ActivityType
+  agentId         String
+  agent           User         @relation(fields: [agentId], references: [id])
+  customerId      String?
+  customer        Customer?    @relation(fields: [customerId], references: [id])
+  propertyId      String?
+  property        Property?    @relation(fields: [propertyId], references: [id])
+  description     String?
   durationMinutes Int?
-  costToman       Int?
-  oldValue    String?
-  newValue    String?
-  createdAt  DateTime     @default(now())
+  costToman       BigInt?      // ✅ اصلاح شد به BigInt
+  oldValue        String?
+  newValue        String?
+  createdAt       DateTime     @default(now())
 
   @@index([agentId, createdAt])
   @@index([customerId, createdAt])
