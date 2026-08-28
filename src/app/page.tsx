@@ -55,7 +55,7 @@ const STAGES = [
 // داده‌های ساختگی برای Matchها (در فاز بعدی از دیتابیس خوانده می‌شوند)
 const matches = [
   { pct: 96, file: "فایل #۴۵۲۱", desc: "مناسب برای محمد رضایی", ago: "۲ ساعت پیش" },
-  { pct: 92, file: "فایل #۳۴۱۲", desc: "مناسب برای علی احمدی", ago: "۳ ساعت پیش" },
+  { pct: 92, file: "فایل #۳۴۱", desc: "مناسب برای علی احمدی", ago: "۳ ساعت پیش" },
   { pct: 89, file: "فایل #۲۲۱۰", desc: "مناسب برای سارا کریمی", ago: "۵ ساعت پیش" },
 ];
 
@@ -147,7 +147,7 @@ export default function SajCRM() {
               <span className="text-sm" style={{ color: T.textFaint }}>جستجوی مشتری، ملک، لید...</span>
             </div>
             <div className="flex items-center gap-3">
-              <button className="relative p-2 rounded-lg" style={{ background: T.surface }}><Bell size={17} style={{ color: T.textMuted }} /><span className="absolute -top-1 -left-1 w-4 h-4 rounded-full text-[10px] flex items-center justify-center font-bold" style={{ background: T.accent, color: T.onAccent }}>۳</span></button>
+              <button className="relative p-2 rounded-lg" style={{ background: T.surface }}><Bell size={17} style={{ color: T.textMuted }} /><span className="absolute -top-1 -left-1 w-4 h-4 rounded-full text-[10px] flex items-center justify-center font-bold" style={{ background: T.accent, color: T.onAccent }}></span></button>
               <div className="w-9 h-9 rounded-full flex items-center justify-center font-bold text-sm" style={{ background: T.goldSoft, color: T.gold }}>ب</div>
             </div>
           </header>
