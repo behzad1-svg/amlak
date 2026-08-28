@@ -6,26 +6,10 @@ services:
       POSTGRES_USER: saj_user
       POSTGRES_PASSWORD: saj_password_123
       POSTGRES_DB: saj_crm
+    ports:
+      - "5432:5432"
     volumes:
       - postgres_data:/var/lib/postgresql/data
-    networks:
-      - saj_network
-
-  app:
-    build: .
-    restart: always
-    ports:
-      - "3000:3000"
-    environment:
-      - DATABASE_URL=postgresql://saj_user:saj_password_123@db:5432/saj_crm
-      - NODE_ENV=production
-    depends_on:
-      - db
-    networks:
-      - saj_network
 
 volumes:
   postgres_data:
-
-networks:
-  saj_network:
