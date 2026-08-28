@@ -13,6 +13,7 @@ export async function GET() {
     });
     return NextResponse.json({ message: "Database seeded successfully!" });
   } catch (error) {
+    console.error(error);
     return NextResponse.json({ error: "Failed" }, { status: 500 });
   }
 }
