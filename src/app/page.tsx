@@ -4,7 +4,7 @@ import React, { useState, useEffect } from "react";
 import {
   Home, Users, Building2, CalendarClock, Handshake, Inbox as InboxIcon,
   FileText, BarChart3, Bell, Settings, Search, Phone, MapPin,
-  Clock, TrendingUp, Target, X, Archive, Plus
+  Clock, ChevronLeft, TrendingUp, Target, X, Archive, Plus, Mail
 } from "lucide-react";
 
 type Customer = {
@@ -52,6 +52,13 @@ const STAGES = [
   { key: "CONTRACT", label: "قرارداد" },
 ];
 
+// داده‌های ساختگی برای Matchها (در فاز بعدی از دیتابیس خوانده می‌شوند)
+const matches = [
+  { pct: 96, file: "فایل #۴۵۲۱", desc: "مناسب برای محمد رضایی", ago: "۲ ساعت پیش" },
+  { pct: 92, file: "فایل #۳۴۱۲", desc: "مناسب برای علی احمدی", ago: "۳ ساعت پیش" },
+  { pct: 89, file: "فایل #۲۲۱۰", desc: "مناسب برای سارا کریمی", ago: "۵ ساعت پیش" },
+];
+
 function Badge({ children, tone = "muted" }: { children: React.ReactNode; tone?: string }) {
   const tones: Record<string, { color: string; bg: string }> = {
     muted: { color: T.textMuted, bg: "rgba(184,161,153,0.12)" },
@@ -81,6 +88,9 @@ export default function SajCRM() {
   const [customers, setCustomers] = useState<Customer[]>([]);
   const [loading, setLoading] = useState(true);
   const [selectedCustomer, setSelectedCustomer] = useState<Customer | null>(null);
+  const [dragId, setDragId] = useState<string | null>(null);
+  const [dragOverStage, setDragOverStage] = useState<string | null>(null);
+  const [showArchive, setShowArchive] = useState(false);
 
   useEffect(() => {
     fetch('/api/customers')
@@ -145,9 +155,10 @@ export default function SajCRM() {
           <main className="p-5 md:p-8 space-y-6">
             {active === "today" && (
               <>
+                {/* Welcome Section */}
                 <div>
                   <h1 className="text-xl font-extrabold" style={{ color: T.text }}>سلام بهزاد 👋</h1>
-                  <p className="text-sm mt-1" style={{ color: T.textMuted }}>امروز شنبه، ۲۵ مرداد ۱۴۰۳ — این‌هفته {viewings.length} بازدید، {todayFollowUps.length} پیگیری و {customers.length} مشتری داری.</p>
+                  <p className="text-sm mt-1" style={{ color: T.textMuted }}>امروز شنبه، ۲۵ مرداد ۴۰۳ — این‌هفته {viewings.length} بازدید، {todayFollowUps.length} پیگیری و {matches.length} Match جدید داری.</p>
                 </div>
 
                 {/* KPI Cards */}
@@ -169,40 +180,77 @@ export default function SajCRM() {
                   </Card>
                   <Card>
                     <Target size={18} style={{ color: T.gold }} />
-                    <div className="text-2xl font-extrabold mt-3" style={{ color: T.text }}>{customers.length}</div>
-                    <div className="text-xs mt-1" style={{ color: T.textMuted }}>کل مشتریان</div>
+                    <div className="text-2xl font-extrabold mt-3" style={{ color: T.text }}>{matches.length}</div>
+                    <div className="text-xs mt-1" style={{ color: T.textMuted }}>Match جدید</div>
                   </Card>
                 </div>
 
-                {/* Customer List Table */}
+                {/* Matches and Priorities Grid */}
+                <div className="grid lg:grid-cols-2 gap-6">
+                  {/* Matches */}
+                  <Card>
+                    <SectionTitle icon={Target} title="Matchهای جدید" />
+                    <div className="space-y-3">
+                      {matches.map((m, i) => (
+                        <div key={i} className="flex items-center gap-3 p-3 rounded-xl" style={{ background: T.surfaceRaised }}>
+                          <div className="w-11 h-11 rounded-full flex items-center justify-center text-xs font-extrabold shrink-0" style={{ border: `2px solid ${T.success}`, color: T.success }}>{m.pct}%</div>
+                          <div className="flex-1">
+                            <div className="text-sm font-bold" style={{ color: T.text }}>{m.file}</div>
+                            <div className="text-xs" style={{ color: T.textMuted }}>{m.desc}</div>
+                          </div>
+                          <span className="text-[11px]" style={{ color: T.textFaint }}>{m.ago}</span>
+                        </div>
+                      ))}
+                    </div>
+                  </Card>
+
+                  {/* Today's Priorities */}
+                  <Card>
+                    <SectionTitle icon={CalendarClock} title="اولویت‌های امروز" />
+                    <div className="space-y-3">
+                      {todayFollowUps.map((c, i) => (
+                        <div key={i} className="flex items-center justify-between p-3 rounded-xl" style={{ background: T.surfaceRaised }}>
+                          <div className="flex items-center gap-3">
+                            <Badge tone="gold">پیگیری</Badge>
+                            <div>
+                              <div className="text-sm font-bold" style={{ color: T.text }}>{c.name}</div>
+                              <div className="text-xs mt-0.5" style={{ color: T.textMuted }}>{c.area || "نامشخص"} — {c.type}</div>
+                            </div>
+                          </div>
+                          <ChevronLeft size={16} style={{ color: T.textFaint }} />
+                        </div>
+                      ))}
+                      {todayFollowUps.length === 0 && (
+                        <div className="text-sm text-center py-4" style={{ color: T.textFaint }}>پیگیری امروز ندارید</div>
+                      )}
+                    </div>
+                  </Card>
+                </div>
+
+                {/* Recent Customers Table */}
                 <Card>
-                  <SectionTitle icon={Users} title="لیست مشتریان (از دیتابیس)" />
+                  <SectionTitle icon={Users} title="پیگیری‌های نزدیک" />
                   <div className="overflow-x-auto">
                     <table className="w-full text-sm">
                       <thead>
                         <tr style={{ color: T.textFaint }} className="text-xs border-b">
                           <th className="text-right font-medium pb-2" style={{ borderColor: T.borderSoft }}>پیگیری بعدی</th>
                           <th className="text-right font-medium pb-2">نام مشتری</th>
-                          <th className="text-right font-medium pb-2">شماره تماس</th>
                           <th className="text-right font-medium pb-2">نوع نیاز</th>
                           <th className="text-right font-medium pb-2">منطقه</th>
                           <th className="text-right font-medium pb-2">وضعیت</th>
                         </tr>
                       </thead>
                       <tbody>
-                        {customers.map((c) => (
+                        {customers.slice(0, 5).map((c) => (
                           <tr key={c.id} className="border-b" style={{ borderColor: T.borderSoft }}>
                             <td className="py-3"><Badge tone={c.nextFollowUp === "عقب‌افتاده" ? "accent" : "muted"}>{c.nextFollowUp || "—"}</Badge></td>
                             <td className="py-3 font-semibold" style={{ color: T.text }}>{c.name}</td>
-                            <td className="py-3" style={{ color: T.textMuted }}>{c.phone}</td>
                             <td className="py-3" style={{ color: T.textMuted }}>{c.type}</td>
                             <td className="py-3" style={{ color: T.textMuted }}>{c.area || "—"}</td>
                             <td className="py-3"><Badge tone="gold">{c.temp}</Badge></td>
                           </tr>
                         ))}
-                        {customers.length === 0 && (
-                          <tr><td colSpan={6} className="py-8 text-center" style={{ color: T.textFaint }}>هنوز مشتری‌ای ثبت نشده است.</td></tr>
-                        )}
                       </tbody>
                     </table>
                   </div>
@@ -211,27 +259,54 @@ export default function SajCRM() {
             )}
 
             {active === "customers" && (
-              <div className="flex gap-4 overflow-x-auto pb-2">
-                {STAGES.map((s) => {
-                  const inStage = customers.filter((c) => c.stage === s.key);
-                  return (
-                    <div key={s.key} className="w-64 shrink-0">
-                      <div className="flex items-center justify-between rounded-xl px-3 py-2.5 mb-3" style={{ background: T.surfaceRaised }}>
-                        <span className="text-sm font-bold" style={{ color: T.text }}>{s.label}</span>
-                        <span className="w-6 h-6 rounded-full flex items-center justify-center text-xs font-bold" style={{ background: T.goldSoft, color: T.gold }}>{inStage.length}</span>
-                      </div>
-                      <div className="space-y-2 min-h-[60px]">
-                        {inStage.map((c) => (
-                          <button key={c.id} onClick={() => setSelectedCustomer(c)} className="w-full text-right p-3 rounded-xl border" style={{ background: T.surface, borderColor: T.border }}>
+              <>
+                <div className="flex items-center justify-between">
+                  <div />
+                  <button onClick={() => setShowArchive((v) => !v)} className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-bold" style={{ background: T.surface, border: `1px solid ${T.border}`, color: T.textMuted }}>
+                    <Archive size={13} /> {showArchive ? "برگشت به کانبان" : `بایگانی (${customers.filter((c) => c.stage === "LOST").length})`}
+                  </button>
+                </div>
+                {showArchive ? (
+                  <div className="space-y-2">
+                    {customers.filter((c) => c.stage === "LOST").length === 0 && <div className="text-sm text-center py-8" style={{ color: T.textFaint }}>هنوز مشتری‌ای بایگانی نشده</div>}
+                    {customers.filter((c) => c.stage === "LOST").map((c) => (
+                      <Card key={c.id}>
+                        <div className="flex items-center justify-between">
+                          <div>
                             <div className="text-sm font-bold" style={{ color: T.text }}>{c.name}</div>
-                            <div className="text-xs mt-1 flex items-center gap-1" style={{ color: T.textMuted }}><MapPin size={10} /> {c.area || "نامشخص"}</div>
-                          </button>
-                        ))}
-                      </div>
-                    </div>
-                  );
-                })}
-              </div>
+                            <div className="text-xs mt-1" style={{ color: T.textMuted }}>دلیل: {c.lostReason || "—"}</div>
+                          </div>
+                          <Badge tone="muted">از دست رفته</Badge>
+                        </div>
+                      </Card>
+                    ))}
+                  </div>
+                ) : (
+                  <div className="flex gap-4 overflow-x-auto pb-2">
+                    {STAGES.map((s) => {
+                      const inStage = customers.filter((c) => c.stage === s.key);
+                      const isOver = dragOverStage === s.key;
+                      return (
+                        <div key={s.key} className="w-64 shrink-0">
+                          <div className="flex items-center justify-between rounded-xl px-3 py-2.5 mb-3" style={{ background: T.surfaceRaised }}>
+                            <span className="text-sm font-bold" style={{ color: T.text }}>{s.label}</span>
+                            <span className="w-6 h-6 rounded-full flex items-center justify-center text-xs font-bold" style={{ background: T.goldSoft, color: T.gold }}>{inStage.length}</span>
+                          </div>
+                          <div className="space-y-2 min-h-[60px]">
+                            {inStage.map((c) => (
+                              <button key={c.id} onClick={() => setSelectedCustomer(c)} className="w-full text-right p-3 rounded-xl border transition-colors" style={{ background: T.surface, borderColor: T.border }}>
+                                <div className="text-sm font-bold" style={{ color: T.text }}>{c.name}</div>
+                                <div className="text-xs mt-1 flex items-center gap-1" style={{ color: T.textMuted }}><MapPin size={10} /> {c.area || "نامشخص"}</div>
+                              </button>
+                            ))}
+                            <button className="w-full text-xs py-2 rounded-xl border border-dashed" style={{ color: T.textFaint, borderColor: T.border }}>+ افزودن مشتری</button>
+                          </div>
+                        </div>
+                      );
+                    })}
+                  </div>
+                )}
+              </>
             )}
 
             {["properties", "viewings", "deals", "inbox", "documents", "analytics"].includes(active) && (
@@ -256,11 +331,13 @@ export default function SajCRM() {
               <div>
                 <div className="font-bold" style={{ color: T.text }}>{selectedCustomer.name}</div>
                 <div className="text-xs flex items-center gap-1 mt-1" style={{ color: T.textMuted }}><Phone size={11} /> {selectedCustomer.phone}</div>
+                {selectedCustomer.email && <div className="text-xs flex items-center gap-1 mt-1" style={{ color: T.textMuted }}><Mail size={11} /> {selectedCustomer.email}</div>}
               </div>
             </div>
+            <div className="mb-2"><Badge tone="gold">{STAGES.find(s => s.key === selectedCustomer.stage)?.label}</Badge></div>
             <Card className="mt-4" style={{ background: T.surfaceRaised }}>
               <div className="text-xs font-bold mb-3" style={{ color: T.gold }}>اطلاعات شخصی</div>
-              {[["نوع", selectedCustomer.type], ["منطقه", selectedCustomer.area || "—"], ["بودجه", selectedCustomer.budget || "—"], ["منبع", selectedCustomer.source]].map(([label, val]) => (
+              {[["نوع", selectedCustomer.type], ["منطقه", selectedCustomer.area || "—"], ["بودجه", selectedCustomer.budget || "—"], ["منبع مشتری", selectedCustomer.source], ["دما", selectedCustomer.temp]].map(([label, val]) => (
                 <div key={label} className="flex items-center justify-between py-1.5 text-sm">
                   <span style={{ color: T.textFaint }}>{label}</span>
                   <span style={{ color: T.text }}>{val}</span>
