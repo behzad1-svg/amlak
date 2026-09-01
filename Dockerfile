@@ -1,22 +1,41 @@
-FROM node:20-bookworm
+FROM node:22-alpine AS builder
 
 WORKDIR /app
 
-# ۱. تنظیم رجیستری npm روی آینه‌ی چینی (برای دور زدن تحریم و جلوگیری از ETIMEDOUT)
-RUN npm config set registry https://registry.npmmirror.com
-
-# ۲. ابتدا فقط فایل‌های پکیج را کپی می‌کنیم (برای استفاده از کش داکر)
+# Copy package files
 COPY package*.json ./
 
-# ۳. تمام وابستگی‌ها را نصب می‌کنیم (با گزینه legacy-peer-deps برای جلوگیری از تداخل نسخه‌ها)
-RUN npm install --legacy-peer-deps
+# Install dependencies
+RUN npm ci
 
-# ۴. حالا بقیه‌ی کدهای پروژه را کپی می‌کنیم
+# Copy Prisma schema and generate client
+COPY prisma ./prisma
+RUN npx prisma generate
+
+# Copy the rest of the application
 COPY . .
 
-# ۵. پروژه را بیلد می‌کنیم
+# Build Next.js
 RUN npm run build
 
-EXPOSE 3000
+# Production image
+FROM node:22-alpine AS runner
+WORKDIR /app
 
-CMD ["npm", "start"]
+ENV NODE_ENV production
+ENV NEXT_TELEMETRY_DISABLED 1
+
+# Copy built assets
+COPY --from=builder /app/next.config.ts ./
+COPY --from=builder /app/public ./public
+COPY --from=builder /app/.next/standalone ./
+COPY --from=builder /app/.next/static ./.next/static
+COPY --from=builder /app/prisma ./prisma
+COPY --from=builder /app/node_modules/@prisma ./node_modules/@prisma
+
+EXPOSE 3000
+ENV PORT 3000
+ENV HOSTNAME "0.0.0.0"
+
+# Run Prisma migrations before starting Next.js
+CMD ["sh", "-c", "npx prisma migrate deploy && node server.js"]
