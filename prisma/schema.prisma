@@ -1,3 +1,6 @@
+// املاک ساج — Prisma schema (v3: سرنخ و مشتری یکی شدن، pipeline واحد)
+// استک: PostgreSQL + Prisma، یک اپ Next.js واحد
+
 generator client {
   provider = "prisma-client-js"
 }
@@ -7,20 +10,113 @@ datasource db {
   url      = env("DATABASE_URL")
 }
 
-enum UserRole { OWNER AGENT }
-enum CustomerType { BUYER SELLER TENANT }
-enum CustomerTemperature { HOT WARM COLD }
-enum PropertyType { APARTMENT VILLA OFFICE LAND SHOP }
-enum PropertyDealType { SALE RENT }
-enum PropertyStatus { ACTIVE RESERVED SOLD RENTED }
-enum PropertyVisibility { TEAM_VISIBLE RESTRICTED }
-enum ViewingStatus { SCHEDULED DONE CANCELED }
-enum CustomerPipelineStage { NEW INITIAL_CONTACT QUALIFIED VIEWING CONTRACT LOST }
-enum LostReasonCategory { CUSTOMER_WITHDREW PRICE_REJECTED NO_RESPONSE NO_SUITABLE_PROPERTY OTHER }
-enum NotificationPriority { LOW NORMAL HIGH }
-enum CustomerSource { INSTAGRAM DIVAR DIRECT_CALL REFERRAL SIGN_BOARD WEBSITE OTHER }
-enum NotificationType { MATCH_SUGGESTION FOLLOW_UP_OVERDUE VIEWING_REMINDER ACCESS_GRANTED }
-enum ActivityType { CALL MESSAGE MEETING NOTE APPRAISAL ADVERTISED VIEWING_DONE STAGE_CHANGE OTHER }
+enum UserRole {
+  OWNER
+  AGENT
+}
+
+// نکته: این فقط یه برچسب توصیفیه، محدودکننده نیست — یه Customer با type=BUYER هنوز می‌تونه
+// از طریق رابطه‌ی ownedProperties مالک فایل هم باشه (مثلاً کسی که می‌فروشه تا بزرگ‌تر بخره)
+enum CustomerType {
+  BUYER
+  SELLER
+  TENANT
+}
+
+
+
+enum CustomerTemperature {
+  HOT
+  WARM
+  COLD
+}
+
+enum PropertyType {
+  APARTMENT
+  VILLA
+  OFFICE
+  LAND
+  SHOP
+}
+
+// فروش، جدا از رهن‌واجاره — چون رهن‌واجاره دو تا عدد لازم داره نه یکی
+enum PropertyDealType {
+  SALE
+  RENT
+}
+
+enum PropertyStatus {
+  ACTIVE
+  RESERVED
+  SOLD
+  RENTED
+}
+
+enum PropertyVisibility {
+  TEAM_VISIBLE
+  RESTRICTED
+}
+
+enum ViewingStatus {
+  SCHEDULED
+  DONE
+  CANCELED
+}
+
+// Customer Pipeline Stage — مشتری تو کدام مرحله است (Kanban دستی)
+enum CustomerPipelineStage {
+  NEW                    // تازه‌وارد، هنوز تماسی گرفته نشده
+  INITIAL_CONTACT       // تماس اولیه گرفته شده
+  QUALIFIED             // نیاز سنجی شده
+  VIEWING               // در حال دیدن ملک‌ها
+  CONTRACT              // قرارداد (مرحله نهایی v1)
+  LOST                  // منصرف شده
+}
+
+enum LostReasonCategory {
+  CUSTOMER_WITHDREW      // منصرف شد
+  PRICE_REJECTED         // قیمت پیشنهادی رو قبول نکرد
+  NO_RESPONSE            // دیگه پاسخ نمی‌ده
+  NO_SUITABLE_PROPERTY   // فایل مناسب نداشتیم
+  OTHER                  // سایر (با توضیح آزاد)
+}
+
+enum NotificationPriority {
+  LOW
+  NORMAL
+  HIGH        // مثلاً پیگیری عقب‌افتاده، match بالای ۹۰٪
+}
+
+enum CustomerSource {
+  INSTAGRAM
+  DIVAR
+  DIRECT_CALL
+  REFERRAL
+  SIGN_BOARD   // تابلو
+  WEBSITE
+  OTHER
+}
+
+enum NotificationType {
+  MATCH_SUGGESTION
+  FOLLOW_UP_OVERDUE
+  VIEWING_REMINDER
+  ACCESS_GRANTED
+}
+
+// هر کاری که مشاور انجام می‌ده به‌عنوان یه رکورد Activity ثبت می‌شه —
+// پایه‌ی هم Timeline مشتری/فایل، هم آمار مدیر از کارکرد هر مشاوره
+enum ActivityType {
+  CALL
+  MESSAGE
+  MEETING
+  NOTE
+  APPRAISAL          // کارشناسی ملک
+  ADVERTISED          // آگهی‌کردن یه فایل مشخص
+  VIEWING_DONE
+  STAGE_CHANGE
+  OTHER
+}
 
 model User {
   id           String   @id @default(cuid())
@@ -29,7 +125,7 @@ model User {
   passwordHash String
   role         UserRole @default(AGENT)
   active       Boolean  @default(true)
-  tokenVersion Int      @default(1)
+  tokenVersion Int      @default(1) // با +۱ شدن، تمام Tokenهای قدیمی فوری باطل می‌شوند (تغییر رمز، قطع دسترسی فوری)
   createdAt    DateTime @default(now())
   updatedAt    DateTime @updatedAt
 
@@ -46,93 +142,114 @@ model User {
   passwordResetTokens PasswordResetToken[]
 }
 
+// موجودیت واحد: هم سرنخ اولیه، هم مشتری، هم (احتمالاً) مالک یه فایل.
+// stage مشخص می‌کنه کجای pipeline هست؛ وقتی به CONTRACT برسه یعنی معامله بسته شده.
 model Customer {
-  id                       String                @id @default(cuid())
-  name                     String
-  phone                    String
-  type                     CustomerType
-  stage                    CustomerPipelineStage @default(NEW)
-  temperature              CustomerTemperature   @default(WARM)
-  source                   CustomerSource?
-  notes                    String?
+  id              String               @id @default(cuid())
+  name            String
+  phone           String               // نکته‌ی migration: unique نباشه در سطح Prisma —
+  // باید یه Partial Unique Index دستی رو Postgres ساخته بشه: UNIQUE(phone) WHERE "deletedAt" IS NULL
+  // چون Prisma از Partial Index پشتیبانی نمی‌کنه؛ وگرنه بعد از حذف نرم یه مشتری، اون شماره دیگه هیچ‌وقت قابل ثبت مجدد نیست
+  type            CustomerType
+  stage           CustomerPipelineStage @default(NEW)
+  temperature     CustomerTemperature  @default(WARM)
+  source          CustomerSource?      // اینستاگرام، دیوار، تماس مستقیم، معرفی...
+  notes           String?
 
-  preferredType            PropertyType?
-  preferredDealType        PropertyDealType?
-  preferredArea            String?
-  preferredBeds            Int?
-  preferredSizeMin         Float?
-  preferredSizeMax         Float?
-  budgetMin                BigInt?               // ✅ اصلاح شد به BigInt
-  budgetMax                BigInt?               // ✅ اصلاح شد به BigInt
+  // ترجیحات برای موتور تطبیق خودکار
+  preferredType     PropertyType?
+  preferredDealType PropertyDealType?  // دنبال خرید/فروش یا رهن‌واجاره؟
+  preferredArea     String?
+  preferredBeds     Int?
+  preferredSizeMin  Float?             // متراژ (اعشاری، چون مثلاً ۸۵.۵ متر رایجه)
+  preferredSizeMax  Float?
+  budgetMin         BigInt?            // برای خرید: کل قیمت / برای رهن‌واجاره: عرف بازار (تبدیل به رهن کامل) — BigInt چون Int 32-بیتی تا ۲.۱ میلیارد بیشتر جا نمی‌شه
+  budgetMax         BigInt?
 
-  nextFollowUpAt           DateTime?
-  needsManagerReview       Boolean               @default(false)
+  // پیگیری اجباری — تا تعیین نشه/بگذره، تو داشبورد «امروز» قرمز و بالای لیست می‌مونه
+  // نکته: وقتی stage=LOST بشه، دیگه این فیلد اجباری/قرمز نیست — مشتری بسته شده، پیگیری بی‌معنیه
+  nextFollowUpAt  DateTime?
+
+  // Escape Hatch — به‌جای تاریخ الکی، مشاور می‌تواند رسماً بگوید "نیاز به بازنگری مدیر"
+  // نکته‌ی پیاده‌سازی: وقتی این true می‌شه، باید خودکار یه Notification به همه‌ی OWNERها ساخته بشه
+  needsManagerReview       Boolean   @default(false)
   managerReviewReason      String?
   managerReviewRequestedAt DateTime?
 
-  lostReasonCategory       LostReasonCategory?
-  lostReasonDetail         String?
-  lostAt                   DateTime?
-  deletedAt                DateTime?
+  // اتمام کار — وقتی مشاور تصمیم می‌گیرد دیگر روی این مشتری کار نکند (منصرف شد یا خودش نمی‌خواهد ادامه دهد)
+  lostReasonCategory LostReasonCategory?  // اجباری وقتی stage=LOST — از لیست از‌پیش‌تعریف‌شده
+  lostReasonDetail   String?              // توضیح آزاد، مخصوصاً برای OTHER
+  lostAt             DateTime?
 
-  assignedAgentId          String
-  assignedAgent            User                  @relation("CustomerAgent", fields: [assignedAgentId], references: [id])
-  createdAt                DateTime              @default(now())
-  updatedAt                DateTime              @updatedAt
+  deletedAt DateTime? // Soft delete — حذف فیزیکی نمی‌شه، فقط مخفی می‌شه
+  // نکته: Query هایی که owner یه Property رو نشون می‌دن، نباید بر اساس deletedAt فیلترش کنن —
+  // حتی مالک soft-delete شده باید تو صفحه‌ی فایل به‌عنوان مالک نشون داده بشه (نه پنهان/orphan)
 
-  ownedProperties          Property[]            @relation("PropertyOwner")
-  viewings                 Viewing[]
-  deals                    Deal[]
-  tasks                    Task[]
-  activities               Activity[]
+  assignedAgentId String
+  assignedAgent   User                 @relation("CustomerAgent", fields: [assignedAgentId], references: [id])
+  createdAt       DateTime             @default(now())
+  updatedAt       DateTime             @updatedAt
+
+  ownedProperties Property[]           @relation("PropertyOwner")
+  viewings        Viewing[]
+  deals           Deal[]
+  tasks           Task[]
+  activities      Activity[]
 
   @@index([assignedAgentId])
   @@index([stage])
   @@index([type, temperature])
+  @@index([name])   // برای جستجوی مشاورا؛ برای مقیاس ما (نه صدهزار رکورد) کافیه —
+  // اگه بعداً حجم بالا رفت، برای جستجوی substring واقعی (LIKE '%x%') به pg_trgm/GIN index نیاز داریم
+  @@index([assignedAgentId, deletedAt, stage]) // ایندکس ترکیبی برای داشبورد هر مشاور
   @@index([nextFollowUpAt])
 }
 
 model Property {
-  id                    String             @id @default(cuid())
-  title                 String
-  type                  PropertyType
-  dealType              PropertyDealType
+  id          String             @id @default(cuid())
+  title       String
+  type        PropertyType
+  dealType    PropertyDealType   // فروش یا رهن‌واجاره — دسته‌بندی اصلی فایل‌ها
 
-  salePriceToman        BigInt?            // ✅ اصلاح شد به BigInt
-  depositToman          BigInt?            // ✅ اصلاح شد به BigInt
-  monthlyRentToman      BigInt?            // ✅ اصلاح شد به BigInt
+  // فروش: فقط این پر می‌شه
+  salePriceToman     BigInt?    // BigInt، نه Int — قیمت ملک معمولاً بیشتر از ظرفیت Int 32-بیتی (۲.۱ میلیارد) است
 
-  status                PropertyStatus     @default(ACTIVE)
-  sizeSqm               Float?
-  beds                  Int?
-  builtYear             Int?
-  floor                 Int?
-  totalFloors           Int?
-  hasParking            Boolean            @default(false)
-  hasStorage            Boolean            @default(false)
-  region                String
-  address               String?
-  images                String[]           @default([])
+  // رهن‌واجاره: این دوتا پر می‌شن (نه salePriceToman)
+  depositToman        BigInt?     // رهن
+  monthlyRentToman    BigInt?     // اجاره ماهانه
 
-  isAdvertised          Boolean            @default(false)
-  nextOwnerFollowUpAt   DateTime?
+  status      PropertyStatus     @default(ACTIVE)
+  sizeSqm     Float?              // اعشاری (مثلاً ۸۵.۵ متر)
+  beds        Int?
+  builtYear   Int?               // سال ساخت
+  floor       Int?
+  totalFloors Int?
+  hasParking  Boolean            @default(false)
+  hasStorage  Boolean            @default(false)
+  region      String
+  address     String?
+  images      String[]           @default([])
 
-  ownerId               String
-  owner                 Customer           @relation("PropertyOwner", fields: [ownerId], references: [id])
+  // پیگیری خود فایل (نه فقط مشتری) — سبک، نه اجباری مثل مشتری
+  isAdvertised        Boolean   @default(false)  // آگهی شده یا نه
+  nextOwnerFollowUpAt DateTime?                   // پیگیری بعدی با مالک
 
-  listedById            String
-  listedBy              User               @relation("PropertyLister", fields: [listedById], references: [id])
+  ownerId     String
+  owner       Customer           @relation("PropertyOwner", fields: [ownerId], references: [id])
 
-  visibility            PropertyVisibility @default(TEAM_VISIBLE)
-  accessList            PropertyAccess[]
+  listedById  String
+  listedBy    User               @relation("PropertyLister", fields: [listedById], references: [id])
 
-  createdAt             DateTime           @default(now())
-  updatedAt             DateTime           @updatedAt
-  deletedAt             DateTime?
+  visibility  PropertyVisibility @default(TEAM_VISIBLE)
+  accessList  PropertyAccess[]
 
-  viewings              Viewing[]
-  deals                 Deal[]
-  activities            Activity[]
+  createdAt   DateTime           @default(now())
+  updatedAt   DateTime           @updatedAt
+  deletedAt   DateTime?          // Soft delete
+
+  viewings Viewing[]
+  deals    Deal[]
+  activities Activity[]
 
   @@index([listedById])
   @@index([region])
@@ -140,9 +257,11 @@ model Property {
   @@index([dealType])
   @@index([status, visibility])
   @@index([dealType, status])
-  @@index([region, type, dealType, status])
+  @@index([region, type, dealType, status, deletedAt]) // موتور تطبیق همیشه باید deletedAt:null رو فیلترش لحاظ کنه
 }
 
+// دسترسی موقت به فایل RESTRICTED — می‌تواند منقضی یا لغو شود
+// نکته‌ی پیاده‌سازی: هر بار که رکورد جدید ساخته می‌شه، باید خودکار یه Notification به userId (گیرنده) بره
 model PropertyAccess {
   id         String    @id @default(cuid())
   propertyId String
@@ -156,18 +275,30 @@ model PropertyAccess {
   expiresAt  DateTime?
   revokedAt  DateTime?
 
-  @@index([propertyId, userId])
-  @@index([revokedAt, expiresAt])
+  @@index([propertyId, userId]) // نه @@unique — چون بعد از revoke باید بشه دوباره grant کرد؛
+  // منطق اپلیکیشن باید چک کنه رکورد فعال (revokedAt=null) قبلی هست یا نه، و اگه هست update کنه نه insert
+  @@index([revokedAt, expiresAt]) // ترتیب اول revokedAt چون تساویه (IS NULL)، بعد expiresAt (رنج)
 }
 
+// نکته‌ی پیاده‌سازی حیاتی: هر Query که چک می‌کنه "آیا این کاربر دسترسی داره؟"
+// باید صراحتاً این شرط رو رعایت کنه: expiresAt IS NULL OR expiresAt > now()  AND  revokedAt IS NULL
+// وگرنه دسترسیِ منقضی/لغوشده هنوز باز می‌مونه. این باید یه تابع/helper مشترک باشه، نه تکرار دستی تو هر Endpoint.
+//
+// نکته‌ی migration دستی (مثل phone): برای جلوگیری از race condition (دو درخواست هم‌زمان = دو رکورد فعال
+// برای یک property+user)، باید یه Partial Unique Index دستی رو Postgres ساخته بشه:
+// CREATE UNIQUE INDEX property_access_active_unique ON "PropertyAccess" ("propertyId", "userId")
+// WHERE "revokedAt" IS NULL AND ("expiresAt" IS NULL OR "expiresAt" > NOW());
+
+// لاگ Immutable — فقط Insert، هرگز Update/Delete (حتی از UI مدیر)
+// اطلاعات حساس (پسورد، شماره تماس خام) هرگز اینجا ذخیره نمی‌شود
 model AuditLog {
   id         String   @id @default(cuid())
   actorId    String
   actor      User     @relation(fields: [actorId], references: [id])
-  action     String
+  action     String   // مثلاً PROPERTY_PRICE_UPDATED, ACCESS_GRANTED, EXPORT_CUSTOMERS
   entityType String
   entityId   String
-  oldValue   String?
+  oldValue   String?  // JSON، بدون فیلدهای حساس
   newValue   String?
   ipAddress  String?
   createdAt  DateTime @default(now())
@@ -176,18 +307,21 @@ model AuditLog {
   @@index([entityType, entityId, createdAt])
 }
 
+// توکن یک‌بارمصرف برای فراموشی رمز — همیشه هش (نه خام) ذخیره می‌شه، مثل پسورد
 model PasswordResetToken {
   id        String    @id @default(cuid())
   userId    String
   user      User      @relation(fields: [userId], references: [id])
   tokenHash String    @unique
   expiresAt DateTime
-  usedAt    DateTime?
+  usedAt    DateTime? // وقتی استفاده شد، دیگه قابل استفاده‌ی مجدد نیست
   createdAt DateTime  @default(now())
 
   @@index([userId])
 }
 
+// بازدید — هر مشاوری می‌تواند برای هر فایلی (حتی مال مشاور دیگر) بازدید ثبت کند؛
+// agentId = کسی که واقعاً بازدید را انجام/ثبت کرده، نه لزوماً صاحب فایل یا مشتری
 model Viewing {
   id         String        @id @default(cuid())
   customerId String
@@ -197,7 +331,7 @@ model Viewing {
   agentId    String
   agent      User          @relation("ViewingAgent", fields: [agentId], references: [id])
   startAt    DateTime
-  endAt      DateTime?
+  endAt      DateTime?  // اختیاری — موقع SCHEDULED معمولاً دقیق معلوم نیست
   status     ViewingStatus @default(SCHEDULED)
   feedback   String?
   createdAt  DateTime      @default(now())
@@ -207,21 +341,25 @@ model Viewing {
   @@index([propertyId])
 }
 
+// Deal = "مشتری + ملک + مبلغ معامله"
+// برای v1: نشانه‌گذار + مبلغ نهایی. برای رهن‌واجاره، رهن/اجاره جدا (مثل Property) — نه یه عدد مبهم
 model Deal {
-  id                   String    @id @default(cuid())
-  customerId           String
-  customer             Customer  @relation(fields: [customerId], references: [id])
-  propertyId           String
-  property             Property  @relation(fields: [propertyId], references: [id])
-  agentId              String
-  agent                User      @relation("DealAgent", fields: [agentId], references: [id])
+  id         String    @id @default(cuid())
+  customerId String
+  customer   Customer  @relation(fields: [customerId], references: [id])
+  propertyId String
+  property   Property  @relation(fields: [propertyId], references: [id])
+  agentId    String
+  agent      User      @relation("DealAgent", fields: [agentId], references: [id])
 
-  dealSalePriceToman   BigInt?   // ✅ اصلاح شد به BigInt
-  dealDepositToman     BigInt?   // ✅ اصلاح شد به BigInt
-  dealMonthlyRentToman BigInt?   // ✅ اصلاح شد به BigInt
+  // فروش: فقط این پر می‌شه
+  dealSalePriceToman   BigInt?
+  // رهن‌واجاره: این دوتا پر می‌شن
+  dealDepositToman     BigInt?
+  dealMonthlyRentToman BigInt?
 
-  createdAt            DateTime  @default(now())
-  updatedAt            DateTime  @updatedAt
+  createdAt  DateTime  @default(now())
+  updatedAt  DateTime  @updatedAt
 
   @@index([customerId, propertyId])
   @@index([agentId])
@@ -229,11 +367,14 @@ model Deal {
 
 model Task {
   id              String    @id @default(cuid())
-  relatedType     String
-  relatedId       String
+  // نکته‌ی طراحی: customerId رابطه‌ی صریح Prisma برای رایج‌ترین حالت (پیگیری با یه مشتری) —
+  // relatedType/relatedId فقط برای حالت‌های دیگه (مثلاً Task مرتبط با Property) استفاده می‌شه،
+  // نه هردو برای یک چیز. وقتی customerId پره، relatedType/relatedId نادیده گرفته می‌شن.
+  relatedType     String?
+  relatedId       String?
   title           String
   dueAt           DateTime?
-  priority        Int       @default(0)
+  priority        Int       @default(0) // 0: عادی, 1: مهم, 2: فوری — برای ترتیب‌بندی تو داشبورد
   done            Boolean   @default(false)
   assignedAgentId String
   assignedAgent   User      @relation("TaskAgent", fields: [assignedAgentId], references: [id])
@@ -244,6 +385,8 @@ model Task {
   @@index([assignedAgentId])
 }
 
+// خودِ این جدول (createdAt + read) پاسخ «چرا این Match رو ندیدم؟» رو می‌ده —
+// نیازی نیست تولید/خواندن Notification تو AuditLog جدا هم ثبت بشه؛ تکرار داده‌ست
 model Notification {
   id          String           @id @default(cuid())
   userId      String
@@ -260,21 +403,23 @@ model Notification {
   @@index([userId, read, createdAt])
 }
 
+// لاگ کامل هر کاری که مشاور انجام می‌ده — پایه‌ی Timeline و آمار مدیر.
+// آمار مدیر = همین جدول با فیلتر agentId (تعداد + قابلیت کلیک برای دیدن لیست کامل)
 model Activity {
-  id              String       @id @default(cuid())
-  type            ActivityType
-  agentId         String
-  agent           User         @relation(fields: [agentId], references: [id])
-  customerId      String?
-  customer        Customer?    @relation(fields: [customerId], references: [id])
-  propertyId      String?
-  property        Property?    @relation(fields: [propertyId], references: [id])
-  description     String?
-  durationMinutes Int?
-  costToman       BigInt?      // ✅ اصلاح شد به BigInt
-  oldValue        String?
-  newValue        String?
-  createdAt       DateTime     @default(now())
+  id         String       @id @default(cuid())
+  type       ActivityType
+  agentId    String
+  agent      User         @relation(fields: [agentId], references: [id])
+  customerId String?
+  customer   Customer?    @relation(fields: [customerId], references: [id])
+  propertyId String?
+  property   Property?    @relation(fields: [propertyId], references: [id])
+  description String?
+  durationMinutes Int?     // برای CALL — مدت تماس
+  costToman       Int?     // برای ADVERTISED — هزینه‌ی آگهی
+  oldValue    String?      // برای STAGE_CHANGE: مرحله‌ی قبلی
+  newValue    String?      // برای STAGE_CHANGE: مرحله‌ی جدید
+  createdAt  DateTime     @default(now())
 
   @@index([agentId, createdAt])
   @@index([customerId, createdAt])
