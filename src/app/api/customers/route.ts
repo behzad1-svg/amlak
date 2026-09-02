@@ -98,7 +98,7 @@ export async function POST(request: Request) {
     return NextResponse.json(newCustomer, { status: 201 });
   } catch (error) {
     if (error instanceof z.ZodError) {
-      return NextResponse.json({ error: 'خطای اعتبارسنجی', details: error.errors }, { status: 400 });
+      return NextResponse.json({ error: 'خطای اعتبارسنجی', details: error.issues }, { status: 400 });
     }
     console.error("Create customer error:", error);
     // Global Error Handler: عدم نشت جزئیات فنی به کلاینت
