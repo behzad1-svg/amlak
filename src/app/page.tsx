@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, useMemo } from "react";
 import {
   Home, Users, Building2, CalendarClock, Handshake, Inbox as InboxIcon,
   FileText, BarChart3, Bell, Settings, Search, Phone, MapPin,
@@ -97,10 +97,6 @@ export default function SajCRM() {
   });
   const [submitting, setSubmitting] = useState(false);
 
-  useEffect(() => {
-    fetchCustomers();
-  }, []);
-
   const fetchCustomers = () => {
     fetch('/api/customers')
       .then(res => res.json())
@@ -110,6 +106,10 @@ export default function SajCRM() {
       })
       .catch(() => setLoading(false));
   };
+
+  useEffect(() => {
+    fetchCustomers();
+  }, []);
 
   const handleAddCustomer = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -144,13 +144,20 @@ export default function SajCRM() {
     }
   };
 
+  const { todayFollowUps, viewings, overdue } = useMemo(() => {
+    const acc = { todayFollowUps: [] as Customer[], viewings: [] as Customer[], overdue: [] as Customer[] };
+    for (let i = 0; i < customers.length; i++) {
+      const c = customers[i];
+      if (c.nextFollowUp === "امروز") acc.todayFollowUps.push(c);
+      if (c.stage === "VIEWING") acc.viewings.push(c);
+      if (c.nextFollowUp === "عقب‌افتاده") acc.overdue.push(c);
+    }
+    return acc;
+  }, [customers]);
+
   if (loading) {
     return <div className="flex items-center justify-center h-screen" style={{ background: T.bg, color: T.text }}>در حال بارگذاری...</div>;
   }
-
-  const todayFollowUps = customers.filter(c => c.nextFollowUp === "امروز");
-  const viewings = customers.filter(c => c.stage === "VIEWING");
-  const overdue = customers.filter(c => c.nextFollowUp === "عقب‌افتاده");
 
   return (
     <div dir="rtl" style={{ ...font, background: T.bg, minHeight: "100vh", color: T.text }}>
