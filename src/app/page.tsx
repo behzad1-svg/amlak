@@ -1,10 +1,10 @@
 "use client";
 
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, useMemo } from "react";
 import {
   Home, Users, Building2, CalendarClock, Handshake, Inbox as InboxIcon,
   FileText, BarChart3, Bell, Settings, Search, Phone, MapPin,
-  Clock, ChevronLeft, Target, X, Archive, Plus, Mail
+  Clock, ChevronLeft, Target, X, Archive, Plus
 } from "lucide-react";
 
 type Customer = {
@@ -73,7 +73,7 @@ function Card({ children, className = "", style = {} }: { children: React.ReactN
   return <div className={`rounded-2xl border p-5 ${className}`} style={{ background: T.surface, borderColor: T.border, ...style }}>{children}</div>;
 }
 
-function SectionTitle({ icon: Icon, title }: { icon: any; title: string }) {
+function SectionTitle({ icon: Icon, title }: { icon: React.ElementType; title: string }) {
   return (
     <div className="flex items-center gap-2 mb-4">
       <Icon size={18} style={{ color: T.gold }} />
@@ -97,10 +97,6 @@ export default function SajCRM() {
   });
   const [submitting, setSubmitting] = useState(false);
 
-  useEffect(() => {
-    fetchCustomers();
-  }, []);
-
   const fetchCustomers = () => {
     fetch('/api/customers')
       .then(res => res.json())
@@ -110,6 +106,10 @@ export default function SajCRM() {
       })
       .catch(() => setLoading(false));
   };
+
+  useEffect(() => {
+    fetchCustomers();
+  }, []);
 
   const handleAddCustomer = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -144,13 +144,24 @@ export default function SajCRM() {
     }
   };
 
-  if (loading) {
-    return <div className="flex items-center justify-center h-screen" style={{ background: T.bg, color: T.text }}>در حال بارگذاری...</div>;
-  }
-
   const todayFollowUps = customers.filter(c => c.nextFollowUp === "امروز");
   const viewings = customers.filter(c => c.stage === "VIEWING");
   const overdue = customers.filter(c => c.nextFollowUp === "عقب‌افتاده");
+
+  const customersByStage = useMemo(() => {
+    const grouped: Record<string, typeof customers> = {};
+    for (const customer of customers) {
+      if (!grouped[customer.stage]) {
+        grouped[customer.stage] = [];
+      }
+      grouped[customer.stage].push(customer);
+    }
+    return grouped;
+  }, [customers]);
+
+  if (loading) {
+    return <div className="flex items-center justify-center h-screen" style={{ background: T.bg, color: T.text }}>در حال بارگذاری...</div>;
+  }
 
   return (
     <div dir="rtl" style={{ ...font, background: T.bg, minHeight: "100vh", color: T.text }}>
@@ -296,7 +307,7 @@ export default function SajCRM() {
                 ) : (
                   <div className="flex gap-4 overflow-x-auto pb-2">
                     {STAGES.map((s) => {
-                      const inStage = customers.filter((c) => c.stage === s.key);
+                      const inStage = customersByStage[s.key] || [];
                       return (
                         <div key={s.key} className="w-64 shrink-0">
                           <div className="flex items-center justify-between rounded-xl px-3 py-2.5 mb-3" style={{ background: T.surfaceRaised }}>
