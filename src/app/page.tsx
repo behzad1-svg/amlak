@@ -4,7 +4,7 @@ import React, { useState, useEffect } from "react";
 import {
   Home, Users, Building2, CalendarClock, Handshake, Inbox as InboxIcon,
   FileText, BarChart3, Bell, Settings, Search, Phone, MapPin,
-  Clock, ChevronLeft, Target, X, Archive, Plus, Mail
+  Clock, ChevronLeft, Target, X, Archive, Plus
 } from "lucide-react";
 
 type Customer = {
@@ -73,7 +73,7 @@ function Card({ children, className = "", style = {} }: { children: React.ReactN
   return <div className={`rounded-2xl border p-5 ${className}`} style={{ background: T.surface, borderColor: T.border, ...style }}>{children}</div>;
 }
 
-function SectionTitle({ icon: Icon, title }: { icon: any; title: string }) {
+function SectionTitle({ icon: Icon, title }: { icon: React.ElementType; title: string }) {
   return (
     <div className="flex items-center gap-2 mb-4">
       <Icon size={18} style={{ color: T.gold }} />
@@ -97,10 +97,6 @@ export default function SajCRM() {
   });
   const [submitting, setSubmitting] = useState(false);
 
-  useEffect(() => {
-    fetchCustomers();
-  }, []);
-
   const fetchCustomers = () => {
     fetch('/api/customers')
       .then(res => res.json())
@@ -110,6 +106,10 @@ export default function SajCRM() {
       })
       .catch(() => setLoading(false));
   };
+
+  useEffect(() => {
+    fetchCustomers();
+  }, []);
 
   const handleAddCustomer = async (e: React.FormEvent) => {
     e.preventDefault();

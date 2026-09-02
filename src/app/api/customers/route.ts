@@ -5,6 +5,8 @@ import {
   CustomerType, CustomerPipelineStage, CustomerTemperature, 
   CustomerSource, LostReasonCategory, PropertyType, PropertyDealType 
 } from '@prisma/client';
+import { matchCustomerToProperties } from '@/lib/matching';
+import { safeJsonStringify } from '@/lib/utils';
 
 // Schema اعتبارسنجی دقیق مطابق MVP
 const createCustomerSchema = z.object({
@@ -22,8 +24,8 @@ const createCustomerSchema = z.object({
   preferredBeds: z.number().int().optional().nullable(),
   preferredSizeMin: z.number().optional().nullable(),
   preferredSizeMax: z.number().optional().nullable(),
-  budgetMin: z.number().int().optional().nullable(),
-  budgetMax: z.number().int().optional().nullable(),
+  budgetMin: z.union([z.number(), z.string()]).transform(val => BigInt(val)).optional().nullable(),
+  budgetMax: z.union([z.number(), z.string()]).transform(val => BigInt(val)).optional().nullable(),
 
   nextFollowUpAt: z.string().datetime().optional().nullable(),
   
@@ -32,7 +34,6 @@ const createCustomerSchema = z.object({
 
   assignedAgentId: z.string().optional(),
 }).refine((data) => {
-  // قانون MVP: اگر LOST شد، دلیل الزامی است
   if (data.stage === CustomerPipelineStage.LOST) {
     return data.lostReasonCategory != null;
   }
@@ -41,7 +42,6 @@ const createCustomerSchema = z.object({
   message: "دلیل از دست رفتن مشتری الزامی است",
   path: ["lostReasonCategory"],
 }).refine((data) => {
-  // قانون MVP: اگر LOST نبود، پیگیری بعدی الزامی است
   if (data.stage !== CustomerPipelineStage.LOST) {
     return data.nextFollowUpAt != null;
   }
@@ -56,7 +56,6 @@ export async function POST(request: Request) {
     const body = await request.json();
     const validatedData = createCustomerSchema.parse(body);
 
-    // بررسی یکتا بودن شماره تلفن (فقط برای مشتریان حذف نشده)
     const existingCustomer = await prisma.customer.findFirst({
       where: {
         phone: validatedData.phone,
@@ -68,7 +67,6 @@ export async function POST(request: Request) {
       return NextResponse.json({ error: 'این شماره تلفن قبلاً ثبت شده است' }, { status: 400 });
     }
 
-    // مدیریت Agent برای v1 (چون هنوز لاگین نداریم)
     let agentId = validatedData.assignedAgentId;
     if (!agentId) {
       let defaultAgent = await prisma.user.findUnique({ where: { phone: '09123456789' } });
@@ -95,13 +93,20 @@ export async function POST(request: Request) {
       },
     });
 
-    return NextResponse.json(newCustomer, { status: 201 });
+    // Run matching synchronously
+    await matchCustomerToProperties(newCustomer);
+
+    return new NextResponse(safeJsonStringify(newCustomer), {
+      status: 201,
+      headers: {
+        'Content-Type': 'application/json',
+      },
+    });
   } catch (error) {
     if (error instanceof z.ZodError) {
-      return NextResponse.json({ error: 'خطای اعتبارسنجی', details: error.errors }, { status: 400 });
+      return NextResponse.json({ error: 'خطای اعتبارسنجی', details: error.issues }, { status: 400 });
     }
     console.error("Create customer error:", error);
-    // Global Error Handler: عدم نشت جزئیات فنی به کلاینت
     return NextResponse.json({ error: 'خطای داخلی سرور' }, { status: 500 });
   }
 }
@@ -112,7 +117,12 @@ export async function GET() {
       where: { deletedAt: null },
       orderBy: { createdAt: 'desc' },
     });
-    return NextResponse.json(customers);
+    return new NextResponse(safeJsonStringify(customers), {
+      status: 200,
+      headers: {
+        'Content-Type': 'application/json',
+      },
+    });
   } catch (error) {
     console.error("Fetch error:", error);
     return NextResponse.json({ error: 'خطای داخلی سرور' }, { status: 500 });
