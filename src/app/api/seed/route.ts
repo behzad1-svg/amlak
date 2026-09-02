@@ -2,6 +2,10 @@ import { NextResponse } from 'next/server';
 import { prisma } from '@/lib/prisma';
 
 export async function GET() {
+  if (process.env.NODE_ENV === 'production') {
+    return NextResponse.json({ error: "Forbidden in production environment" }, { status: 403 });
+  }
+
   try {
     // ۱. اطمینان از وجود یک کاربر پیش‌فرض (برای جلوگیری از خطای Foreign Key)
     let defaultAgent = await prisma.user.findFirst({ where: { role: 'OWNER' } });
