@@ -1,3 +1,4 @@
+import crypto from 'crypto';
 import { NextResponse } from 'next/server';
 import { prisma } from '@/lib/prisma';
 import { z } from 'zod';
@@ -77,7 +78,7 @@ export async function POST(request: Request) {
           data: {
             name: 'مدیر سیستم',
             phone: '09123456789',
-            passwordHash: 'temp_hash',
+            passwordHash: process.env.DEFAULT_PASSWORD_HASH || crypto.randomBytes(32).toString('hex'),
             role: 'OWNER',
           }
         });
@@ -98,7 +99,8 @@ export async function POST(request: Request) {
     return NextResponse.json(newCustomer, { status: 201 });
   } catch (error) {
     if (error instanceof z.ZodError) {
-      return NextResponse.json({ error: 'خطای اعتبارسنجی', details: error.errors }, { status: 400 });
+
+      return NextResponse.json({ error: 'خطای اعتبارسنجی', details: error.issues }, { status: 400 });
     }
     console.error("Create customer error:", error);
     // Global Error Handler: عدم نشت جزئیات فنی به کلاینت
