@@ -1,14 +1,22 @@
-"use client"
-
 import { Button } from "@/components/ui/button"
 import { Users, Home, Settings, LogOut, LayoutDashboard } from "lucide-react"
 import Link from "next/link"
 
-export default function DashboardLayout({
+import { cookies } from "next/headers"
+import { redirect } from "next/navigation"
+
+export default async function DashboardLayout({
   children,
 }: {
   children: React.ReactNode
 }) {
+  const cookieStore = await cookies()
+  const session = cookieStore.get('session_token')
+
+  if (!session) {
+    redirect('/login')
+  }
+
   return (
     <div className="flex h-screen w-full bg-gray-100" dir="rtl">
       {/* Sidebar */}

@@ -8,15 +8,31 @@ import { Input } from "@/components/ui/input"
 export default function LoginPage() {
   const [mobile, setMobile] = useState("")
   const [password, setPassword] = useState("")
+  const [loading, setLoading] = useState(false)
   const router = useRouter()
 
-  const handleLogin = (e: React.FormEvent) => {
+  const handleLogin = async (e: React.FormEvent) => {
     e.preventDefault()
-    // Simulated auth
-    if (mobile === "09123456789" && password === "admin") {
+    setLoading(true)
+
+    try {
+      const res = await fetch("/api/auth/login", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ phone: mobile, password })
+      })
+
+      if (!res.ok) {
+        const error = await res.json()
+        throw new Error(error.error || "خطا در ورود")
+      }
+
       router.push("/dashboard")
-    } else {
-      alert("اطلاعات ورود اشتباه است. (09123456789 / admin)")
+      router.refresh()
+    } catch (error: any) {
+      alert(error.message || "اطلاعات ورود اشتباه است.")
+    } finally {
+      setLoading(false)
     }
   }
 
@@ -50,8 +66,8 @@ export default function LoginPage() {
               className="text-left dir-ltr"
             />
           </div>
-          <Button type="submit" className="w-full">
-            ورود
+          <Button type="submit" className="w-full" disabled={loading}>
+            {loading ? "در حال ورود..." : "ورود"}
           </Button>
         </form>
       </div>
