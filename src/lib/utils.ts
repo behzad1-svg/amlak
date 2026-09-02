@@ -1,19 +1,12 @@
-// Overriding BigInt serialization to string
-// This is needed because `JSON.stringify` throws a TypeError for BigInts,
-// and Prisma returns BigInts for monetary fields.
+import { type ClassValue, clsx } from "clsx"
+import { twMerge } from "tailwind-merge"
 
-declare global {
-  interface BigInt {
-    toJSON(): string;
-  }
+export function cn(...inputs: ClassValue[]) {
+  return twMerge(clsx(inputs))
 }
 
-BigInt.prototype.toJSON = function (): string {
-  return this.toString();
-};
-
-export const safeJsonStringify = (data: unknown): string => {
-  return JSON.stringify(data, (key, value) =>
+export function safeJsonStringify(obj: any): string {
+  return JSON.stringify(obj, (key, value) =>
     typeof value === 'bigint' ? value.toString() : value
-  );
-};
+  )
+}
