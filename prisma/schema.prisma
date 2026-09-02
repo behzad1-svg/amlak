@@ -7,20 +7,92 @@ datasource db {
   url      = env("DATABASE_URL")
 }
 
-enum UserRole { OWNER AGENT }
-enum CustomerType { BUYER SELLER TENANT }
-enum CustomerTemperature { HOT WARM COLD }
-enum PropertyType { APARTMENT VILLA OFFICE LAND SHOP }
-enum PropertyDealType { SALE RENT }
-enum PropertyStatus { ACTIVE RESERVED SOLD RENTED }
-enum PropertyVisibility { TEAM_VISIBLE RESTRICTED }
-enum ViewingStatus { SCHEDULED DONE CANCELED }
-enum CustomerPipelineStage { NEW INITIAL_CONTACT QUALIFIED VIEWING CONTRACT LOST }
-enum LostReasonCategory { CUSTOMER_WITHDREW PRICE_REJECTED NO_RESPONSE NO_SUITABLE_PROPERTY OTHER }
-enum NotificationPriority { LOW NORMAL HIGH }
-enum CustomerSource { INSTAGRAM DIVAR DIRECT_CALL REFERRAL SIGN_BOARD WEBSITE OTHER }
-enum NotificationType { MATCH_SUGGESTION FOLLOW_UP_OVERDUE VIEWING_REMINDER ACCESS_GRANTED }
-enum ActivityType { CALL MESSAGE MEETING NOTE APPRAISAL ADVERTISED VIEWING_DONE STAGE_CHANGE OTHER }
+enum UserRole {
+  OWNER
+  AGENT
+}
+enum CustomerType {
+  BUYER
+  SELLER
+  TENANT
+}
+enum CustomerTemperature {
+  HOT
+  WARM
+  COLD
+}
+enum PropertyType {
+  APARTMENT
+  VILLA
+  OFFICE
+  LAND
+  SHOP
+}
+enum PropertyDealType {
+  SALE
+  RENT
+}
+enum PropertyStatus {
+  ACTIVE
+  RESERVED
+  SOLD
+  RENTED
+}
+enum PropertyVisibility {
+  TEAM_VISIBLE
+  RESTRICTED
+}
+enum ViewingStatus {
+  SCHEDULED
+  DONE
+  CANCELED
+}
+enum CustomerPipelineStage {
+  NEW
+  INITIAL_CONTACT
+  QUALIFIED
+  VIEWING
+  CONTRACT
+  LOST
+}
+enum LostReasonCategory {
+  CUSTOMER_WITHDREW
+  PRICE_REJECTED
+  NO_RESPONSE
+  NO_SUITABLE_PROPERTY
+  OTHER
+}
+enum NotificationPriority {
+  LOW
+  NORMAL
+  HIGH
+}
+enum CustomerSource {
+  INSTAGRAM
+  DIVAR
+  DIRECT_CALL
+  REFERRAL
+  SIGN_BOARD
+  WEBSITE
+  OTHER
+}
+enum NotificationType {
+  MATCH_SUGGESTION
+  FOLLOW_UP_OVERDUE
+  VIEWING_REMINDER
+  ACCESS_GRANTED
+}
+enum ActivityType {
+  CALL
+  MESSAGE
+  MEETING
+  NOTE
+  APPRAISAL
+  ADVERTISED
+  VIEWING_DONE
+  STAGE_CHANGE
+  OTHER
+}
 
 model User {
   id           String   @id @default(cuid())
