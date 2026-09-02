@@ -3,15 +3,16 @@
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Search, Plus } from "lucide-react"
+import Link from "next/link"
 
 export default function PropertiesPage() {
   return (
     <div className="space-y-6">
       <div className="flex items-center justify-between">
         <h2 className="text-2xl font-bold">مدیریت فایل‌ها</h2>
-        <Button className="flex items-center gap-2">
+        <Button className="flex items-center gap-2" asChild><Link href="/dashboard/properties/new">
           <Plus className="w-4 h-4" />
-          ثبت فایل جدید
+          ثبت فایل جدید</Link>
         </Button>
       </div>
 

@@ -3,16 +3,14 @@
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Search, Plus, UserPlus } from "lucide-react"
+import Link from "next/link"
 
 export default function CustomersPage() {
   return (
     <div className="space-y-6">
       <div className="flex items-center justify-between">
         <h2 className="text-2xl font-bold">مدیریت مشتریان</h2>
-        <Button className="flex items-center gap-2">
-          <UserPlus className="w-4 h-4" />
-          ثبت مشتری جدید
-        </Button>
+        <Button className="flex items-center gap-2" asChild><Link href="/dashboard/customers/new"><UserPlus className="w-4 h-4" />ثبت مشتری جدید</Link></Button>
       </div>
 
       <div className="flex items-center gap-4 bg-white p-4 rounded-lg border shadow-sm">
