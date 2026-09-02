@@ -51,6 +51,8 @@ const createCustomerSchema = z.object({
   path: ["nextFollowUpAt"],
 });
 
+let cachedDefaultAgentId: string | null = null;
+
 export async function POST(request: Request) {
   try {
     const body = await request.json();
@@ -71,18 +73,23 @@ export async function POST(request: Request) {
     // مدیریت Agent برای v1 (چون هنوز لاگین نداریم)
     let agentId = validatedData.assignedAgentId;
     if (!agentId) {
-      let defaultAgent = await prisma.user.findUnique({ where: { phone: '09123456789' } });
-      if (!defaultAgent) {
-        defaultAgent = await prisma.user.create({
-          data: {
-            name: 'مدیر سیستم',
-            phone: '09123456789',
-            passwordHash: 'temp_hash',
-            role: 'OWNER',
-          }
-        });
+      if (cachedDefaultAgentId) {
+        agentId = cachedDefaultAgentId;
+      } else {
+        let defaultAgent = await prisma.user.findUnique({ where: { phone: '09123456789' } });
+        if (!defaultAgent) {
+          defaultAgent = await prisma.user.create({
+            data: {
+              name: 'مدیر سیستم',
+              phone: '09123456789',
+              passwordHash: 'temp_hash',
+              role: 'OWNER',
+            }
+          });
+        }
+        cachedDefaultAgentId = defaultAgent.id;
+        agentId = defaultAgent.id;
       }
-      agentId = defaultAgent.id;
     }
 
     const newCustomer = await prisma.customer.create({
@@ -98,7 +105,7 @@ export async function POST(request: Request) {
     return NextResponse.json(newCustomer, { status: 201 });
   } catch (error) {
     if (error instanceof z.ZodError) {
-      return NextResponse.json({ error: 'خطای اعتبارسنجی', details: error.errors }, { status: 400 });
+      return NextResponse.json({ error: 'خطای اعتبارسنجی', details: error.issues }, { status: 400 });
     }
     console.error("Create customer error:", error);
     // Global Error Handler: عدم نشت جزئیات فنی به کلاینت

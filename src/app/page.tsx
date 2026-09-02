@@ -20,7 +20,7 @@ type Customer = {
   source: string;
   nextFollowUp: string | null;
   lostReason?: string | null;
-};
+}
 
 const T = {
   bg: "#F7F4F3", bgSoft: "#FFFFFF", surface: "#FFFFFF", surfaceRaised: "#FBF3F2",
@@ -28,10 +28,10 @@ const T = {
   accentGlow: "rgba(150,34,46,0.10)", gold: "#B4842E", goldSoft: "rgba(180,132,46,0.12)",
   text: "#241614", textMuted: "#6E5C58", textFaint: "#A6928E", success: "#2E8354",
   successSoft: "rgba(46,131,84,0.10)", onAccent: "#FFFFFF",
-};
+}
 
-const font = { fontFamily: "'Vazirmatn', 'IRANSans', 'Tahoma', system-ui, sans-serif" };
-const woodgrain = { backgroundImage: `repeating-linear-gradient(100deg, rgba(180,132,46,0.06) 0px, rgba(180,132,46,0.06) 1px, transparent 1px, transparent 14px)` };
+const font = { fontFamily: "'Vazirmatn', 'IRANSans', 'Tahoma', system-ui, sans-serif" }
+const woodgrain = { backgroundImage: `repeating-linear-gradient(100deg, rgba(180,132,46,0.06) 0px, rgba(180,132,46,0.06) 1px, transparent 1px, transparent 14px)` }
 
 const NAV = [
   { key: "today", label: "امروز", icon: Home },
@@ -64,7 +64,7 @@ function Badge({ children, tone = "muted" }: { children: React.ReactNode; tone?:
     accent: { color: T.accent, bg: T.accentGlow },
     gold: { color: T.gold, bg: T.goldSoft },
     success: { color: T.success, bg: T.successSoft },
-  };
+  }
   const s = tones[tone] || tones.muted;
   return <span className="text-xs px-2 py-1 rounded-full font-medium" style={{ color: s.color, background: s.bg }}>{children}</span>;
 }
@@ -73,7 +73,7 @@ function Card({ children, className = "", style = {} }: { children: React.ReactN
   return <div className={`rounded-2xl border p-5 ${className}`} style={{ background: T.surface, borderColor: T.border, ...style }}>{children}</div>;
 }
 
-function SectionTitle({ icon: Icon, title }: { icon: any; title: string }) {
+function SectionTitle({ icon: Icon, title }: { icon: React.ElementType; title: string }) {
   return (
     <div className="flex items-center gap-2 mb-4">
       <Icon size={18} style={{ color: T.gold }} />
@@ -101,7 +101,7 @@ export default function SajCRM() {
     fetchCustomers();
   }, []);
 
-  const fetchCustomers = () => {
+  function fetchCustomers() {
     fetch('/api/customers')
       .then(res => res.json())
       .then(data => {
@@ -109,7 +109,7 @@ export default function SajCRM() {
         setLoading(false);
       })
       .catch(() => setLoading(false));
-  };
+  }
 
   const handleAddCustomer = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -142,7 +142,7 @@ export default function SajCRM() {
     } finally {
       setSubmitting(false);
     }
-  };
+  }
 
   if (loading) {
     return <div className="flex items-center justify-center h-screen" style={{ background: T.bg, color: T.text }}>در حال بارگذاری...</div>;
