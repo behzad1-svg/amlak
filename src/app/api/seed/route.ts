@@ -1,3 +1,4 @@
+import crypto from 'crypto';
 import { NextResponse } from 'next/server';
 import { prisma } from '@/lib/prisma';
 
@@ -10,7 +11,7 @@ export async function GET() {
         data: { 
           name: 'مدیر سیستم', 
           phone: '09123456789', 
-          passwordHash: 'temp_hash', 
+          passwordHash: process.env.DEFAULT_PASSWORD_HASH || crypto.randomBytes(32).toString('hex'),
           role: 'OWNER' 
         }
       });
