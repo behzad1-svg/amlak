@@ -33,9 +33,12 @@ export async function POST(request: Request) {
     );
 
     const cookieStore = await cookies();
+    // Allow non-secure cookies in production if accessing via HTTP (e.g., bare IP)
+    const isSecure = request.headers.get('x-forwarded-proto') === 'https' || request.url.startsWith('https://');
+
     cookieStore.set('session_token', token, {
       httpOnly: true,
-      secure: process.env.NODE_ENV === 'production',
+      secure: isSecure,
       sameSite: 'lax',
       maxAge: 60 * 60 * 24 * 7 // 1 week
     });
