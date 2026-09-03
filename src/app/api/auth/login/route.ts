@@ -1,10 +1,7 @@
 import { NextResponse } from 'next/server';
 import { prisma } from '@/lib/prisma';
-import { cookies } from 'next/headers';
 import bcrypt from 'bcrypt';
-import jwt from 'jsonwebtoken';
-
-const JWT_SECRET = process.env.JWT_SECRET || 'fallback_secret_key_for_development';
+import { createSession } from '@/lib/auth';
 
 export async function POST(request: Request) {
   try {
@@ -17,31 +14,16 @@ export async function POST(request: Request) {
     const user = await prisma.user.findUnique({ where: { phone } });
 
     if (!user) {
-      return NextResponse.json({ error: 'اطلاعات ورود اشتباه است' }, { status: 401 });
+      return NextResponse.json({ error: 'کاربری با این شماره یافت نشد' }, { status: 401 });
     }
 
-    const isPasswordValid = await bcrypt.compare(password, user.passwordHash);
+    const isMatch = await bcrypt.compare(password, user.passwordHash);
 
-    if (!isPasswordValid) {
-      return NextResponse.json({ error: 'اطلاعات ورود اشتباه است' }, { status: 401 });
+    if (!isMatch) {
+      return NextResponse.json({ error: 'رمز عبور اشتباه است' }, { status: 401 });
     }
 
-    const token = jwt.sign(
-      { id: user.id, role: user.role },
-      JWT_SECRET,
-      { expiresIn: '7d' }
-    );
-
-    const cookieStore = await cookies();
-    // Allow non-secure cookies in production if accessing via HTTP (e.g., bare IP)
-    const isSecure = request.headers.get('x-forwarded-proto') === 'https' || request.url.startsWith('https://');
-
-    cookieStore.set('session_token', token, {
-      httpOnly: true,
-      secure: isSecure,
-      sameSite: 'lax',
-      maxAge: 60 * 60 * 24 * 7 // 1 week
-    });
+    await createSession(user.id, user.role);
 
     return NextResponse.json({ success: true, user: { id: user.id, name: user.name, role: user.role } }, { status: 200 });
   } catch (error) {

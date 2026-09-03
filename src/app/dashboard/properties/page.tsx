@@ -81,7 +81,7 @@ export default function PropertiesPage() {
             ) : (
               properties.map((p) => (
                 <tr key={p.id} className="hover:bg-gray-50">
-                  <td className="px-6 py-4 font-medium text-primary">#{p.id.slice(-5)}</td>
+                  <td className="px-6 py-4 font-medium text-blue-600">#{p.id.slice(-5)}</td>
                   <td className="px-6 py-4">{p.title}</td>
                   <td className="px-6 py-4">{translateType(p.type)} / {translateDeal(p.dealType)}</td>
                   <td className="px-6 py-4">
@@ -96,7 +96,7 @@ export default function PropertiesPage() {
                     </span>
                   </td>
                   <td className="px-6 py-4">
-                    <Button variant="ghost" size="sm" className="text-primary">مشاهده</Button>
+                    <Button variant="ghost" size="sm" className="text-blue-600">مشاهده</Button>
                   </td>
                 </tr>
               ))

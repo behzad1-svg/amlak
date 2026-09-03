@@ -25,6 +25,9 @@ WORKDIR /app
 ENV NODE_ENV production
 ENV NEXT_TELEMETRY_DISABLED 1
 
+# Install prisma globally to run migrations
+RUN npm install -g prisma@5.22.0
+
 # Copy built assets
 COPY --from=builder /app/next.config.ts ./
 COPY --from=builder /app/public ./public
@@ -38,4 +41,4 @@ ENV PORT 3000
 ENV HOSTNAME "0.0.0.0"
 
 # Run Prisma migrations before starting Next.js
-CMD ["sh", "-c", "npx --yes prisma migrate deploy && node server.js"]
+CMD ["sh", "-c", "prisma migrate deploy && node server.js"]

@@ -1,31 +1,69 @@
 import { NextResponse } from 'next/server';
 import { prisma } from '@/lib/prisma';
-import bcrypt from 'bcrypt';
 
-export async function POST(request: Request) {
-  // Protect seed route from public execution in production
-  if (process.env.NODE_ENV === 'production' && process.env.ALLOW_SEED !== 'true') {
-      return NextResponse.json({ error: 'Not allowed in production' }, { status: 403 });
-  }
-
+export async function GET() {
   try {
-    const passwordHash = await bcrypt.hash('admin', 10);
-    const user = await prisma.user.upsert({
-      where: { phone: '09123456789' },
-      update: {
-        passwordHash
-      },
-      create: {
-        name: 'مدیر سیستم',
-        phone: '09123456789',
-        passwordHash,
-        role: 'OWNER',
-      }
+    // ۱. اطمینان از وجود یک کاربر پیش‌فرض (برای جلوگیری از خطای Foreign Key)
+    let defaultAgent = await prisma.user.findFirst({ where: { role: 'OWNER' } });
+    if (!defaultAgent) {
+      defaultAgent = await prisma.user.create({
+        data: {
+          name: 'مدیر سیستم',
+          phone: '09123456789',
+          passwordHash: 'temp_hash',
+          role: 'OWNER'
+        }
+      });
+    }
+
+    // ۲. پاک کردن داده‌های قدیمی
+    await prisma.customer.deleteMany({});
+
+    // ۳. درج داده‌های جدید با فرمت صحیح Enumها و تاریخ
+    await prisma.customer.createMany({
+      data: [
+        {
+          name: "محمد رضایی",
+          phone: "09121234567",
+          type: "BUYER", // Enum صحیح
+          stage: "INITIAL_CONTACT",
+          temperature: "HOT", // Enum صحیح
+          preferredArea: "سعادت‌آباد",
+          budgetMin: 3000000000,
+          source: "WEBSITE", // Enum صحیح
+          nextFollowUpAt: new Date(), // تاریخ امروز
+          assignedAgentId: defaultAgent.id,
+        },
+        {
+          name: "سعید رحیمی",
+          phone: "09382201190",
+          type: "BUYER",
+          stage: "VIEWING",
+          temperature: "WARM",
+          preferredArea: "شهرک صنعتی",
+          budgetMin: 2000000000,
+          source: "INSTAGRAM",
+          nextFollowUpAt: new Date(Date.now() + 86400000), // تاریخ فردا
+          assignedAgentId: defaultAgent.id,
+        },
+        {
+          name: "مریم حسینی",
+          phone: "09354418820",
+          type: "TENANT", // Enum صحیح
+          stage: "QUALIFIED",
+          temperature: "COLD",
+          preferredArea: "بندرگاه",
+          budgetMax: 8000000,
+          source: "DIRECT_CALL", // Enum صحیح
+          nextFollowUpAt: new Date(),
+          assignedAgentId: defaultAgent.id,
+        }
+      ],
     });
 
-    return NextResponse.json({ success: true, message: 'Admin user created successfully' }, { status: 201 });
+    return NextResponse.json({ message: "Database seeded successfully!" });
   } catch (error) {
     console.error("Seed error:", error);
-    return NextResponse.json({ error: 'Internal Server Error' }, { status: 500 });
+    return NextResponse.json({ error: "Failed to seed database" }, { status: 500 });
   }
 }

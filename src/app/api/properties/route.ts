@@ -6,7 +6,7 @@ import {
 } from '@prisma/client';
 import { matchPropertyToCustomers } from '@/lib/matching';
 import { safeJsonStringify } from '@/lib/utils';
-import { getUserFromSession } from '@/lib/auth';
+import { verifySession } from '@/lib/auth';
 
 const createPropertySchema = z.object({
   title: z.string().min(5).max(150),
@@ -30,7 +30,6 @@ const createPropertySchema = z.object({
   images: z.array(z.string().url()).max(20).optional(),
 
   ownerId: z.string().cuid().optional(),
-  listedById: z.string().cuid().optional(),
   visibility: z.nativeEnum(PropertyVisibility).optional(),
 }).refine(data => {
   if (data.dealType === 'SALE') {
@@ -46,15 +45,13 @@ const createPropertySchema = z.object({
 
 export async function POST(request: Request) {
   try {
-    const user = await getUserFromSession();
-    if (!user) {
+    const session = await verifySession();
+    if (!session || !session.id) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
     }
 
     const body = await request.json();
     const validatedData = createPropertySchema.parse(body);
-
-    let listerId = validatedData.listedById || user.id;
 
     let ownerId = validatedData.ownerId;
     if (!ownerId) {
@@ -65,7 +62,7 @@ export async function POST(request: Request) {
                 name: 'صاحب پیش‌فرض',
                 phone: '09123456789',
                 type: 'SELLER',
-                assignedAgentId: listerId,
+                assignedAgentId: session.id as string,
                 nextFollowUpAt: new Date()
             }
         });
@@ -77,7 +74,7 @@ export async function POST(request: Request) {
     const newProperty = await prisma.property.create({
       data: {
         ...validatedData,
-        listedById: listerId,
+        listedById: session.id as string,
         ownerId: ownerId
       },
     });
@@ -100,18 +97,24 @@ export async function POST(request: Request) {
   }
 }
 
-export async function GET() {
+export async function GET(request: Request) {
   try {
-    const user = await getUserFromSession();
-    if (!user) {
+    const session = await verifySession();
+    if (!session || !session.id) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
     }
 
-    const whereClause: any = { deletedAt: null };
-    // Only agents are restricted to their own properties
-    if (user.role === 'AGENT') {
-      whereClause.listedById = user.id;
+    // Role-based visibility logic
+    const role = session.role;
+    let whereClause: any = { deletedAt: null };
+
+    if (role === 'AGENT') {
+        whereClause.OR = [
+            { listedById: session.id }, // Properties listed by this agent
+            { visibility: 'TEAM_VISIBLE' } // Or properties visible to the whole team
+        ]
     }
+    // OWNER or MANAGER can see everything, so no restriction needed
 
     const properties = await prisma.property.findMany({
       where: whereClause,

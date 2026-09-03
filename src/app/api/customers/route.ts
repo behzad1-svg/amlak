@@ -7,7 +7,7 @@ import {
 } from '@prisma/client';
 import { matchCustomerToProperties } from '@/lib/matching';
 import { safeJsonStringify } from '@/lib/utils';
-import { getUserFromSession } from '@/lib/auth';
+import { verifySession } from '@/lib/auth';
 
 // Schema اعتبارسنجی دقیق مطابق MVP
 const createCustomerSchema = z.object({
@@ -54,8 +54,8 @@ const createCustomerSchema = z.object({
 
 export async function POST(request: Request) {
   try {
-    const user = await getUserFromSession();
-    if (!user) {
+    const session = await verifySession();
+    if (!session || !session.id) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
     }
 
@@ -73,7 +73,7 @@ export async function POST(request: Request) {
       return NextResponse.json({ error: 'این شماره تلفن قبلاً ثبت شده است' }, { status: 400 });
     }
 
-    let agentId = validatedData.assignedAgentId || user.id;
+    let agentId = session.id as string;
 
     const newCustomer = await prisma.customer.create({
       data: {
@@ -103,17 +103,19 @@ export async function POST(request: Request) {
   }
 }
 
-export async function GET() {
+export async function GET(request: Request) {
   try {
-    const user = await getUserFromSession();
-    if (!user) {
+    const session = await verifySession();
+    if (!session || !session.id) {
       return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
     }
 
-    const whereClause: any = { deletedAt: null };
-    // Only agents are restricted; owners see all
-    if (user.role === 'AGENT') {
-      whereClause.assignedAgentId = user.id;
+    // Role-based logic
+    const role = session.role;
+    let whereClause: any = { deletedAt: null };
+
+    if (role === 'AGENT') {
+        whereClause.assignedAgentId = session.id;
     }
 
     const customers = await prisma.customer.findMany({
