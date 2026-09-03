@@ -1,6 +1,10 @@
 import { NextResponse } from 'next/server';
 import { prisma } from '@/lib/prisma';
 import { cookies } from 'next/headers';
+import bcrypt from 'bcrypt';
+import jwt from 'jsonwebtoken';
+
+const JWT_SECRET = process.env.JWT_SECRET || 'fallback_secret_key_for_development';
 
 export async function POST(request: Request) {
   try {
@@ -10,35 +14,33 @@ export async function POST(request: Request) {
       return NextResponse.json({ error: 'شماره تلفن و رمز عبور الزامی است' }, { status: 400 });
     }
 
-    // Mock Authentication for MVP
-    // We expect the default admin to be 09123456789 / admin
-    if (phone === '09123456789' && password === 'admin') {
+    const user = await prisma.user.findUnique({ where: { phone } });
 
-      // Ensure the mock admin user exists in the DB so operations work
-      let user = await prisma.user.findUnique({ where: { phone } });
-      if (!user) {
-        user = await prisma.user.create({
-          data: {
-            name: 'مدیر سیستم',
-            phone: '09123456789',
-            passwordHash: 'mocked_admin_hash',
-            role: 'OWNER',
-          }
-        });
-      }
-
-      const cookieStore = await cookies();
-      cookieStore.set('session_token', user.id, {
-        httpOnly: true,
-        secure: process.env.NODE_ENV === 'production',
-        sameSite: 'lax',
-        maxAge: 60 * 60 * 24 * 7 // 1 week
-      });
-
-      return NextResponse.json({ success: true, user: { id: user.id, name: user.name, role: user.role } }, { status: 200 });
+    if (!user) {
+      return NextResponse.json({ error: 'اطلاعات ورود اشتباه است' }, { status: 401 });
     }
 
-    return NextResponse.json({ error: 'اطلاعات ورود اشتباه است' }, { status: 401 });
+    const isPasswordValid = await bcrypt.compare(password, user.passwordHash);
+
+    if (!isPasswordValid) {
+      return NextResponse.json({ error: 'اطلاعات ورود اشتباه است' }, { status: 401 });
+    }
+
+    const token = jwt.sign(
+      { id: user.id, role: user.role },
+      JWT_SECRET,
+      { expiresIn: '7d' }
+    );
+
+    const cookieStore = await cookies();
+    cookieStore.set('session_token', token, {
+      httpOnly: true,
+      secure: process.env.NODE_ENV === 'production',
+      sameSite: 'lax',
+      maxAge: 60 * 60 * 24 * 7 // 1 week
+    });
+
+    return NextResponse.json({ success: true, user: { id: user.id, name: user.name, role: user.role } }, { status: 200 });
   } catch (error) {
     console.error("Login error:", error);
     return NextResponse.json({ error: 'خطای داخلی سرور' }, { status: 500 });

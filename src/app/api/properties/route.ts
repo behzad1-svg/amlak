@@ -6,6 +6,7 @@ import {
 } from '@prisma/client';
 import { matchPropertyToCustomers } from '@/lib/matching';
 import { safeJsonStringify } from '@/lib/utils';
+import { getUserFromSession } from '@/lib/auth';
 
 const createPropertySchema = z.object({
   title: z.string().min(5).max(150),
@@ -45,24 +46,15 @@ const createPropertySchema = z.object({
 
 export async function POST(request: Request) {
   try {
+    const user = await getUserFromSession();
+    if (!user) {
+      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+    }
+
     const body = await request.json();
     const validatedData = createPropertySchema.parse(body);
 
-    let listerId = validatedData.listedById;
-    if (!listerId) {
-      let defaultAgent = await prisma.user.findUnique({ where: { phone: '09123456789' } });
-      if (!defaultAgent) {
-        defaultAgent = await prisma.user.create({
-          data: {
-            name: 'مدیر سیستم',
-            phone: '09123456789',
-            passwordHash: 'temp_hash',
-            role: 'OWNER',
-          }
-        });
-      }
-      listerId = defaultAgent.id;
-    }
+    let listerId = validatedData.listedById || user.id;
 
     let ownerId = validatedData.ownerId;
     if (!ownerId) {

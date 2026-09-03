@@ -7,6 +7,7 @@ import {
 } from '@prisma/client';
 import { matchCustomerToProperties } from '@/lib/matching';
 import { safeJsonStringify } from '@/lib/utils';
+import { getUserFromSession } from '@/lib/auth';
 
 // Schema اعتبارسنجی دقیق مطابق MVP
 const createCustomerSchema = z.object({
@@ -53,6 +54,11 @@ const createCustomerSchema = z.object({
 
 export async function POST(request: Request) {
   try {
+    const user = await getUserFromSession();
+    if (!user) {
+      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+    }
+
     const body = await request.json();
     const validatedData = createCustomerSchema.parse(body);
 
@@ -67,21 +73,7 @@ export async function POST(request: Request) {
       return NextResponse.json({ error: 'این شماره تلفن قبلاً ثبت شده است' }, { status: 400 });
     }
 
-    let agentId = validatedData.assignedAgentId;
-    if (!agentId) {
-      let defaultAgent = await prisma.user.findUnique({ where: { phone: '09123456789' } });
-      if (!defaultAgent) {
-        defaultAgent = await prisma.user.create({
-          data: {
-            name: 'مدیر سیستم',
-            phone: '09123456789',
-            passwordHash: 'temp_hash',
-            role: 'OWNER',
-          }
-        });
-      }
-      agentId = defaultAgent.id;
-    }
+    let agentId = validatedData.assignedAgentId || user.id;
 
     const newCustomer = await prisma.customer.create({
       data: {
