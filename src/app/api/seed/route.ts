@@ -3,6 +3,11 @@ import { prisma } from '@/lib/prisma';
 import bcrypt from 'bcrypt';
 
 export async function POST(request: Request) {
+  // Protect seed route from public execution in production
+  if (process.env.NODE_ENV === 'production' && process.env.ALLOW_SEED !== 'true') {
+      return NextResponse.json({ error: 'Not allowed in production' }, { status: 403 });
+  }
+
   try {
     const passwordHash = await bcrypt.hash('admin', 10);
     const user = await prisma.user.upsert({

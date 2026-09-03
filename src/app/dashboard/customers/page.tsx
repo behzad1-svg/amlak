@@ -93,7 +93,7 @@ export default function CustomersPage() {
                     {c.nextFollowUpAt ? new Date(c.nextFollowUpAt).toLocaleDateString('fa-IR') : 'نامشخص'}
                   </td>
                   <td className="px-6 py-4">
-                    <Button variant="ghost" size="sm" className="text-blue-600">پروفایل</Button>
+                    <Button variant="ghost" size="sm" className="text-primary">پروفایل</Button>
                   </td>
                 </tr>
               ))

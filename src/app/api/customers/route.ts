@@ -105,8 +105,19 @@ export async function POST(request: Request) {
 
 export async function GET() {
   try {
+    const user = await getUserFromSession();
+    if (!user) {
+      return NextResponse.json({ error: 'Unauthorized' }, { status: 401 });
+    }
+
+    const whereClause: any = { deletedAt: null };
+    // Only agents are restricted; owners see all
+    if (user.role === 'AGENT') {
+      whereClause.assignedAgentId = user.id;
+    }
+
     const customers = await prisma.customer.findMany({
-      where: { deletedAt: null },
+      where: whereClause,
       orderBy: { createdAt: 'desc' },
     });
     return new NextResponse(safeJsonStringify(customers), {
