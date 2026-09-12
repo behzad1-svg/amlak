@@ -1,0 +1,12 @@
+{
+  "files.autoSave": "afterDelay",
+  "files.autoSaveDelay": 800,
+  "files.exclude": {
+    "**/.next": true,
+    "**/node_modules": true
+  },
+  "workbench.localHistory.enabled": true,
+  "workbench.localHistory.maxFileEntries": 200,
+  "workbench.localHistory.maxFileSize": 512,
+  "timeline.excludeSources": []
+}
