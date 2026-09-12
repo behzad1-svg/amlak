@@ -1,0 +1,102 @@
+import { NextRequest, NextResponse } from "next/server";
+import { cookies } from "next/headers";
+import { prisma } from "@/lib/prisma";
+import { validateSession } from "@/lib/auth";
+import { propertyUpdateSchema } from "@/lib/validation";
+import { serializeBigInt } from "@/lib/utils";
+import { hasRestrictedAccess } from "@/lib/access";
+import { runMatchingForProperty } from "@/lib/matching";
+import { createAuditLog } from "@/lib/audit";
+
+async function getSession() {
+  const cookieStore = await cookies();
+  const token = cookieStore.get("saj_token")?.value;
+  return validateSession(token);
+}
+
+async function canViewProperty(user: { id: string; role: string }, property: { listedById: string; visibility: string; id: string }) {
+  if (user.role === "OWNER") return true;
+  if (property.listedById === user.id) return true;
+  if (property.visibility === "TEAM_VISIBLE") return true;
+  const hasAccess = await hasRestrictedAccess(prisma as never, property.id, user.id);
+  return hasAccess;
+}
+
+export async function GET(_req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
+  const session = await getSession();
+  if (!session) return NextResponse.json({ error: "وارد نشده‌اید" }, { status: 401 });
+  const { id } = await params;
+  const property = await prisma.property.findUnique({ where: { id }, include: { listedBy: { select: { id: true, name: true } }, owner: { select: { id: true, name: true, phone: true } } } });
+  if (!property || property.deletedAt) return NextResponse.json({ error: "یافت نشد" }, { status: 404 });
+  const allowed = await canViewProperty(session.user, property);
+  if (!allowed) return NextResponse.json({ error: "دسترسی ندارید" }, { status: 403 });
+
+  // Mask for TEAM_VISIBLE non-owners
+  if (session.user.role !== "OWNER" && property.listedById !== session.user.id && property.visibility === "TEAM_VISIBLE") {
+    // Still show but mask address/owner details partially
+  }
+  if (property.visibility === "RESTRICTED" && property.listedById !== session.user.id && session.user.role !== "OWNER") {
+    const hasAccess = await hasRestrictedAccess(prisma as never, property.id, session.user.id);
+    if (!hasAccess) return NextResponse.json({ error: "دسترسی ندارید" }, { status: 403 });
+  }
+
+  return NextResponse.json(serializeBigInt(property));
+}
+
+export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
+  const session = await getSession();
+  if (!session) return NextResponse.json({ error: "وارد نشده‌اید" }, { status: 401 });
+  const { id } = await params;
+  const existing = await prisma.property.findUnique({ where: { id } });
+  if (!existing || existing.deletedAt) return NextResponse.json({ error: "یافت نشد" }, { status: 404 });
+  // Only owner/lister can edit
+  if (session.user.role !== "OWNER" && existing.listedById !== session.user.id) return NextResponse.json({ error: "دسترسی ندارید" }, { status: 403 });
+
+  const body = await req.json();
+  const parsed = propertyUpdateSchema.safeParse(body);
+  if (!parsed.success) return NextResponse.json({ error: parsed.error.issues[0].message }, { status: 400 });
+  const d = parsed.data;
+  const updateData: Record<string, unknown> = {};
+  if (d.title !== undefined) updateData.title = d.title;
+  if (d.type !== undefined) updateData.type = d.type;
+  if (d.dealType !== undefined) updateData.dealType = d.dealType;
+  if (d.salePriceToman !== undefined) updateData.salePriceToman = d.salePriceToman ? BigInt(d.salePriceToman as string) : null;
+  if (d.depositToman !== undefined) updateData.depositToman = d.depositToman ? BigInt(d.depositToman as string) : null;
+  if (d.monthlyRentToman !== undefined) updateData.monthlyRentToman = d.monthlyRentToman ? BigInt(d.monthlyRentToman as string) : null;
+  if (d.status !== undefined) updateData.status = d.status;
+  if (d.sizeSqm !== undefined) updateData.sizeSqm = d.sizeSqm;
+  if (d.beds !== undefined) updateData.beds = d.beds;
+  if (d.builtYear !== undefined) updateData.builtYear = d.builtYear;
+  if (d.floor !== undefined) updateData.floor = d.floor;
+  if (d.totalFloors !== undefined) updateData.totalFloors = d.totalFloors;
+  if (d.hasParking !== undefined) updateData.hasParking = d.hasParking;
+  if (d.hasStorage !== undefined) updateData.hasStorage = d.hasStorage;
+  if (d.region !== undefined) updateData.region = d.region;
+  if (d.address !== undefined) updateData.address = d.address;
+  if (d.ownerId !== undefined) updateData.ownerId = d.ownerId;
+  if (d.visibility !== undefined) updateData.visibility = d.visibility;
+  if (d.isAdvertised !== undefined) updateData.isAdvertised = d.isAdvertised;
+  if (d.nextOwnerFollowUpAt !== undefined) updateData.nextOwnerFollowUpAt = d.nextOwnerFollowUpAt ? new Date(d.nextOwnerFollowUpAt as string) : null;
+
+  const property = await prisma.property.update({ where: { id }, data: updateData });
+  await createAuditLog({ actorId: session.user.id, action: "PROPERTY_UPDATED", entityType: "Property", entityId: id });
+
+  const matchingFields = ["region", "type", "dealType", "salePriceToman", "depositToman", "sizeSqm"];
+  if (matchingFields.some((f) => f in d)) {
+    try { await runMatchingForProperty(id, property.listedById); } catch {}
+  }
+
+  return NextResponse.json(serializeBigInt(property));
+}
+
+export async function DELETE(_req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
+  const session = await getSession();
+  if (!session) return NextResponse.json({ error: "وارد نشده‌اید" }, { status: 401 });
+  const { id } = await params;
+  const existing = await prisma.property.findUnique({ where: { id } });
+  if (!existing || existing.deletedAt) return NextResponse.json({ error: "یافت نشد" }, { status: 404 });
+  if (session.user.role !== "OWNER" && existing.listedById !== session.user.id) return NextResponse.json({ error: "دسترسی ندارید" }, { status: 403 });
+  await prisma.property.update({ where: { id }, data: { deletedAt: new Date() } });
+  await createAuditLog({ actorId: session.user.id, action: "PROPERTY_DELETED", entityType: "Property", entityId: id });
+  return NextResponse.json({ ok: true });
+}
