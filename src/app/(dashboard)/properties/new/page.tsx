@@ -11,7 +11,17 @@ export default function NewPropertyPage() {
   const [owners, setOwners] = useState<{ id: string; name: string }[]>([]);
   const [regions, setRegions] = useState<string[]>([]);
   const [propertyTypes, setPropertyTypes] = useState<{ value: string; label: string }[]>([]);
-  const [form, setForm] = useState<Record<string, string>>({ title: "", type: "APARTMENT", dealType: "SALE", region: "بهمنی", ownerId: "", salePriceToman: "", depositToman: "", monthlyRentToman: "", sizeSqm: "" });
+  const [form, setForm] = useState<Record<string, string>>({
+    title: "", type: "APARTMENT", dealType: "SALE", region: "بهمنی", ownerId: "",
+    salePriceToman: "", depositToman: "", monthlyRentToman: "",
+    // General
+    sizeSqm: "", builtYear: "", address: "",
+    hasParking: "false", hasStorage: "false",
+    // Apartment-specific
+    floor: "", totalFloors: "", beds: "", unitCount: "", unitSizeSqm: "",
+    // Villa / Kolangi
+    landSizeSqm: "", buildingAge: "", passageWidth: "", buildingFloors: "",
+  });
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(false);
   const upd = (k: string, v: string) => setForm((f) => ({ ...f, [k]: v }));
@@ -29,7 +39,22 @@ export default function NewPropertyPage() {
   }, []);
   async function submit(e: React.FormEvent) {
     e.preventDefault(); setError(""); setLoading(true);
-    const body: Record<string, unknown> = { title: form.title, type: form.type, dealType: form.dealType, region: form.region, ownerId: form.ownerId };
+    const body: Record<string, unknown> = {
+      title: form.title, type: form.type, dealType: form.dealType, region: form.region, ownerId: form.ownerId,
+      address: form.address || null,
+      builtYear: form.builtYear ? parseInt(form.builtYear) : null,
+      floor: form.floor ? parseInt(form.floor) : null,
+      totalFloors: form.totalFloors ? parseInt(form.totalFloors) : null,
+      beds: form.beds ? parseInt(form.beds) : null,
+      hasParking: form.hasParking === "true",
+      hasStorage: form.hasStorage === "true",
+      // Extended fields (stored as notes-like or direct)
+      unitCount: form.unitCount ? parseInt(form.unitCount) : null,
+      unitSizeSqm: form.unitSizeSqm ? parseFloat(form.unitSizeSqm) : null,
+      landSizeSqm: form.landSizeSqm ? parseFloat(form.landSizeSqm) : null,
+      passageWidth: form.passageWidth ? parseFloat(form.passageWidth) : null,
+      buildingFloors: form.buildingFloors ? parseInt(form.buildingFloors) : null,
+    };
     if (form.dealType === "SALE") body.salePriceToman = form.salePriceToman;
     else { body.depositToman = form.depositToman; body.monthlyRentToman = form.monthlyRentToman; }
     if (form.sizeSqm) body.sizeSqm = parseFloat(form.sizeSqm);
