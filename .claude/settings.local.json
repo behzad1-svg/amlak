@@ -44,7 +44,8 @@
       "Bash(python /tmp/patch_detail.py)",
       "Bash(echo \" EXIT:$?\")",
       "Bash(python /tmp/patch_detail3.py)",
-      "Bash(python)"
+      "Bash(python)",
+      "Bash(python3)"
     ]
   }
 }
