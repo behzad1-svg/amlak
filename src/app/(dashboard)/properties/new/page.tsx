@@ -49,7 +49,7 @@ export default function NewPropertyPage() {
         <div className="grid gap-4 md:grid-cols-2">
           <div><Label>عنوان *</Label><Input value={form.title} onChange={(e) => upd("title", e.target.value)} required className="mt-1" /></div>
           <div><Label>نوع ملک</Label><Select value={form.type} onChange={(e) => upd("type", e.target.value)} className="mt-1">{propertyTypes.map((t) => <option key={t.value} value={t.value}>{t.label}</option>)}</Select></div>
-          <div><Label>نوع معامله</Label><Select value={form.dealType} onChange={(e) => upd("dealType", e.target.value)} className="mt-1"><option value="SALE">فروش</option><option value="RENT">رهن و اجاره</option></Select></div>
+          <div><Label>نوع معامله</Label><Select value={form.dealType} onChange={(e) => upd("dealType", e.target.value)} className="mt-1"><option value="SALE">خرید / فروش</option><option value="RENT">رهن و اجاره</option></Select></div>
           <div><Label>منطقه *</Label><Select value={form.region} onChange={(e) => upd("region", e.target.value)} className="mt-1">{regions.map((r) => <option key={r} value={r}>{r}</option>)}</Select></div>
           <div><Label>مالک *</Label><Select value={form.ownerId} onChange={(e) => upd("ownerId", e.target.value)} className="mt-1" required><option value="">انتخاب کنید</option>{owners.map((o) => <option key={o.id} value={o.id}>{o.name}</option>)}</Select></div>
           <div><Label>متراژ</Label><NumberInput value={form.sizeSqm} onChange={(e) => upd("sizeSqm", e.target.value)} placeholder="85.5" className="mt-1" /></div>
