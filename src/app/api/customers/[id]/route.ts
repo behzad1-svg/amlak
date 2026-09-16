@@ -37,9 +37,9 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
   if (!parsed.success) return NextResponse.json({ error: parsed.error.issues[0].message }, { status: 400 });
   const d = parsed.data;
 
-  // Stage transition guard: LOST -> NEW directly not allowed
-  if (existing.stage === "LOST" && d.stage === "NEW") {
-    return NextResponse.json({ error: "بازگشت مستقیم از LOST به NEW مجاز نیست" }, { status: 400 });
+  // Stage transition guard: LOST -> INITIAL_CONTACT directly not allowed
+  if (existing.stage === "LOST" && d.stage === "INITIAL_CONTACT") {
+    return NextResponse.json({ error: "بازگشت مستقیم از LOST به تماس اولیه مجاز نیست" }, { status: 400 });
   }
   if (d.stage === "LOST" && !d.lostReasonCategory && !existing.lostReasonCategory) {
     return NextResponse.json({ error: "دلیل از دست رفتن الزامی است" }, { status: 400 });

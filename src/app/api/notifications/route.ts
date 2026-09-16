@@ -15,11 +15,16 @@ export async function GET(req: NextRequest) {
   if (!session) return NextResponse.json({ error: "وارد نشده‌اید" }, { status: 401 });
   const { searchParams } = new URL(req.url);
   const unreadOnly = searchParams.get("unreadOnly") === "true";
+  const page = Math.max(1, parseInt(searchParams.get("page") ?? "1"));
+  const limit = Math.min(100, Math.max(1, parseInt(searchParams.get("limit") ?? "50")));
   const where: Record<string, unknown> = { userId: session.user.id };
   if (unreadOnly) where.read = false;
-  const notifications = await prisma.notification.findMany({ where, orderBy: { createdAt: "desc" }, take: 100 });
+  const [notifications, total] = await Promise.all([
+    prisma.notification.findMany({ where, orderBy: { createdAt: "desc" }, skip: (page - 1) * limit, take: limit }),
+    prisma.notification.count({ where }),
+  ]);
   const unreadCount = await prisma.notification.count({ where: { userId: session.user.id, read: false } });
-  return NextResponse.json({ notifications: serializeBigInt(notifications), unreadCount });
+  return NextResponse.json({ ...serializeBigInt({ notifications }), unreadCount, total, page, limit });
 }
 
 export async function PATCH(req: NextRequest) {

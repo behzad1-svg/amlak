@@ -3,6 +3,7 @@ import { cookies } from "next/headers";
 import { prisma } from "@/lib/prisma";
 import { validateSession } from "@/lib/auth";
 import { serializeBigInt } from "@/lib/utils";
+import { createAuditLog } from "@/lib/audit";
 
 async function getSession() {
   const cookieStore = await cookies();
@@ -24,6 +25,7 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
   if (body.priority !== undefined) data.priority = body.priority;
   if (body.dueAt !== undefined) data.dueAt = body.dueAt ? new Date(body.dueAt) : null;
   const task = await prisma.task.update({ where: { id }, data });
+  await createAuditLog({ actorId: session.user.id, action: "TASK_UPDATED", entityType: "Task", entityId: id, newValue: data as never });
   return NextResponse.json(serializeBigInt(task));
 }
 
@@ -35,5 +37,6 @@ export async function DELETE(_req: NextRequest, { params }: { params: Promise<{ 
   if (!existing) return NextResponse.json({ error: "یافت نشد" }, { status: 404 });
   if (existing.assignedAgentId !== session.user.id && session.user.role !== "OWNER") return NextResponse.json({ error: "دسترسی ندارید" }, { status: 403 });
   await prisma.task.delete({ where: { id } });
+  await createAuditLog({ actorId: session.user.id, action: "TASK_DELETED", entityType: "Task", entityId: id });
   return NextResponse.json({ ok: true });
 }

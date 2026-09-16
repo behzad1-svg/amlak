@@ -4,11 +4,24 @@ import { prisma } from "@/lib/prisma";
 import { validateSession } from "@/lib/auth";
 import { viewingCreateSchema } from "@/lib/validation";
 import { serializeBigInt } from "@/lib/utils";
+import { canAccessCustomer } from "@/lib/access";
+import { hasRestrictedAccess } from "@/lib/access";
+import { createAuditLog } from "@/lib/audit";
 
 async function getSession() {
   const cookieStore = await cookies();
   const token = cookieStore.get("saj_token")?.value;
   return validateSession(token);
+}
+
+async function canAccessPropertyForAction(
+  user: { id: string; role: string },
+  property: { listedById: string; visibility: string; id: string }
+): Promise<boolean> {
+  if (user.role === "OWNER") return true;
+  if (property.listedById === user.id) return true;
+  if (property.visibility === "TEAM_VISIBLE") return true;
+  return hasRestrictedAccess(prisma as never, property.id, user.id);
 }
 
 export async function GET(req: NextRequest) {
@@ -34,9 +47,21 @@ export async function POST(req: NextRequest) {
   const d = parsed.data;
   if (d.endAt && new Date(d.endAt) <= new Date(d.startAt)) return NextResponse.json({ error: "زمان پایان باید بعد از شروع باشد" }, { status: 400 });
   if (d.status === "DONE" && !d.endAt) return NextResponse.json({ error: "برای بازدید انجام‌شده، زمان پایان الزامی است" }, { status: 400 });
+
+  // گارد بین‌مشاوری: باید به مشتری و فایل دسترسی داشته باشد
+  if (session.user.role !== "OWNER") {
+    const customer = await prisma.customer.findUnique({ where: { id: d.customerId } });
+    if (!customer || !canAccessCustomer(session.user, customer)) return NextResponse.json({ error: "به این مشتری دسترسی ندارید" }, { status: 403 });
+    const property = await prisma.property.findUnique({ where: { id: d.propertyId } });
+    if (!property || property.deletedAt) return NextResponse.json({ error: "فایل یافت نشد" }, { status: 404 });
+    const canAccessProp = await canAccessPropertyForAction(session.user, property);
+    if (!canAccessProp) return NextResponse.json({ error: "به این فایل دسترسی ندارید" }, { status: 403 });
+  }
+
   const viewing = await prisma.viewing.create({
     data: { customerId: d.customerId, propertyId: d.propertyId, agentId: session.user.id, startAt: new Date(d.startAt), endAt: d.endAt ? new Date(d.endAt) : null, status: (d.status as never) ?? "SCHEDULED", feedback: d.feedback },
   });
+  await createAuditLog({ actorId: session.user.id, action: "VIEWING_CREATED", entityType: "Viewing", entityId: viewing.id, newValue: { customerId: d.customerId, propertyId: d.propertyId } as never });
   if (viewing.status === "DONE") {
     await prisma.activity.create({ data: { type: "VIEWING_DONE", agentId: session.user.id, customerId: d.customerId, propertyId: d.propertyId, description: `بازدید انجام شد` } });
   }

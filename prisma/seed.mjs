@@ -26,7 +26,7 @@ async function main() {
   // مشتریان نمونه
   const c1 = await prisma.customer.create({
     data: {
-      name: "رضا کریمی", phone: "09170000101", type: "BUYER", stage: "NEW", temperature: "HOT",
+      name: "رضا کریمی", phone: "09170000101", type: "BUYER", stage: "INITIAL_CONTACT", temperature: "HOT",
       preferredDealType: "SALE", preferredType: "APARTMENT", preferredArea: "بهمنی", budgetMax: BigInt("3500000000"), preferredSizeMin: 80, preferredSizeMax: 120,
       nextFollowUpAt: new Date(Date.now() - 2 * 24 * 60 * 60 * 1000), // عقب‌افتاده
       assignedAgentId: agent1.id,

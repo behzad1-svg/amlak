@@ -1,5 +1,6 @@
 // Simple in-memory rate limiter (single-instance, per spec)
 // For multi-instance deployment: switch to Redis or DB-backed storage
+// محدودیت مستند: فقط با یک Instance درست کار می‌کند؛ برای چند instance باید به storage مشترک سوییچ شود.
 const store = new Map<string, { count: number; resetAt: number }>();
 
 export function rateLimit(key: string, max: number, windowMs: number): { allowed: boolean; remaining: number } {

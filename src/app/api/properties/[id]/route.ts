@@ -4,7 +4,7 @@ import { prisma } from "@/lib/prisma";
 import { validateSession } from "@/lib/auth";
 import { propertyUpdateSchema } from "@/lib/validation";
 import { serializeBigInt } from "@/lib/utils";
-import { hasRestrictedAccess } from "@/lib/access";
+import { hasRestrictedAccess, maskPropertyForTeam } from "@/lib/access";
 import { runMatchingForProperty } from "@/lib/matching";
 import { createAuditLog } from "@/lib/audit";
 
@@ -31,16 +31,13 @@ export async function GET(_req: NextRequest, { params }: { params: Promise<{ id:
   const allowed = await canViewProperty(session.user, property);
   if (!allowed) return NextResponse.json({ error: "دسترسی ندارید" }, { status: 403 });
 
-  // Mask for TEAM_VISIBLE non-owners
+  // RESTRICTED بدون دسترسی را قبلا canViewProperty رد کرده؛ اینجا فقط TEAM_VISIBLE دیگران را ماسک می‌کنیم
+  let result: unknown = property;
   if (session.user.role !== "OWNER" && property.listedById !== session.user.id && property.visibility === "TEAM_VISIBLE") {
-    // Still show but mask address/owner details partially
-  }
-  if (property.visibility === "RESTRICTED" && property.listedById !== session.user.id && session.user.role !== "OWNER") {
-    const hasAccess = await hasRestrictedAccess(prisma as never, property.id, session.user.id);
-    if (!hasAccess) return NextResponse.json({ error: "دسترسی ندارید" }, { status: 403 });
+    result = maskPropertyForTeam(property as unknown as Record<string, unknown>);
   }
 
-  return NextResponse.json(serializeBigInt(property));
+  return NextResponse.json(serializeBigInt(result));
 }
 
 export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id: string }> }) {

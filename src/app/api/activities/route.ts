@@ -4,6 +4,8 @@ import { prisma } from "@/lib/prisma";
 import { validateSession } from "@/lib/auth";
 import { activityCreateSchema } from "@/lib/validation";
 import { serializeBigInt } from "@/lib/utils";
+import { canAccessCustomer, hasRestrictedAccess } from "@/lib/access";
+import { createAuditLog } from "@/lib/audit";
 
 async function getSession() {
   const cookieStore = await cookies();
@@ -18,6 +20,8 @@ export async function GET(req: NextRequest) {
   const customerId = searchParams.get("customerId");
   const propertyId = searchParams.get("propertyId");
   const agentId = searchParams.get("agentId");
+  const page = Math.max(1, parseInt(searchParams.get("page") ?? "1"));
+  const limit = Math.min(100, Math.max(1, parseInt(searchParams.get("limit") ?? "50")));
   const where: Record<string, unknown> = {};
   if (customerId) where.customerId = customerId;
   if (propertyId) where.propertyId = propertyId;
@@ -27,8 +31,13 @@ export async function GET(req: NextRequest) {
   } else if (session.user.role !== "OWNER") {
     where.agentId = session.user.id;
   }
-  const activities = await prisma.activity.findMany({ where, include: { agent: { select: { id: true, name: true } } }, orderBy: { createdAt: "desc" }, take: 100 });
-  return NextResponse.json(serializeBigInt(activities));
+  const isDefaultPage = !new URL(req.url).searchParams.has("page") && !new URL(req.url).searchParams.has("limit");
+  const [activities, total] = await Promise.all([
+    prisma.activity.findMany({ where, include: { agent: { select: { id: true, name: true } } }, orderBy: { createdAt: "desc" }, skip: (page - 1) * limit, take: limit }),
+    prisma.activity.count({ where }),
+  ]);
+  if (isDefaultPage) return NextResponse.json(serializeBigInt(activities));
+  return NextResponse.json({ ...serializeBigInt({ activities }), total, page, limit });
 }
 
 export async function POST(req: NextRequest) {
@@ -38,8 +47,24 @@ export async function POST(req: NextRequest) {
   const parsed = activityCreateSchema.safeParse(body);
   if (!parsed.success) return NextResponse.json({ error: parsed.error.issues[0].message }, { status: 400 });
   const d = parsed.data;
+
+  // گارد: اگر به مشتری/فایل اشاره شده، باید دسترسی داشته باشد
+  if (session.user.role !== "OWNER") {
+    if (d.customerId) {
+      const customer = await prisma.customer.findUnique({ where: { id: d.customerId } });
+      if (!customer || !canAccessCustomer(session.user, customer)) return NextResponse.json({ error: "به این مشتری دسترسی ندارید" }, { status: 403 });
+    }
+    if (d.propertyId) {
+      const property = await prisma.property.findUnique({ where: { id: d.propertyId } });
+      if (!property || property.deletedAt) return NextResponse.json({ error: "فایل یافت نشد" }, { status: 404 });
+      const canAccessProp = property.listedById === session.user.id || property.visibility === "TEAM_VISIBLE" || await hasRestrictedAccess(prisma as never, property.id, session.user.id);
+      if (!canAccessProp) return NextResponse.json({ error: "به این فایل دسترسی ندارید" }, { status: 403 });
+    }
+  }
+
   const activity = await prisma.activity.create({
     data: { type: d.type as never, agentId: session.user.id, customerId: d.customerId, propertyId: d.propertyId, description: d.description, durationMinutes: d.durationMinutes, costToman: d.costToman },
   });
+  await createAuditLog({ actorId: session.user.id, action: "ACTIVITY_CREATED", entityType: "Activity", entityId: activity.id, newValue: { type: d.type } as never });
   return NextResponse.json(serializeBigInt(activity), { status: 201 });
 }

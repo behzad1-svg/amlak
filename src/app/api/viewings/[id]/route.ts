@@ -3,6 +3,7 @@ import { cookies } from "next/headers";
 import { prisma } from "@/lib/prisma";
 import { validateSession } from "@/lib/auth";
 import { serializeBigInt } from "@/lib/utils";
+import { createAuditLog } from "@/lib/audit";
 
 async function getSession() {
   const cookieStore = await cookies();
@@ -26,6 +27,7 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
   if (body.startAt !== undefined) data.startAt = new Date(body.startAt);
   if (data.status === "DONE" && !data.endAt && !existing.endAt) return NextResponse.json({ error: "زمان پایان الزامی است" }, { status: 400 });
   const viewing = await prisma.viewing.update({ where: { id }, data });
+  await createAuditLog({ actorId: session.user.id, action: "VIEWING_UPDATED", entityType: "Viewing", entityId: id, oldValue: { status: existing.status } as never, newValue: { status: viewing.status } as never });
   if (!wasDone && viewing.status === "DONE") {
     await prisma.activity.create({ data: { type: "VIEWING_DONE", agentId: viewing.agentId, customerId: viewing.customerId, propertyId: viewing.propertyId, description: "بازدید انجام شد" } });
   }

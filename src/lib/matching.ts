@@ -17,6 +17,16 @@ function budgetScore(customerMax: bigint | null, propertyPrice: bigint | null): 
   return null; // رد
 }
 
+// برای RENT: ودیعه و اجاره را جداگانه امتیاز بده و میانگین بگیر
+function rentBudgetScore(customerMax: bigint | null, deposit: bigint | null, monthlyRent: bigint | null): number | null {
+  const dScore = budgetScore(customerMax, deposit);
+  const rScore = budgetScore(customerMax, monthlyRent);
+  if (dScore !== null && rScore !== null) return Math.round((dScore + rScore) / 2);
+  if (dScore !== null) return dScore;
+  if (rScore !== null) return rScore;
+  return null;
+}
+
 function sizeScore(
   custMin: number | null, custMax: number | null, propSize: number | null
 ): number | null {
@@ -52,12 +62,11 @@ export async function findMatchesForCustomer(customerId: string): Promise<MatchR
 
   const results: MatchResult[] = [];
   for (const prop of properties) {
-    // Budget soft score
     let bScore: number | null = null;
-    if (customer.preferredDealType === "SALE" || !customer.preferredDealType) {
-      bScore = budgetScore(customer.budgetMax, prop.salePriceToman);
-    } else if (customer.preferredDealType === "RENT") {
-      bScore = budgetScore(customer.budgetMax, prop.depositToman);
+    if (customer.preferredDealType === "RENT") {
+      bScore = rentBudgetScore(customer.budgetMax, (prop as { depositToman: bigint | null }).depositToman, (prop as { monthlyRentToman: bigint | null }).monthlyRentToman);
+    } else {
+      bScore = budgetScore(customer.budgetMax, (prop as { salePriceToman: bigint | null }).salePriceToman);
     }
 
     // If budget exceeds 10% → رد
@@ -109,15 +118,15 @@ export async function findMatchesForProperty(propertyId: string): Promise<MatchR
   const results: MatchResult[] = [];
   for (const cust of customers) {
     // Hard filters
-    if (cust.preferredDealType && cust.preferredDealType !== property.dealType) continue;
-    if (cust.preferredType && cust.preferredType !== property.type) continue;
-    if (cust.preferredArea && cust.preferredArea !== property.region) continue;
+    if (cust.preferredDealType && cust.preferredDealType !== (property as { dealType: string }).dealType) continue;
+    if (cust.preferredType && cust.preferredType !== (property as { type: string }).type) continue;
+    if (cust.preferredArea && cust.preferredArea !== (property as { region: string }).region) continue;
 
     let bScore: number | null = null;
-    if (cust.preferredDealType === "SALE" || !cust.preferredDealType) {
-      bScore = budgetScore(cust.budgetMax, property.salePriceToman);
+    if (cust.preferredDealType === "RENT") {
+      bScore = rentBudgetScore(cust.budgetMax, (property as { depositToman: bigint | null }).depositToman, (property as { monthlyRentToman: bigint | null }).monthlyRentToman);
     } else {
-      bScore = budgetScore(cust.budgetMax, property.depositToman);
+      bScore = budgetScore(cust.budgetMax, (property as { salePriceToman: bigint | null }).salePriceToman);
     }
     if (cust.budgetMax != null && bScore === null) continue;
 
@@ -152,6 +161,28 @@ export async function findMatchesForProperty(propertyId: string): Promise<MatchR
   return results.sort((a, b) => b.score - a.score);
 }
 
+async function alreadyNotified(userId: string, relatedId: string, sourceId: string): Promise<boolean> {
+  // جلوگیری از اعلان تکراری: اگر در 24 ساعت اخیر همان (user, relatedId) با همان sourceId وجود داشت، تکرار نکن
+  const since = new Date(Date.now() - 24 * 60 * 60 * 1000);
+  const existing = await prisma.notification.findFirst({
+    where: {
+      userId,
+      relatedId,
+      type: "MATCH_SUGGESTION",
+      createdAt: { gte: since },
+      message: { contains: sourceId.slice(0, 8) },
+    },
+  });
+  if (existing) return true;
+  // همچنین چک دقیق پیام حاوی relatedId دیگر
+  const exact = await prisma.notification.findFirst({
+    where: { userId, relatedId, type: "MATCH_SUGGESTION", createdAt: { gte: since } },
+  });
+  // اگر هر تطبیق قبلی با همین جفت در 24 ساعت وجود داشت، آن را تکرار نکن — فقط اگر امتیاز تغییر کرده باشد اجازه می‌دهیم
+  // برای سادگی: اگر هر رکوردی با همین relatedId در 24 ساعت بود، skip
+  return !!exact;
+}
+
 export async function createMatchNotifications(
   matches: MatchResult[],
   sourceType: "customer" | "property",
@@ -172,6 +203,12 @@ export async function createMatchNotifications(
 
     if (!targetAgentId) continue;
 
+    // ضدتکرار
+    const dedupKey = `${sourceType}:${sourceId}→${targetId}`;
+    const alreadyForTarget = targetAgentId !== sourceAgentId ? await alreadyNotified(targetAgentId, sourceType === "customer" ? targetId : sourceId, sourceId) : false;
+    const alreadyForSource = await alreadyNotified(sourceAgentId, targetId, sourceId);
+    if (alreadyForTarget && alreadyForSource) continue;
+
     const score = match.score;
     const reasons = match.reasons.join(" — ");
     const priority = score >= 90 ? "HIGH" : score >= 80 ? "NORMAL" : "LOW";
@@ -180,7 +217,7 @@ export async function createMatchNotifications(
     const sourceLabel = sourceType === "customer" ? "مشتری" : "فایل";
 
     // نوتیفیکیشن برای مالک فایل/مشتری مقابل
-    if (targetAgentId !== sourceAgentId) {
+    if (targetAgentId !== sourceAgentId && !alreadyForTarget) {
       await prisma.notification.create({
         data: {
           userId: targetAgentId,
@@ -188,22 +225,24 @@ export async function createMatchNotifications(
           priority: priority as never,
           relatedType: sourceType === "customer" ? "Property" : "Customer",
           relatedId: sourceType === "customer" ? targetId : sourceId,
-          message: `${score}% — ${reasons} — یه ${sourceLabel} جدید با فایل/مشتری شما تطبیق دارد، برای هماهنگی تماس بگیرید.`,
+          message: `${score}% — ${reasons} — یه ${sourceLabel} جدید با فایل/مشتری شما تطبیق دارد، برای هماهنگی تماس بگیرید. [${dedupKey}]`,
         },
       });
     }
 
     // نوتیفیکیشن برای خود ایجادکننده هم
-    await prisma.notification.create({
-      data: {
-        userId: sourceAgentId,
-        type: "MATCH_SUGGESTION",
-        priority: priority as never,
-        relatedType: sourceType === "customer" ? "Property" : "Customer",
-        relatedId: targetId,
-        message: `${score}% — ${reasons} — تطبیق یافت.`,
-      },
-    });
+    if (!alreadyForSource) {
+      await prisma.notification.create({
+        data: {
+          userId: sourceAgentId,
+          type: "MATCH_SUGGESTION",
+          priority: priority as never,
+          relatedType: sourceType === "customer" ? "Property" : "Customer",
+          relatedId: targetId,
+          message: `${score}% — ${reasons} — تطبیق یافت. [${dedupKey}]`,
+        },
+      });
+    }
   }
 }
 

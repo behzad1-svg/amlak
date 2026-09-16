@@ -6,7 +6,9 @@ import { rateLimit } from "@/lib/rateLimit";
 import { serializeBigInt } from "@/lib/utils";
 
 export async function POST(req: NextRequest) {
-  const ip = req.headers.get("x-forwarded-for") ?? req.headers.get("x-real-ip") ?? "unknown";
+  // توجه: در دیپلوی تک‌نمونه، rateLimit حافظه‌ای کافی است؛ برای چند نمونه باید به Redis/DB مشترک سوییچ شود.
+  // هدر x-forwarded-for قابل جعل است — فقط در پشت reverse-proxy معتبر است؛ در prod حتما XFF را فقط از proxy بپذیرید.
+  const ip = req.headers.get("x-forwarded-for")?.split(",")[0]?.trim() ?? req.headers.get("x-real-ip") ?? "unknown";
   const rl = rateLimit(`login:${ip}`, 5, 15 * 60 * 1000);
   if (!rl.allowed) {
     return NextResponse.json({ error: "تعداد تلاش بیش از حد مجاز، لطفا بعدا تلاش کنید" }, { status: 429 });

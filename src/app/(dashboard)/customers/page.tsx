@@ -22,7 +22,7 @@ export default function CustomersPage() {
   async function handleDrop(newStage: string) {
     if (!dragId) return;
     const c = customers.find((x) => x.id === dragId);
-    if (c?.stage === "LOST" && newStage === "NEW") return;
+    if (c?.stage === "LOST" && newStage === "INITIAL_CONTACT") return;
     const body: Record<string, unknown> = { stage: newStage };
     if (newStage === "LOST") {
       const cat = prompt("دلیل: CUSTOMER_WITHDREW / PRICE_REJECTED / NO_RESPONSE / NO_SUITABLE_PROPERTY / OTHER", "OTHER");
@@ -37,10 +37,9 @@ export default function CustomersPage() {
   const stages = [...CUSTOMER_STAGE_ORDER, ...(showLost ? ["LOST"] as const : [])];
   const grouped = new Map<string, Customer[]>();
   for (const s of stages) grouped.set(s, []);
-  for (const c of customers) { const arr = grouped.get(c.stage); if (arr) arr.push(c); else grouped.get("NEW")!.push(c); }
+  for (const c of customers) { const arr = grouped.get(c.stage); if (arr) arr.push(c); else grouped.get("INITIAL_CONTACT")!.push(c); }
 
   const stageAccent: Record<string, string> = {
-    NEW: "border-[var(--line)] bg-[var(--paper-2)]",
     INITIAL_CONTACT: "border-[#C7D8EE] bg-[#EFF4FF]",
     QUALIFIED: "border-[#F1D9A8] bg-[var(--amber-soft)]",
     VIEWING: "border-[#C9D8E8] bg-[#EEF2FF]",

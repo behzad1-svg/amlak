@@ -9,7 +9,7 @@ export const customerCreateSchema = z.object({
   name: z.string().min(1, "نام و نام خانوادگی الزامی است").max(200),
   phone: z.string().regex(/^[0-9]{10,15}$/, "شماره تماس فقط عدد و ۱۰ تا ۱۵ رقم"),
   type: z.enum(["BUYER", "SELLER", "TENANT", "OWNER"]),
-  stage: z.enum(["NEW", "INITIAL_CONTACT", "QUALIFIED", "VIEWING", "CONTRACT", "LOST"]).optional(),
+  stage: z.enum(["INITIAL_CONTACT", "QUALIFIED", "VIEWING", "CONTRACT", "LOST"]).optional(),
   temperature: z.enum(["HOT", "WARM", "COLD"]).optional(),
   source: z.enum(["INSTAGRAM", "DIVAR", "DIRECT_CALL", "REFERRAL", "SIGN_BOARD", "WEBSITE", "OTHER"]).optional().nullable(),
   notes: z.string().max(2000).optional().nullable(),

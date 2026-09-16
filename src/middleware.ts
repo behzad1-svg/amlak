@@ -1,7 +1,11 @@
 import { NextRequest, NextResponse } from "next/server";
 import { jwtVerify } from "jose";
 
-const JWT_SECRET = new TextEncoder().encode(process.env.JWT_SECRET || "fallback");
+function getJwtSecret(): Uint8Array {
+  const secret = process.env.JWT_SECRET;
+  if (!secret) throw new Error("JWT_SECRET is not set — refusing to start with insecure fallback");
+  return new TextEncoder().encode(secret);
+}
 
 const publicPaths = ["/login", "/api/auth/login", "/api/health"];
 
@@ -16,7 +20,7 @@ export async function middleware(req: NextRequest) {
     return NextResponse.redirect(new URL("/login", req.url));
   }
   try {
-    await jwtVerify(token, JWT_SECRET);
+    await jwtVerify(token, getJwtSecret());
     return NextResponse.next();
   } catch {
     if (pathname.startsWith("/api/")) return NextResponse.json({ error: "توکن نامعتبر" }, { status: 401 });

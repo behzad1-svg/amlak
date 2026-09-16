@@ -22,6 +22,13 @@ export async function GET(req: NextRequest) {
   const showLost = searchParams.get("showLost") === "true";
   const showDeleted = searchParams.get("showDeleted") === "true";
   const search = searchParams.get("search");
+  const page = Math.max(1, parseInt(searchParams.get("page") ?? "1"));
+  const limit = Math.min(100, Math.max(1, parseInt(searchParams.get("limit") ?? "100")));
+  const budgetMin = searchParams.get("budgetMin");
+  const budgetMax = searchParams.get("budgetMax");
+  const sizeMin = searchParams.get("sizeMin");
+  const sizeMax = searchParams.get("sizeMax");
+  const agentId = searchParams.get("agentId");
 
   const where: Record<string, unknown> = {};
   if (!showDeleted) where.deletedAt = null;
@@ -33,14 +40,27 @@ export async function GET(req: NextRequest) {
   }
   if (search) where.name = { contains: search, mode: "insensitive" };
   if (session.user.role !== "OWNER") where.assignedAgentId = session.user.id;
+  else if (agentId) where.assignedAgentId = agentId;
+  if (budgetMin) where.budgetMax = { gte: BigInt(budgetMin) };
+  if (budgetMax) where.budgetMin = { lte: BigInt(budgetMax) };
+  if (sizeMin) where.preferredSizeMax = { gte: parseFloat(sizeMin) };
+  if (sizeMax) where.preferredSizeMin = { lte: parseFloat(sizeMax) };
 
-  const customers = await prisma.customer.findMany({
-    where,
-    include: { assignedAgent: { select: { id: true, name: true } } },
-    orderBy: [{ nextFollowUpAt: "asc" }, { createdAt: "desc" }],
-  });
+  const [customers, total] = await Promise.all([
+    prisma.customer.findMany({
+      where,
+      include: { assignedAgent: { select: { id: true, name: true } } },
+      orderBy: [{ nextFollowUpAt: "asc" }, { createdAt: "desc" }],
+      skip: (page - 1) * limit,
+      take: limit,
+    }),
+    prisma.customer.count({ where }),
+  ]);
 
-  return NextResponse.json(serializeBigInt(customers));
+  // Kanban صفحه همیشه کل لیست را می‌خواهد — اگر page/limit پیش‌فرض بود، همان آرایه ساده برگردان
+  const isDefaultPage = !searchParams.has("page") && !searchParams.has("limit");
+  if (isDefaultPage) return NextResponse.json(serializeBigInt(customers));
+  return NextResponse.json({ ...serializeBigInt({ customers }), total, page, limit });
 }
 
 export async function POST(req: NextRequest) {
@@ -65,7 +85,7 @@ export async function POST(req: NextRequest) {
       name: d.name,
       phone: d.phone,
       type: d.type as never,
-      stage: (d.stage as never) ?? "NEW",
+      stage: (d.stage as never) ?? "INITIAL_CONTACT",
       temperature: (d.temperature as never) ?? "WARM",
       source: d.source as never,
       notes: d.notes,
@@ -111,7 +131,7 @@ export async function POST(req: NextRequest) {
   try { await runMatchingForCustomer(customer.id, session.user.id); } catch {}
 
   // Activity
-  await prisma.activity.create({ data: { type: "STAGE_CHANGE", agentId: session.user.id, customerId: customer.id, description: `مشتری جدید: ${d.name}`, newValue: d.stage ?? "NEW" } });
+  await prisma.activity.create({ data: { type: "STAGE_CHANGE", agentId: session.user.id, customerId: customer.id, description: `مشتری جدید: ${d.name}`, newValue: d.stage ?? "INITIAL_CONTACT" } });
 
   return NextResponse.json(serializeBigInt(customer), { status: 201 });
 }

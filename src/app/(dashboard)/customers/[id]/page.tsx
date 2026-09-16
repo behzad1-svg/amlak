@@ -49,6 +49,7 @@ export default function CustomerDetailPage() {
   const [activityText, setActivityText] = useState("");
   const [activityType, setActivityType] = useState("NOTE");
   const [savingActivity, setSavingActivity] = useState(false);
+  const [followUpSaving, setFollowUpSaving] = useState<string | null>(null);
   const [regions, setRegions] = useState<string[]>([]);
   const [propertyTypes, setPropertyTypes] = useState<{ value: string; label: string }[]>([]);
 
@@ -76,7 +77,10 @@ export default function CustomerDetailPage() {
       });
     fetch(`/api/activities?customerId=${id}`)
       .then((r) => r.json())
-      .then((d) => setActivities(Array.isArray(d) ? d : []));
+      .then((d) => {
+        const list = Array.isArray(d) ? d : (Array.isArray(d.activities) ? d.activities : []);
+        setActivities(list);
+      });
   }
   useEffect(() => { load(); fetch("/api/settings").then((r)=>r.json()).then((d)=>{ if(d.regions) setRegions(d.regions); if(d.propertyTypes) setPropertyTypes(d.propertyTypes); }); }, [id]);
 
@@ -155,7 +159,7 @@ export default function CustomerDetailPage() {
               <div><Label>نام و نام خانوادگی</Label><Input value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })} className="mt-1" /></div>
               <div><Label>شماره تماس</Label><PhoneInput value={form.phone} onChange={(e) => setForm({ ...form, phone: e.target.value })} className="mt-1" /></div>
               <div><Label>نوع</Label><Select value={form.type} onChange={(e) => setForm({ ...form, type: e.target.value })} className="mt-1"><option value="BUYER">خریدار</option><option value="SELLER">فروشنده</option><option value="TENANT">مستاجر</option><option value="OWNER">مالک</option></Select></div>
-              <div><Label>مرحله</Label><Select value={form.stage} onChange={(e) => setForm({ ...form, stage: e.target.value })} className="mt-1"><option value="NEW">جدید</option><option value="INITIAL_CONTACT">تماس اولیه</option><option value="QUALIFIED">ارزیابی‌شده</option><option value="VIEWING">بازدید</option><option value="CONTRACT">قرارداد</option><option value="LOST">از دست رفته</option></Select></div>
+              <div><Label>مرحله</Label><Select value={form.stage} onChange={(e) => setForm({ ...form, stage: e.target.value })} className="mt-1"><option value="INITIAL_CONTACT">تماس اولیه</option><option value="QUALIFIED">ارزیابی‌شده</option><option value="VIEWING">بازدید</option><option value="CONTRACT">قرارداد</option><option value="LOST">از دست رفته</option></Select></div>
               <div><Label>دما</Label><Select value={form.temperature} onChange={(e) => setForm({ ...form, temperature: e.target.value })} className="mt-1"><option value="HOT">داغ</option><option value="WARM">گرم</option><option value="COLD">سرد</option></Select></div>
               <div><Label>منبع</Label><Select value={form.source} onChange={(e) => setForm({ ...form, source: e.target.value })} className="mt-1"><option value="">—</option><option value="INSTAGRAM">اینستاگرام</option><option value="DIVAR">دیوار</option><option value="DIRECT_CALL">تماس مستقیم</option><option value="REFERRAL">معرفی</option><option value="SIGN_BOARD">تابلو</option><option value="WEBSITE">وب‌سایت</option><option value="OTHER">سایر</option></Select></div>
               <div><Label>نوع معامله موردنظر</Label><Select value={form.preferredDealType} onChange={(e) => setForm({ ...form, preferredDealType: e.target.value })} className="mt-1"><option value="">—</option><option value="SALE">خرید / فروش</option><option value="RENT">رهن و اجاره</option></Select></div>
@@ -231,7 +235,19 @@ export default function CustomerDetailPage() {
               <Calendar className={`h-4 w-4 ${overdue ? "text-[var(--pomegranate)]" : "text-zinc-500"}`} /> پیگیری بعدی
               {overdue && <span className="rounded-full bg-[var(--pomegranate)] px-2 py-0.5 text-[11px] font-bold text-white">عقب‌افتاده</span>}
             </h3>
-            {c.nextFollowUpAt ? (
+            {followUpSaving !== null ? (
+              <div className="rounded-[12px] border border-[var(--line)] bg-white p-3">
+                <JalaliDatePicker value={followUpSaving} onChange={(v) => setFollowUpSaving(v)} />
+                <div className="mt-2 flex gap-2">
+                  <Button size="sm" disabled={!followUpSaving} onClick={async () => {
+                    if (!followUpSaving) return;
+                    const res = await fetch(`/api/customers/${id}`, { method: "PATCH", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ nextFollowUpAt: followUpSaving }) });
+                    if (res.ok) { setFollowUpSaving(null); load(); }
+                  }}>ذخیره</Button>
+                  <Button variant="ghost" size="sm" onClick={() => setFollowUpSaving(null)}>انصراف</Button>
+                </div>
+              </div>
+            ) : c.nextFollowUpAt ? (
               <div className={`rounded-[12px] border px-3 py-3 text-sm ${overdue ? "border-[var(--pomegranate-line)] bg-white text-[var(--pomegranate)]" : "border-[var(--line)] bg-[var(--paper-2)]"}`}>
                 <div className="flex items-center justify-between gap-2">
                   <span className="font-bold">{formatDate(c.nextFollowUpAt)}</span>
@@ -239,13 +255,13 @@ export default function CustomerDetailPage() {
                 </div>
                 <div className="mt-2 flex gap-2">
                   <a href={`tel:${c.phone}`} className="inline-flex items-center gap-1 rounded-[10px] bg-[var(--ink)] px-3 py-1.5 text-[12px] font-medium text-white hover:bg-black">تماس</a>
-                  <button onClick={() => setEditing(true)} className="inline-flex items-center gap-1 rounded-[10px] border border-[var(--line)] bg-white px-3 py-1.5 text-[12px] font-medium hover:bg-[var(--paper-2)]">تغییر تاریخ</button>
+                  <button onClick={() => setFollowUpSaving(c.nextFollowUpAt)} className="inline-flex items-center gap-1 rounded-[10px] border border-[var(--line)] bg-white px-3 py-1.5 text-[12px] font-medium hover:bg-[var(--paper-2)]">تغییر تاریخ</button>
                 </div>
               </div>
             ) : (
               <div className="rounded-[12px] border border-dashed border-[var(--line-2)] bg-white px-3 py-4 text-center">
                 <p className="text-sm text-[var(--ink-3)]">تاریخ پیگیری تعیین نشده</p>
-                <button onClick={() => setEditing(true)} className="mt-2 text-[12px] font-medium text-[var(--pomegranate)] hover:underline">تعیین تاریخ پیگیری</button>
+                <button onClick={() => setFollowUpSaving(new Date().toISOString())} className="mt-2 text-[12px] font-medium text-[var(--pomegranate)] hover:underline">تعیین تاریخ پیگیری</button>
               </div>
             )}
           </Card>

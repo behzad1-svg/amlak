@@ -1,5 +1,4 @@
 // Masking ≠ Authorization — این لایه Defense in Depth است، چک دسترسی باید جداگانه انجام شود
-import type { Property, Customer, User } from "@prisma/client";
 
 export function canAccessCustomer(user: { id: string; role: string }, customer: { assignedAgentId: string }): boolean {
   if (user.role === "OWNER") return true;
@@ -32,12 +31,18 @@ export async function hasRestrictedAccess(
   return !!access;
 }
 
+// برای فایل TEAM_VISIBLE که متعلق به مشاور دیگر است: فقط نوع/منطقه/قیمت کلی — نه آدرس دقیق و نه اطلاعات مالک
 export function maskPropertyForTeam<T extends Record<string, unknown>>(property: T): T {
-  // برای فایل TEAM_VISIBLE دیگران: فقط نوع/منطقه/قیمت کلی
-  const masked = { ...property };
-  delete (masked as Record<string, unknown>).address;
-  delete (masked as Record<string, unknown>).ownerId;
-  return masked;
+  const masked = { ...property } as Record<string, unknown>;
+  delete masked.address;
+  delete masked.ownerId;
+  delete masked.owner;
+  // شماره مالک از طریق include جداست — اگر بود حذف می‌شود
+  if (masked.owner && typeof masked.owner === "object") {
+    const o = masked.owner as Record<string, unknown>;
+    delete o.phone;
+  }
+  return masked as T;
 }
 
 export function maskSensitiveFields(data: Record<string, unknown>): Record<string, unknown> {

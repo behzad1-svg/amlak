@@ -57,7 +57,6 @@ export const CUSTOMER_STAGE_LABELS: Record<string, string> = {
 };
 
 export const CUSTOMER_STAGE_ORDER = [
-  "NEW",
   "INITIAL_CONTACT",
   "QUALIFIED",
   "VIEWING",

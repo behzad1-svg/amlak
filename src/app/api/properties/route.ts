@@ -4,6 +4,7 @@ import { prisma } from "@/lib/prisma";
 import { validateSession } from "@/lib/auth";
 import { propertyCreateSchema } from "@/lib/validation";
 import { serializeBigInt } from "@/lib/utils";
+import { maskPropertyForTeam } from "@/lib/access";
 import { runMatchingForProperty } from "@/lib/matching";
 import { createAuditLog } from "@/lib/audit";
 
@@ -23,12 +24,23 @@ export async function GET(req: NextRequest) {
   const status = searchParams.get("status");
   const search = searchParams.get("search");
 
+  const page = Math.max(1, parseInt(searchParams.get("page") ?? "1"));
+  const limit = Math.min(100, Math.max(1, parseInt(searchParams.get("limit") ?? "100")));
+  const priceMin = searchParams.get("priceMin");
+  const priceMax = searchParams.get("priceMax");
+  const sizeMin = searchParams.get("sizeMin");
+  const sizeMax = searchParams.get("sizeMax");
+
   const where: Record<string, unknown> = { deletedAt: null };
   if (region) where.region = region;
   if (type) where.type = type;
   if (dealType) where.dealType = dealType;
   if (status) where.status = status;
   if (search) where.title = { contains: search, mode: "insensitive" };
+  if (priceMin) where.salePriceToman = { ...(where.salePriceToman as object ?? {}), gte: BigInt(priceMin) };
+  if (priceMax) where.salePriceToman = { ...(where.salePriceToman as object ?? {}), lte: BigInt(priceMax) };
+  if (sizeMin) where.sizeSqm = { ...(where.sizeSqm as object ?? {}), gte: parseFloat(sizeMin) };
+  if (sizeMax) where.sizeSqm = { ...(where.sizeSqm as object ?? {}), lte: parseFloat(sizeMax) };
 
   // AGENT: only own + TEAM_VISIBLE, plus RESTRICTED with active access
   if (session.user.role !== "OWNER") {
@@ -44,31 +56,31 @@ export async function GET(req: NextRequest) {
     ];
   }
 
-  const properties = await prisma.property.findMany({
-    where,
-    include: { listedBy: { select: { id: true, name: true } }, owner: { select: { id: true, name: true } } },
-    orderBy: { createdAt: "desc" },
-  });
+  const [properties, total] = await Promise.all([
+    prisma.property.findMany({
+      where,
+      include: { listedBy: { select: { id: true, name: true } }, owner: { select: { id: true, name: true } } },
+      orderBy: { createdAt: "desc" },
+      skip: (page - 1) * limit,
+      take: limit,
+    }),
+    prisma.property.count({ where }),
+  ]);
 
-  // Mask RESTRICTED for non-owners without access
-  let result = properties;
+  // برای مشاور غیرمالک: فایل TEAM_VISIBLE دیگران بدون آدرس/مالک (حریم خصوصی)
+  let result: unknown = properties;
   if (session.user.role !== "OWNER") {
-    const accessSet = new Set(
-      (await prisma.propertyAccess.findMany({
-        where: { userId: session.user.id, revokedAt: null, OR: [{ expiresAt: null }, { expiresAt: { gt: new Date() } }] },
-        select: { propertyId: true },
-      })).map((a) => a.propertyId)
-    );
     result = properties.map((p) => {
-      if (p.visibility === "RESTRICTED" && p.listedById !== session.user.id && !accessSet.has(p.id)) {
-        const { address: _a, ...rest } = p as Record<string, unknown> as typeof p & { address: unknown };
-        return rest as typeof p;
+      if (p.listedById !== session.user.id && p.visibility === "TEAM_VISIBLE") {
+        return maskPropertyForTeam(p as unknown as Record<string, unknown>);
       }
       return p;
     });
   }
 
-  return NextResponse.json(serializeBigInt(result));
+  const isDefaultPage = !searchParams.has("page") && !searchParams.has("limit");
+  if (isDefaultPage) return NextResponse.json(serializeBigInt(result));
+  return NextResponse.json({ ...serializeBigInt({ properties: result }), total, page, limit });
 }
 
 export async function POST(req: NextRequest) {
