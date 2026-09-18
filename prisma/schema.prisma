@@ -28,6 +28,8 @@ enum CustomerTemperature {
   COLD
 }
 
+// نوع ملک: type در Property/Customer ترجیحاً یکی از مقادیر DEFAULT_PROPERTY_TYPES یا AppSetting است
+// (رشته آزاد می‌ماند تا مدیر بتواند از تنظیمات نوع جدید اضافه کند — enum دیتابیسی آن را می‌شکند)
 enum PropertyType {
   APARTMENT
   VILLA
@@ -67,6 +69,8 @@ enum CustomerPipelineStage {
   QUALIFIED
   VIEWING
   CONTRACT
+  WON
+  FAILED
   LOST
 }
 
@@ -140,7 +144,7 @@ model User {
 model Customer {
   id              String               @id @default(cuid())
   name            String
-  phone           String
+  phone           String               @unique
   type            CustomerType
   stage           CustomerPipelineStage @default(NEW)
   temperature     CustomerTemperature  @default(WARM)
@@ -150,11 +154,15 @@ model Customer {
   preferredType     String?
   preferredDealType PropertyDealType?
   preferredArea     String?
+  preferredAreas    String[] @default([])
   preferredBeds     Int?
   preferredSizeMin  Float?
   preferredSizeMax  Float?
   budgetMin         BigInt?
   budgetMax         BigInt?
+  /// سقف بودجه ماهانه اجاره (تومان) — برای RENT جدا از budgetMax (ودیعه)
+  budgetMaxMonthly  BigInt?
+  description       String?
 
   nextFollowUpAt  DateTime?
 
@@ -178,6 +186,7 @@ model Customer {
   deals           Deal[]
   tasks           Task[]
   activities      Activity[]
+  followUps       FollowUp[]
 
   @@index([assignedAgentId])
   @@index([stage])
@@ -185,6 +194,7 @@ model Customer {
   @@index([name])
   @@index([assignedAgentId, deletedAt, stage])
   @@index([nextFollowUpAt])
+  // phone already @unique
 }
 
 model AppSetting {
@@ -258,6 +268,7 @@ model PropertyAccess {
   expiresAt   DateTime?
   revokedAt   DateTime?
 
+  @@unique([propertyId, userId])
   @@index([propertyId, userId])
   @@index([revokedAt, expiresAt])
 }
@@ -309,24 +320,54 @@ model Viewing {
   @@index([propertyId])
 }
 
+enum DealStatus {
+  PENDING
+  COMPLETED
+  CANCELED
+}
+
 model Deal {
-  id         String    @id @default(cuid())
+  id         String     @id @default(cuid())
   customerId String
-  customer   Customer  @relation(fields: [customerId], references: [id])
+  customer   Customer   @relation(fields: [customerId], references: [id])
   propertyId String
-  property   Property  @relation(fields: [propertyId], references: [id])
+  property   Property   @relation(fields: [propertyId], references: [id])
   agentId    String
-  agent      User      @relation("DealAgent", fields: [agentId], references: [id])
+  agent      User       @relation("DealAgent", fields: [agentId], references: [id])
+
+  status      DealStatus @default(PENDING)
+  contractAt  DateTime?
+  notes       String?
+  commissionToman   BigInt?
+  commissionPercent Float?
 
   dealSalePriceToman   BigInt?
   dealDepositToman     BigInt?
   dealMonthlyRentToman BigInt?
 
-  createdAt  DateTime  @default(now())
-  updatedAt  DateTime  @updatedAt
+  canceledAt DateTime?
+  createdAt  DateTime   @default(now())
+  updatedAt  DateTime   @updatedAt
 
-  @@index([customerId, propertyId])
-  @@index([agentId])
+  @@index([customerId, status])
+  @@index([propertyId, status])
+  @@index([agentId, status])
+  @@index([status, createdAt])
+}
+
+model FollowUp {
+  id         String   @id @default(cuid())
+  customerId String
+  customer   Customer @relation(fields: [customerId], references: [id], onDelete: Cascade)
+  dueAt      DateTime
+  note       String?
+  done       Boolean  @default(false)
+  doneAt     DateTime?
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
+
+  @@index([customerId, done, dueAt])
+  @@index([customerId, dueAt])
 }
 
 model Task {

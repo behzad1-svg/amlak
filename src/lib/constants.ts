@@ -53,14 +53,30 @@ export const CUSTOMER_STAGE_LABELS: Record<string, string> = {
   QUALIFIED: "ارزیابی‌شده",
   VIEWING: "بازدید",
   CONTRACT: "قرارداد",
-  LOST: "از دست رفته",
+  WON: "موفق",
+  FAILED: "ناموفق",
+  LOST: "بایگانی",
 };
 
 export const CUSTOMER_STAGE_ORDER = [
+  "NEW",
   "INITIAL_CONTACT",
   "QUALIFIED",
   "VIEWING",
   "CONTRACT",
+  "WON",
+  "FAILED",
+] as const;
+
+/** Kanban columns: full pipeline + outcome; LOST is optional via showLost */
+export const CUSTOMER_KANBAN_COLUMNS = [
+  "NEW",
+  "INITIAL_CONTACT",
+  "QUALIFIED",
+  "VIEWING",
+  "CONTRACT",
+  "WON",
+  "FAILED",
 ] as const;
 
 export const CUSTOMER_STAGE_COLORS: Record<string, string> = {
@@ -69,7 +85,9 @@ export const CUSTOMER_STAGE_COLORS: Record<string, string> = {
   QUALIFIED: "bg-amber-50 text-amber-700 border-amber-200",
   VIEWING: "bg-purple-50 text-purple-700 border-purple-200",
   CONTRACT: "bg-emerald-50 text-emerald-700 border-emerald-200",
-  LOST: "bg-red-50 text-red-700 border-red-200",
+  WON: "bg-emerald-100 text-emerald-800 border-emerald-300",
+  FAILED: "bg-red-100 text-red-800 border-red-300",
+  LOST: "bg-zinc-100 text-zinc-600 border-zinc-300",
 };
 
 export const TEMPERATURE_LABELS: Record<string, string> = {
@@ -129,7 +147,10 @@ export const ACTIVITY_TYPE_LABELS: Record<string, string> = {
 };
 
 export const MATCHING_CONFIG = {
-  budgetWeight: 0.6,
-  sizeWeight: 0.4,
+  budgetWeight: 0.5,
+  sizeWeight: 0.3,
+  bedsWeight: 0.2,
   threshold: 70,
+  /** بازار ایران: هر ۳۰ میلیون ودیعه ≈ ۱ میلیون اجاره ماهانه */
+  depositToMonthlyDivisor: BigInt("30000000"),
 } as const;

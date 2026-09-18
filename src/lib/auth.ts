@@ -1,17 +1,16 @@
-import jwt from "jsonwebtoken";
 import bcrypt from "bcryptjs";
 import { cookies } from "next/headers";
 import { prisma } from "./prisma";
+import {
+  COOKIE_NAME,
+  JWTPayload,
+  authCookieOptions,
+  signToken,
+  verifyToken,
+} from "./jwt";
 
-const JWT_SECRET = process.env.JWT_SECRET!;
-const TOKEN_EXPIRY = "24h";
-const COOKIE_NAME = "saj_token";
-
-export interface JWTPayload {
-  userId: string;
-  role: string;
-  tokenVersion: number;
-}
+export type { JWTPayload };
+export { signToken, verifyToken, COOKIE_NAME as COOKIE_NAME_EXPORT };
 
 export async function hashPassword(password: string): Promise<string> {
   return bcrypt.hash(password, 10);
@@ -21,21 +20,9 @@ export async function verifyPassword(password: string, hash: string): Promise<bo
   return bcrypt.compare(password, hash);
 }
 
-export function signToken(payload: JWTPayload): string {
-  return jwt.sign(payload, JWT_SECRET, { expiresIn: TOKEN_EXPIRY });
-}
-
-export function verifyToken(token: string): JWTPayload | null {
-  try {
-    return jwt.verify(token, JWT_SECRET) as JWTPayload;
-  } catch {
-    return null;
-  }
-}
-
 export async function validateSession(token: string | undefined | null) {
   if (!token) return null;
-  const payload = verifyToken(token);
+  const payload = await verifyToken(token);
   if (!payload) return null;
   const user = await prisma.user.findUnique({ where: { id: payload.userId } });
   if (!user || !user.active) return null;
@@ -51,13 +38,7 @@ export async function getSessionFromCookies() {
 
 export async function setAuthCookie(token: string) {
   const cookieStore = await cookies();
-  cookieStore.set(COOKIE_NAME, token, {
-    httpOnly: true,
-    secure: process.env.NODE_ENV === "production",
-    sameSite: "strict",
-    maxAge: 60 * 60 * 24,
-    path: "/",
-  });
+  cookieStore.set(COOKIE_NAME, token, authCookieOptions());
 }
 
 export async function clearAuthCookie() {
@@ -65,4 +46,10 @@ export async function clearAuthCookie() {
   cookieStore.delete(COOKIE_NAME);
 }
 
-export const COOKIE_NAME_EXPORT = COOKIE_NAME;
+/** Invalidate all outstanding JWTs for this user (logout, password change, deactivate). */
+export async function invalidateUserTokens(userId: string) {
+  await prisma.user.update({
+    where: { id: userId },
+    data: { tokenVersion: { increment: 1 } },
+  });
+}

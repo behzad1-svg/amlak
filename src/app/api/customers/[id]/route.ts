@@ -37,9 +37,19 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
   if (!parsed.success) return NextResponse.json({ error: parsed.error.issues[0].message }, { status: 400 });
   const d = parsed.data;
 
-  // Stage transition guard: LOST -> INITIAL_CONTACT directly not allowed
-  if (existing.stage === "LOST" && d.stage === "INITIAL_CONTACT") {
-    return NextResponse.json({ error: "بازگشت مستقیم از LOST به تماس اولیه مجاز نیست" }, { status: 400 });
+  if (d.phone !== undefined && d.phone !== existing.phone) {
+    const phoneClash = await prisma.customer.findUnique({ where: { phone: d.phone } });
+    if (phoneClash) {
+      return NextResponse.json(
+        { error: "مشتری دیگری با این شماره ثبت شده است", existingId: phoneClash.id },
+        { status: 409 }
+      );
+    }
+  }
+
+  // Stage transition guard: terminal stages back to start not allowed directly
+  if ((existing.stage === "LOST" || existing.stage === "FAILED") && d.stage === "INITIAL_CONTACT") {
+    return NextResponse.json({ error: "بازگشت مستقیم از این مرحله به تماس اولیه مجاز نیست" }, { status: 400 });
   }
   if (d.stage === "LOST" && !d.lostReasonCategory && !existing.lostReasonCategory) {
     return NextResponse.json({ error: "دلیل از دست رفتن الزامی است" }, { status: 400 });
@@ -67,15 +77,22 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
   if (d.temperature !== undefined) updateData.temperature = d.temperature;
   if (d.source !== undefined) updateData.source = d.source;
   if (d.notes !== undefined) updateData.notes = d.notes;
+  if ((d as any).description !== undefined) updateData.description = (d as any).description;
   if (d.preferredType !== undefined) updateData.preferredType = d.preferredType;
   if (d.preferredDealType !== undefined) updateData.preferredDealType = d.preferredDealType;
   if (d.preferredArea !== undefined) updateData.preferredArea = d.preferredArea;
+  if ((d as any).preferredAreas !== undefined) updateData.preferredAreas = (d as any).preferredAreas;
   if (d.preferredBeds !== undefined) updateData.preferredBeds = d.preferredBeds;
   if (d.preferredSizeMin !== undefined) updateData.preferredSizeMin = d.preferredSizeMin;
   if (d.preferredSizeMax !== undefined) updateData.preferredSizeMax = d.preferredSizeMax;
   if (d.budgetMin !== undefined) updateData.budgetMin = d.budgetMin ? BigInt(d.budgetMin as string) : null;
   if (d.budgetMax !== undefined) updateData.budgetMax = d.budgetMax ? BigInt(d.budgetMax as string) : null;
+  if ((d as { budgetMaxMonthly?: string | null }).budgetMaxMonthly !== undefined) {
+    const m = (d as { budgetMaxMonthly?: string | null }).budgetMaxMonthly;
+    updateData.budgetMaxMonthly = m ? BigInt(m) : null;
+  }
   if (d.nextFollowUpAt !== undefined) updateData.nextFollowUpAt = d.nextFollowUpAt ? new Date(d.nextFollowUpAt as string) : null;
+  const didSetFollowUp = d.nextFollowUpAt !== undefined;
   if (d.needsManagerReview !== undefined) {
     updateData.needsManagerReview = d.needsManagerReview;
     if (d.needsManagerReview && !wasNeedsReview) {
@@ -91,6 +108,13 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
   if (d.lostReasonDetail !== undefined) updateData.lostReasonDetail = d.lostReasonDetail;
 
   const customer = await prisma.customer.update({ where: { id }, data: updateData });
+  if (didSetFollowUp && d.nextFollowUpAt) {
+    try {
+      const existingFU = await prisma.followUp.findFirst({ where: { customerId: id, done: false }, orderBy: { dueAt: "asc" } });
+      if (existingFU) await prisma.followUp.update({ where: { id: existingFU.id }, data: { dueAt: new Date(d.nextFollowUpAt as string) } });
+      else await prisma.followUp.create({ data: { customerId: id, dueAt: new Date(d.nextFollowUpAt as string) } });
+    } catch {}
+  }
 
   // Manager review notification
   if (nowNeedsReview && !wasNeedsReview) {
@@ -110,7 +134,7 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
   await createAuditLog({ actorId: session.user.id, action: "CUSTOMER_UPDATED", entityType: "Customer", entityId: id });
 
   // Re-run matching if key fields changed
-  const matchingFields = ["preferredType", "preferredDealType", "preferredArea", "budgetMax", "budgetMin", "preferredSizeMin", "preferredSizeMax"];
+  const matchingFields = ["preferredType", "preferredDealType", "preferredArea", "preferredAreas", "budgetMax", "budgetMin", "preferredSizeMin", "preferredSizeMax"];
   if (matchingFields.some((f) => f in d)) {
     try { await runMatchingForCustomer(id, customer.assignedAgentId); } catch {}
   }

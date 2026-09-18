@@ -38,7 +38,12 @@ export async function GET(req: NextRequest) {
   } else if (stage) {
     where.stage = stage;
   }
-  if (search) where.name = { contains: search, mode: "insensitive" };
+  if (search) {
+    where.OR = [
+      { name: { contains: search, mode: "insensitive" } },
+      { phone: { contains: search } },
+    ];
+  }
   if (session.user.role !== "OWNER") where.assignedAgentId = session.user.id;
   else if (agentId) where.assignedAgentId = agentId;
   if (budgetMin) where.budgetMax = { gte: BigInt(budgetMin) };
@@ -80,23 +85,45 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: "دلیل از دست رفتن الزامی است" }, { status: 400 });
   }
 
+  let assignedAgentId = session.user.id;
+  if (session.user.role === "OWNER" && d.assignedAgentId) {
+    const agent = await prisma.user.findUnique({ where: { id: d.assignedAgentId } });
+    if (!agent || !agent.active) {
+      return NextResponse.json({ error: "مشاور انتخاب‌شده معتبر نیست" }, { status: 400 });
+    }
+    assignedAgentId = agent.id;
+  }
+
+  const phoneClash = await prisma.customer.findUnique({ where: { phone: d.phone } });
+  if (phoneClash) {
+    return NextResponse.json(
+      { error: "مشتری با این شماره قبلا ثبت شده است", existingId: phoneClash.id },
+      { status: 409 }
+    );
+  }
+
   const customer = await prisma.customer.create({
     data: {
       name: d.name,
       phone: d.phone,
       type: d.type as never,
-      stage: (d.stage as never) ?? "INITIAL_CONTACT",
+      stage: (d.stage as never) ?? "NEW",
       temperature: (d.temperature as never) ?? "WARM",
       source: d.source as never,
       notes: d.notes,
+      description: d.description,
       preferredType: d.preferredType as never,
       preferredDealType: d.preferredDealType as never,
       preferredArea: d.preferredArea,
+      preferredAreas: d.preferredAreas ?? [],
       preferredBeds: d.preferredBeds,
       preferredSizeMin: d.preferredSizeMin,
       preferredSizeMax: d.preferredSizeMax,
       budgetMin: d.budgetMin ? BigInt(d.budgetMin) : null,
       budgetMax: d.budgetMax ? BigInt(d.budgetMax) : null,
+      budgetMaxMonthly: (d as { budgetMaxMonthly?: string | null }).budgetMaxMonthly
+        ? BigInt((d as { budgetMaxMonthly: string }).budgetMaxMonthly)
+        : null,
       nextFollowUpAt: d.nextFollowUpAt ? new Date(d.nextFollowUpAt) : null,
       needsManagerReview: d.needsManagerReview ?? false,
       managerReviewReason: d.managerReviewReason,
@@ -104,7 +131,7 @@ export async function POST(req: NextRequest) {
       lostReasonCategory: d.lostReasonCategory as never,
       lostReasonDetail: d.lostReasonDetail,
       lostAt: d.stage === "LOST" ? new Date() : null,
-      assignedAgentId: session.user.id,
+      assignedAgentId,
     },
   });
 
@@ -125,7 +152,11 @@ export async function POST(req: NextRequest) {
     }
   }
 
-  await createAuditLog({ actorId: session.user.id, action: "CUSTOMER_CREATED", entityType: "Customer", entityId: customer.id, newValue: { name: d.name } as never });
+  if (d.nextFollowUpAt) {
+    try { await prisma.followUp.create({ data: { customerId: customer.id, dueAt: new Date(d.nextFollowUpAt) } }); } catch {}
+  }
+
+    await createAuditLog({ actorId: session.user.id, action: "CUSTOMER_CREATED", entityType: "Customer", entityId: customer.id, newValue: { name: d.name } as never });
 
   // Matching
   try { await runMatchingForCustomer(customer.id, session.user.id); } catch {}

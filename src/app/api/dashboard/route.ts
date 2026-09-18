@@ -37,8 +37,10 @@ export async function GET() {
   const tasks = await prisma.task.findMany({ where: { assignedAgentId: userId, done: false }, orderBy: { dueAt: "asc" }, take: 10 });
 
   // بازدیدهای امروز
+  const todayStart = new Date(now);
+  todayStart.setHours(0, 0, 0, 0);
   const viewings = await prisma.viewing.findMany({
-    where: { agentId: isOwner ? undefined : userId, startAt: { gte: new Date(now.setHours(0, 0, 0, 0)), lte: todayEnd } },
+    where: { agentId: isOwner ? undefined : userId, startAt: { gte: todayStart, lte: todayEnd } },
     include: { customer: { select: { name: true } }, property: { select: { title: true } } },
     orderBy: { startAt: "asc" },
   });

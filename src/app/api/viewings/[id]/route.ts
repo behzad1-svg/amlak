@@ -1,30 +1,26 @@
 import { NextRequest, NextResponse } from "next/server";
-import { cookies } from "next/headers";
 import { prisma } from "@/lib/prisma";
-import { validateSession } from "@/lib/auth";
+import { getSessionFromCookies } from "@/lib/auth";
+import { viewingUpdateSchema } from "@/lib/validation";
 import { serializeBigInt } from "@/lib/utils";
 import { createAuditLog } from "@/lib/audit";
 
-async function getSession() {
-  const cookieStore = await cookies();
-  const token = cookieStore.get("saj_token")?.value;
-  return validateSession(token);
-}
-
 export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
-  const session = await getSession();
+  const session = await getSessionFromCookies();
   if (!session) return NextResponse.json({ error: "وارد نشده‌اید" }, { status: 401 });
   const { id } = await params;
   const existing = await prisma.viewing.findUnique({ where: { id } });
   if (!existing) return NextResponse.json({ error: "یافت نشد" }, { status: 404 });
   if (session.user.role !== "OWNER" && existing.agentId !== session.user.id) return NextResponse.json({ error: "دسترسی ندارید" }, { status: 403 });
   const body = await req.json();
+  const parsed = viewingUpdateSchema.safeParse(body);
+  if (!parsed.success) return NextResponse.json({ error: parsed.error.issues[0].message }, { status: 400 });
   const wasDone = existing.status === "DONE";
   const data: Record<string, unknown> = {};
-  if (body.status !== undefined) data.status = body.status;
-  if (body.feedback !== undefined) data.feedback = body.feedback;
-  if (body.endAt !== undefined) data.endAt = body.endAt ? new Date(body.endAt) : null;
-  if (body.startAt !== undefined) data.startAt = new Date(body.startAt);
+  if (parsed.data.status !== undefined) data.status = parsed.data.status;
+  if (parsed.data.feedback !== undefined) data.feedback = parsed.data.feedback;
+  if (parsed.data.endAt !== undefined) data.endAt = parsed.data.endAt ? new Date(parsed.data.endAt) : null;
+  if (parsed.data.startAt !== undefined) data.startAt = new Date(parsed.data.startAt);
   if (data.status === "DONE" && !data.endAt && !existing.endAt) return NextResponse.json({ error: "زمان پایان الزامی است" }, { status: 400 });
   const viewing = await prisma.viewing.update({ where: { id }, data });
   await createAuditLog({ actorId: session.user.id, action: "VIEWING_UPDATED", entityType: "Viewing", entityId: id, oldValue: { status: existing.status } as never, newValue: { status: viewing.status } as never });

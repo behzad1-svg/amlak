@@ -1,13 +1,14 @@
 "use client";
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
-import { LayoutDashboard, Users, Building2, Calendar, Bell, CheckSquare, LogOut, BarChart3, Settings } from "lucide-react";
+import { LayoutDashboard, Users, Building2, Calendar, Bell, CheckSquare, LogOut, BarChart3, Settings, Handshake } from "lucide-react";
 import { cn } from "@/lib/utils";
 
 const nav = [
   { href: "/dashboard", label: "داشبورد", icon: LayoutDashboard },
   { href: "/customers", label: "مشتریان", icon: Users },
   { href: "/properties", label: "فایل‌ها", icon: Building2 },
+  { href: "/deals", label: "معاملات", icon: Handshake },
   { href: "/viewings", label: "بازدیدها", icon: Calendar },
   { href: "/tasks", label: "وظایف", icon: CheckSquare },
   { href: "/notifications", label: "اعلان‌ها", icon: Bell },
@@ -80,18 +81,18 @@ export function Sidebar({ role, unreadCount, onClose }: { role?: string; unreadC
             >
               <BarChart3 className={cn("h-[18px] w-[18px]", pathname?.startsWith("/admin") ? "text-white" : "text-[var(--ink-3)]")} /> مدیریت
             </Link>
-            <Link
-              href="/settings"
-              onClick={onClose}
-              className={cn(
-                "flex items-center gap-3 rounded-[12px] px-3 py-2.5 text-[13.5px] font-medium",
-                pathname?.startsWith("/settings") ? "bg-[var(--ink)] text-white" : "text-[var(--ink-2)] hover:bg-[var(--paper-2)]"
-              )}
-            >
-              <Settings className={cn("h-[18px] w-[18px]", pathname?.startsWith("/settings") ? "text-white" : "text-[var(--ink-3)]")} /> تنظیمات
-            </Link>
           </>
         )}
+        <Link
+          href="/settings"
+          onClick={onClose}
+          className={cn(
+            "flex items-center gap-3 rounded-[12px] px-3 py-2.5 text-[13.5px] font-medium",
+            pathname?.startsWith("/settings") ? "bg-[var(--ink)] text-white" : "text-[var(--ink-2)] hover:bg-[var(--paper-2)]"
+          )}
+        >
+          <Settings className={cn("h-[18px] w-[18px]", pathname?.startsWith("/settings") ? "text-white" : "text-[var(--ink-3)]")} /> تنظیمات
+        </Link>
       </nav>
 
       <div className="border-t border-[var(--line)] p-3 shrink-0">

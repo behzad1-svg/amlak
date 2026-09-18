@@ -1,36 +1,32 @@
 import { NextRequest, NextResponse } from "next/server";
-import { cookies } from "next/headers";
 import { prisma } from "@/lib/prisma";
-import { validateSession } from "@/lib/auth";
+import { getSessionFromCookies } from "@/lib/auth";
+import { taskUpdateSchema } from "@/lib/validation";
 import { serializeBigInt } from "@/lib/utils";
 import { createAuditLog } from "@/lib/audit";
 
-async function getSession() {
-  const cookieStore = await cookies();
-  const token = cookieStore.get("saj_token")?.value;
-  return validateSession(token);
-}
-
 export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
-  const session = await getSession();
+  const session = await getSessionFromCookies();
   if (!session) return NextResponse.json({ error: "وارد نشده‌اید" }, { status: 401 });
   const { id } = await params;
   const existing = await prisma.task.findUnique({ where: { id } });
   if (!existing) return NextResponse.json({ error: "یافت نشد" }, { status: 404 });
   if (existing.assignedAgentId !== session.user.id && session.user.role !== "OWNER") return NextResponse.json({ error: "دسترسی ندارید" }, { status: 403 });
   const body = await req.json();
+  const parsed = taskUpdateSchema.safeParse(body);
+  if (!parsed.success) return NextResponse.json({ error: parsed.error.issues[0].message }, { status: 400 });
   const data: Record<string, unknown> = {};
-  if (body.title !== undefined) data.title = body.title;
-  if (body.done !== undefined) data.done = body.done;
-  if (body.priority !== undefined) data.priority = body.priority;
-  if (body.dueAt !== undefined) data.dueAt = body.dueAt ? new Date(body.dueAt) : null;
+  if (parsed.data.title !== undefined) data.title = parsed.data.title;
+  if (parsed.data.done !== undefined) data.done = parsed.data.done;
+  if (parsed.data.priority !== undefined) data.priority = parsed.data.priority;
+  if (parsed.data.dueAt !== undefined) data.dueAt = parsed.data.dueAt ? new Date(parsed.data.dueAt) : null;
   const task = await prisma.task.update({ where: { id }, data });
   await createAuditLog({ actorId: session.user.id, action: "TASK_UPDATED", entityType: "Task", entityId: id, newValue: data as never });
   return NextResponse.json(serializeBigInt(task));
 }
 
 export async function DELETE(_req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
-  const session = await getSession();
+  const session = await getSessionFromCookies();
   if (!session) return NextResponse.json({ error: "وارد نشده‌اید" }, { status: 401 });
   const { id } = await params;
   const existing = await prisma.task.findUnique({ where: { id } });

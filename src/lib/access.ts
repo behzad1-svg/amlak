@@ -34,13 +34,14 @@ export async function hasRestrictedAccess(
 // برای فایل TEAM_VISIBLE که متعلق به مشاور دیگر است: فقط نوع/منطقه/قیمت کلی — نه آدرس دقیق و نه اطلاعات مالک
 export function maskPropertyForTeam<T extends Record<string, unknown>>(property: T): T {
   const masked = { ...property } as Record<string, unknown>;
+  // آدرس دقیق و هویت مالک برای فایل TEAM_VISIBLE دیگران دیده نمی‌شود
   delete masked.address;
   delete masked.ownerId;
   delete masked.owner;
-  // شماره مالک از طریق include جداست — اگر بود حذف می‌شود
-  if (masked.owner && typeof masked.owner === "object") {
-    const o = masked.owner as Record<string, unknown>;
-    delete o.phone;
+  if (masked.listedBy && typeof masked.listedBy === "object") {
+    const lb = { ...(masked.listedBy as Record<string, unknown>) };
+    delete lb.phone;
+    masked.listedBy = lb;
   }
   return masked as T;
 }

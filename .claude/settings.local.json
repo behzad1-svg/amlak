@@ -46,7 +46,28 @@
       "Bash(python /tmp/patch_detail3.py)",
       "Bash(python)",
       "Bash(python3)",
-      "Bash(python /tmp/patch_props.py)"
+      "Bash(python /tmp/patch_props.py)",
+      "Bash(python /tmp/patch_matching_areas.py)",
+      "Bash(python /tmp/add_followup_api.py)",
+      "Bash(python /tmp/patch_customer_followup.py)",
+      "Bash(python3 /tmp/patch_detail.py)",
+      "Read(//tmp/**)",
+      "Bash(curl -s -v -X POST http://localhost:3000/api/customers -b /tmp/c.txt -H \"Content-Type: application/json\" -d '{\"name\":\"تست\",\"phone\":\"09171112233\",\"type\":\"BUYER\",\"preferredDealType\":\"SALE\",\"preferredType\":\"APARTMENT\",\"preferredAreas\":[\"بهمنی\",\"سنگی\"],\"description\":\"توضیح\",\"preferredSizeMin\":80,\"preferredSizeMax\":120,\"budgetMax\":\"3500000000\"}')",
+      "Bash(echo \"RM1:$?\")",
+      "Bash(echo \"RM2:$?\")",
+      "Bash(cmd.exe /c \"taskkill /F /PID 2564 2>&1 & timeout 3 >nul & echo DONE\")",
+      "Bash(curl -s http://localhost:3001/api/health)",
+      "Bash(echo \"EXIT2:$?\")",
+      "Bash(echo \"GEN_EXIT:$?\")",
+      "Bash(echo \"RM:$?\")",
+      "Bash(echo \"GEN:$?\")",
+      "Bash(cmd.exe /c \"for /f \\\\\"tokens=5\\\\\" %a in \\('netstat -ano ^| findstr :3000'\\) do taskkill /F /PID %a 2>nul\")",
+      "Bash(echo \"HEALTH:$?\")",
+      "Bash(echo \"H:$?\")",
+      "Bash(echo \"BUILD:$?\")",
+      "Bash(cmd //c \"netstat -ano | findstr :3000\")",
+      "Bash(cmd //c \"taskkill /F /PID 2564\")",
+      "Bash(curl -s -X POST http://localhost:3000/api/customers -H \"Content-Type: application/json\" -d '{\"name\":\"x\",\"phone\":\"09170000001\",\"type\":\"BUYER\"}')"
     ]
   }
 }
