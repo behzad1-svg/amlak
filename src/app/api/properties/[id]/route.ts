@@ -66,11 +66,32 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
   if (d.builtYear !== undefined) updateData.builtYear = d.builtYear;
   if (d.floor !== undefined) updateData.floor = d.floor;
   if (d.totalFloors !== undefined) updateData.totalFloors = d.totalFloors;
+  const extra = d as Record<string, unknown>;
+  if (extra.unitsPerFloor !== undefined) updateData.unitsPerFloor = extra.unitsPerFloor;
+  if (extra.unitCount !== undefined) updateData.unitCount = extra.unitCount;
+  if (extra.landSizeSqm !== undefined) updateData.landSizeSqm = extra.landSizeSqm;
+  if (extra.passageWidth !== undefined) updateData.passageWidth = extra.passageWidth;
+  if (extra.buildingFrontage !== undefined) updateData.buildingFrontage = extra.buildingFrontage;
+  if (extra.buildingFloors !== undefined) updateData.buildingFloors = extra.buildingFloors;
   if (d.hasParking !== undefined) updateData.hasParking = d.hasParking;
   if (d.hasStorage !== undefined) updateData.hasStorage = d.hasStorage;
+  if (extra.hasElevator !== undefined) updateData.hasElevator = extra.hasElevator;
+  if (extra.hasTerrace !== undefined) updateData.hasTerrace = extra.hasTerrace;
+  if (extra.hasRenovated !== undefined) updateData.hasRenovated = extra.hasRenovated;
+  if (extra.isNewBuild !== undefined) updateData.isNewBuild = extra.isNewBuild;
   if (d.region !== undefined) updateData.region = d.region;
   if (d.address !== undefined) updateData.address = d.address;
   if (d.ownerId !== undefined) updateData.ownerId = d.ownerId;
+  if ((d as { listedById?: string }).listedById !== undefined) {
+    if (session.user.role !== "OWNER") {
+      return NextResponse.json({ error: "فقط مدیر می‌تواند مشاور فایل را عوض کند" }, { status: 403 });
+    }
+    const listedById = (d as { listedById?: string }).listedById;
+    if (!listedById) return NextResponse.json({ error: "شناسه مشاور نامعتبر است" }, { status: 400 });
+    const agent = await prisma.user.findUnique({ where: { id: listedById } });
+    if (!agent || !agent.active) return NextResponse.json({ error: "مشاور معتبر نیست" }, { status: 400 });
+    updateData.listedById = listedById;
+  }
   if (d.visibility !== undefined) updateData.visibility = d.visibility;
   if (d.isAdvertised !== undefined) updateData.isAdvertised = d.isAdvertised;
   if (d.nextOwnerFollowUpAt !== undefined) updateData.nextOwnerFollowUpAt = d.nextOwnerFollowUpAt ? new Date(d.nextOwnerFollowUpAt as string) : null;
@@ -89,10 +110,13 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
 export async function DELETE(_req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
   const session = await getSession();
   if (!session) return NextResponse.json({ error: "وارد نشده‌اید" }, { status: 401 });
+  // فقط مدیر می‌تواند فایل را حذف کند
+  if (session.user.role !== "OWNER") {
+    return NextResponse.json({ error: "فقط مدیر می‌تواند فایل را حذف کند" }, { status: 403 });
+  }
   const { id } = await params;
   const existing = await prisma.property.findUnique({ where: { id } });
   if (!existing || existing.deletedAt) return NextResponse.json({ error: "یافت نشد" }, { status: 404 });
-  if (session.user.role !== "OWNER" && existing.listedById !== session.user.id) return NextResponse.json({ error: "دسترسی ندارید" }, { status: 403 });
   await prisma.property.update({ where: { id }, data: { deletedAt: new Date() } });
   await createAuditLog({ actorId: session.user.id, action: "PROPERTY_DELETED", entityType: "Property", entityId: id });
   return NextResponse.json({ ok: true });

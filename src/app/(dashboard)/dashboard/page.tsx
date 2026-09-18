@@ -6,7 +6,7 @@ import { Card, CardHeader, CardTitle } from "@/components/ui/Card";
 import { Badge } from "@/components/ui/Badge";
 import { formatDate } from "@/lib/utils";
 import { CUSTOMER_STAGE_LABELS } from "@/lib/constants";
-import { AlertTriangle, Clock, CheckSquare, Calendar, Users, ArrowUpLeft, Eye } from "lucide-react";
+import { AlertTriangle, Clock, Calendar, Users, ArrowUpLeft, Eye } from "lucide-react";
 
 type DashboardData = {
   overdueCustomers: { id: string; name: string; phone: string; stage: string; nextFollowUpAt: string }[];
@@ -25,7 +25,6 @@ export default function DashboardPage() {
   const overdue = data.overdueCustomers ?? [];
   const today = data.todayFollowUps ?? [];
   const needsReview = data.needsReview ?? [];
-  const tasks = data.tasks ?? [];
   const viewings = data.viewings ?? [];
   const teamStats = data.teamStats;
 
@@ -127,13 +126,13 @@ export default function DashboardPage() {
 
           <Card className="p-0 overflow-hidden">
             <CardHeader className="px-4 pt-4">
-              <CardTitle className="flex items-center gap-2"><span className="flex h-7 w-7 items-center justify-center rounded-[10px] bg-[var(--sea)] text-white"><CheckSquare className="h-4 w-4" /></span> وظایف باز</CardTitle>
-              <Link href="/tasks" className="text-[11px] font-medium text-[var(--sea)] hover:underline">رفتن به وظایف</Link>
+              <CardTitle className="flex items-center gap-2"><span className="flex h-7 w-7 items-center justify-center rounded-[10px] bg-white border border-[var(--line)]"><Calendar className="h-4 w-4" /></span> بازدیدهای امروز</CardTitle>
+              <Link href="/viewings" className="text-[11px] font-medium text-[var(--ink-3)] hover:text-[var(--ink)]">همه بازدیدها</Link>
             </CardHeader>
             <div className="px-2 pb-2">
-              {tasks.length === 0 ? <p className="px-3 py-6 text-center text-[13px] text-[var(--ink-3)]">وظیفه‌ی بازی ندارید.</p> : tasks.slice(0, 6).map((t) => (
-                <div key={t.id} className="flex items-center justify-between rounded-[12px] px-3 py-2.5">
-                  <span className="text-[13.5px]">{t.title}</span><span className="text-[12px] text-[var(--ink-3)]">{t.dueAt ? formatDate(t.dueAt) : "—"}</span>
+              {viewings.length === 0 ? <p className="px-3 py-6 text-center text-[13px] text-[var(--ink-3)]">بازدیدی برای امروز ثبت نشده.</p> : viewings.map((v) => (
+                <div key={v.id} className="flex items-center justify-between rounded-[12px] px-3 py-2.5 text-[13px]">
+                  <span>{v.customer?.name} — {v.property?.title}</span><span className="text-[12px] text-[var(--ink-3)]">{formatDate(v.startAt)}</span>
                 </div>
               ))}
             </div>
@@ -176,7 +175,7 @@ export default function DashboardPage() {
             <div className="px-4 py-3 border-b border-[var(--line)] flex items-center gap-2">
               <span className="flex h-7 w-7 items-center justify-center rounded-[10px] bg-[var(--ink)] text-white"><Users className="h-4 w-4" /></span>
               <span className="text-[13px] font-extrabold">وضعیت تیم</span>
-              <span className="mr-auto text-[11px] tracking-widest text-[var(--ink-3)]">هفتگی · ماهانه · معامله</span>
+              <span className="mr-auto text-[11px] tracking-widest text-[var(--ink-3)]">هفتگی · ماهانه</span>
             </div>
             <div className="overflow-x-auto">
               <table className="w-full text-[13px]">
@@ -186,7 +185,6 @@ export default function DashboardPage() {
                     <th className="py-2.5 text-center font-medium">عقب‌افتاده</th>
                     <th className="py-2.5 text-center font-medium">هفتگی</th>
                     <th className="py-2.5 text-center font-medium">ماهانه</th>
-                    <th className="py-2.5 pl-4 text-center font-medium">معامله</th>
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-[var(--line)]">
@@ -196,7 +194,6 @@ export default function DashboardPage() {
                       <td className="text-center"><span className={s.overdue > 0 ? "inline-flex min-w-6 justify-center rounded-full bg-[var(--pomegranate-soft)] border border-[var(--pomegranate-line)] px-2 py-0.5 text-[var(--pomegranate)] font-bold" : "text-[var(--ink-3)]"}>{s.overdue}</span></td>
                       <td className="text-center text-[var(--ink-2)]">{s.weeklyActivity}</td>
                       <td className="text-center text-[var(--ink-2)]">{s.monthlyActivity}</td>
-                      <td className="text-center font-bold">{s.deals}</td>
                     </tr>
                   ))}
                 </tbody>

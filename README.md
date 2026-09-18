@@ -53,6 +53,31 @@ npm run dev
 - `Property.type` / `preferredType` stay **strings** so owners can add types in Settings (DB enum would freeze them).
 - Before unique constraints, run `prisma/dedupe-before-unique.sql` if migrating an old database.
 
+## Smoke tests
+
+With the app running and demo users seeded:
+
+```bash
+export SEED_PASSWORD=...          # same as CLI seed
+export SMOKE_PHONE=09170000001
+export BASE_URL=http://localhost:3000
+npm run smoke
+```
+
+Covers: health, seed lock, security headers, login, authz 401, customer create, phone unique 409, phone search, property+deal, one-open-deal 409, logout token invalidation.
+
+## Access control
+
+| Action | AGENT | OWNER |
+|---|---|---|
+| View/edit own customers & listed files | yes | yes |
+| Create customers/files/deals | yes | yes |
+| Mark customer WON/FAILED | yes | yes |
+| **Delete** customer / property / follow-up / task | **no** | **yes** |
+| Manage users, settings, grant access | no | yes |
+
+Soft-delete APIs return `403` with a Persian message for non-owners.
+
 ## Security notes
 
 - Rotate `JWT_SECRET` for any real deployment.

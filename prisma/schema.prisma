@@ -206,6 +206,8 @@ model AppSetting {
 
 model Property {
   id          String             @id @default(cuid())
+  /// کد فایل — یکتا، برای ارجاع سریع در بنگاه (مثلا F-0001)
+  code        String?            @unique
   title       String
   type        String
   dealType    PropertyDealType
@@ -220,8 +222,28 @@ model Property {
   builtYear   Int?
   floor       Int?
   totalFloors Int?
+  /// تعداد واحد در هر طبقه (آپارتمان)
+  unitsPerFloor Int?
+  /// تعداد کل واحدها (آپارتمان)
+  unitCount     Int?
+  /// متراژ زمین — ویلا/کلنگی/زمین
+  landSizeSqm   Float?
+  /// عرض گذر (متر)
+  passageWidth  Float?
+  /// برِ ملک (متر)
+  buildingFrontage Float?
+  /// تعداد طبقات بنا — ویلا/کلنگی
+  buildingFloors   Int?
+
   hasParking  Boolean            @default(false)
   hasStorage  Boolean            @default(false)
+  hasElevator Boolean            @default(false)
+  hasTerrace  Boolean            @default(false)
+  /// بازسازی‌شده — برای جستجوی بعدی
+  hasRenovated Boolean           @default(false)
+  /// نوساز — برای جستجوی بعدی
+  isNewBuild   Boolean           @default(false)
+
   region      String
   address     String?
   images      String[]           @default([])

@@ -5,6 +5,11 @@ export function canAccessCustomer(user: { id: string; role: string }, customer: 
   return customer.assignedAgentId === user.id;
 }
 
+/** حذف (soft-delete) رکوردهای اصلی فقط با نقش مدیر */
+export function canDeleteEntity(user: { role: string }): boolean {
+  return user.role === "OWNER";
+}
+
 export function canAccessPropertyFull(
   user: { id: string; role: string },
   property: { listedById: string; visibility: string }

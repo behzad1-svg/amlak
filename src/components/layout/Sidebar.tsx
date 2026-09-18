@@ -1,7 +1,7 @@
 "use client";
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
-import { LayoutDashboard, Users, Building2, Calendar, Bell, CheckSquare, LogOut, BarChart3, Settings, Handshake } from "lucide-react";
+import { LayoutDashboard, Users, Building2, Calendar, Bell, LogOut, BarChart3, Settings, Handshake } from "lucide-react";
 import { cn } from "@/lib/utils";
 
 const nav = [
@@ -10,7 +10,6 @@ const nav = [
   { href: "/properties", label: "فایل‌ها", icon: Building2 },
   { href: "/deals", label: "معاملات", icon: Handshake },
   { href: "/viewings", label: "بازدیدها", icon: Calendar },
-  { href: "/tasks", label: "وظایف", icon: CheckSquare },
   { href: "/notifications", label: "اعلان‌ها", icon: Bell },
 ];
 

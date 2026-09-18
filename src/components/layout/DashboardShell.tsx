@@ -36,7 +36,7 @@ export function DashboardShell({
   }
 
   const showMini = isDesktop && mode === "mini";
-  const showFull = (isDesktop && mode === "full") || (!isDesktop && mode === "full");
+  const showFull = mode === "full"; // eslint-disable-line @typescript-eslint/no-unused-vars -- kept for layout clarity
 
   return (
     <div className="flex min-h-screen bg-[var(--paper)]">

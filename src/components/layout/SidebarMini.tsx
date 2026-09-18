@@ -1,7 +1,7 @@
 "use client";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { LayoutDashboard, Users, Building2, Calendar, Bell, CheckSquare, BarChart3, Settings, PanelLeftOpen, Handshake } from "lucide-react";
+import { LayoutDashboard, Users, Building2, Calendar, Bell, BarChart3, Settings, PanelLeftOpen, Handshake } from "lucide-react";
 import { cn } from "@/lib/utils";
 
 const nav = [
@@ -10,7 +10,6 @@ const nav = [
   { href: "/properties", icon: Building2 },
   { href: "/deals", icon: Handshake },
   { href: "/viewings", icon: Calendar },
-  { href: "/tasks", icon: CheckSquare },
   { href: "/notifications", icon: Bell },
 ];
 

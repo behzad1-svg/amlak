@@ -51,7 +51,11 @@ export default function AdminPage() {
     setUsers(Array.isArray(usersRes) ? usersRes : []);
   }, []);
 
-  useEffect(() => { load(); }, [load]);
+  useEffect(() => {
+    // data fetch on mount — setState after await is intentional
+    // eslint-disable-next-line react-hooks/set-state-in-effect
+    load();
+  }, [load]);
 
   async function createUser(e: React.FormEvent) {
     e.preventDefault();
@@ -125,7 +129,6 @@ export default function AdminPage() {
                   <th>عقب‌افتاده</th>
                   <th>هفتگی</th>
                   <th>ماهانه</th>
-                  <th>معامله</th>
                 </tr>
               </thead>
               <tbody>
@@ -137,7 +140,6 @@ export default function AdminPage() {
                     </td>
                     <td className="text-center">{s.weeklyActivity}</td>
                     <td className="text-center">{s.monthlyActivity}</td>
-                    <td className="text-center font-medium">{s.deals}</td>
                   </tr>
                 ))}
               </tbody>

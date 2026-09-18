@@ -28,10 +28,12 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
 export async function DELETE(_req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
   const session = await getSessionFromCookies();
   if (!session) return NextResponse.json({ error: "وارد نشده‌اید" }, { status: 401 });
+  if (session.user.role !== "OWNER") {
+    return NextResponse.json({ error: "فقط مدیر می‌تواند وظیفه را حذف کند" }, { status: 403 });
+  }
   const { id } = await params;
   const existing = await prisma.task.findUnique({ where: { id } });
   if (!existing) return NextResponse.json({ error: "یافت نشد" }, { status: 404 });
-  if (existing.assignedAgentId !== session.user.id && session.user.role !== "OWNER") return NextResponse.json({ error: "دسترسی ندارید" }, { status: 403 });
   await prisma.task.delete({ where: { id } });
   await createAuditLog({ actorId: session.user.id, action: "TASK_DELETED", entityType: "Task", entityId: id });
   return NextResponse.json({ ok: true });

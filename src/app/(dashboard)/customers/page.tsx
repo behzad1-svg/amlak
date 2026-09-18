@@ -8,7 +8,6 @@ import { Input, Select } from "@/components/ui/Input";
 import {
   CUSTOMER_KANBAN_COLUMNS,
   CUSTOMER_STAGE_LABELS,
-  CUSTOMER_STAGE_COLORS,
   LOST_REASON_LABELS,
   TEMPERATURE_COLORS,
   TEMPERATURE_LABELS,
@@ -43,7 +42,7 @@ export default function CustomersPage() {
   const [showOutcomes, setShowOutcomes] = useState(true);
   const [search, setSearch] = useState("");
   const [dragId, setDragId] = useState<string | null>(null);
-  const [lostDraft, setLostDraft] = useState<{ id: string; category: string; detail: string } | null>(null);
+  const [lostDraft, setLostDraft] = useState<LostDraft | null>(null);
   const [msg, setMsg] = useState("");
 
   function load() {
@@ -81,18 +80,16 @@ export default function CustomersPage() {
     load();
   }
 
+  type LostDraft = { id: string; category: string; detail: string; stage?: "LOST" | "FAILED" };
+
   async function confirmLost() {
     if (!lostDraft) return;
-    const body: Record<string, unknown> = {
-      stage: lostDraft.category === "OTHER" || lostDraft.category ? undefined : undefined,
+    const stage = lostDraft.stage === "FAILED" ? "FAILED" : "LOST";
+    const body = {
+      stage,
       lostReasonCategory: lostDraft.category,
       lostReasonDetail: lostDraft.detail || null,
     };
-    // FAILED and LOST are both archive-ish; use LOST for pipeline archive, FAILED for dead deals
-    const targetStage = lostDraft.detail === "__FAILED__" ? "FAILED" : "LOST";
-    // Prefer explicit stage from the drop target stored in category context
-    const stage = (lostDraft as typeof lostDraft & { _stage?: string })._stage ?? "LOST";
-    body.stage = stage === "FAILED" ? "FAILED" : "LOST";
 
     const res = await fetch(`/api/customers/${lostDraft.id}`, {
       method: "PATCH",
@@ -127,7 +124,7 @@ export default function CustomersPage() {
     <div>
       <Header
         title="مشتریان"
-        subtitle="بکشید و رها کنید — هر ستون یک مرحله از خط لوله است"
+        subtitle="بکشید و رها کنید — هر ستون یک مرحله از خط فروش است"
         action={
           <div className="flex flex-wrap items-center gap-2">
             <Input
@@ -163,8 +160,8 @@ export default function CustomersPage() {
             </Select>
             <Select
               className="w-[160px]"
-              value={(lostDraft as { _stage?: string })._stage ?? "LOST"}
-              onChange={(e) => setLostDraft({ ...lostDraft, _stage: e.target.value } as typeof lostDraft)}
+              value={lostDraft.stage ?? "LOST"}
+              onChange={(e) => setLostDraft({ ...lostDraft, stage: e.target.value as "LOST" | "FAILED" })}
             >
               <option value="LOST">بایگانی (LOST)</option>
               <option value="FAILED">ناموفق (FAILED)</option>
@@ -193,7 +190,7 @@ export default function CustomersPage() {
                 const c = customers.find((x) => x.id === dragId);
                 if (c?.stage === "LOST" && (stage === "INITIAL_CONTACT" || stage === "NEW")) return;
                 if (stage === "LOST" || stage === "FAILED") {
-                  setLostDraft({ id: dragId, category: stage === "FAILED" ? "OTHER" : "CUSTOMER_WITHDREW", detail: "", _stage: stage } as never);
+                  setLostDraft({ id: dragId, category: stage === "FAILED" ? "OTHER" : "CUSTOMER_WITHDREW", detail: "", stage });
                   setDragId(null);
                   return;
                 }

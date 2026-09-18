@@ -1,0 +1,13 @@
+﻿
+> saj-crm@0.1.0 lint
+> eslint
+
+
+D:\bb\src\app\(dashboard)\customers\[id]\page.tsx
+  90:183  warning  React Hook useEffect has a missing dependency: 'load'. Either include it or remove the dependency array  react-hooks/exhaustive-deps
+
+D:\bb\src\app\(dashboard)\properties\[id]\page.tsx
+  25:32  warning  React Hook useEffect has a missing dependency: 'load'. Either include it or remove the dependency array  react-hooks/exhaustive-deps
+
+✖ 2 problems (0 errors, 2 warnings)
+

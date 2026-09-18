@@ -81,8 +81,18 @@ export const propertyCreateSchema = z.object({
   builtYear: z.number().int().min(1300).max(1500).optional().nullable(),
   floor: z.number().int().optional().nullable(),
   totalFloors: z.number().int().optional().nullable(),
+  unitsPerFloor: z.number().int().min(0).max(50).optional().nullable(),
+  unitCount: z.number().int().min(0).max(500).optional().nullable(),
+  landSizeSqm: z.number().min(0).optional().nullable(),
+  passageWidth: z.number().min(0).optional().nullable(),
+  buildingFrontage: z.number().min(0).optional().nullable(),
+  buildingFloors: z.number().int().min(0).max(30).optional().nullable(),
   hasParking: z.boolean().optional(),
   hasStorage: z.boolean().optional(),
+  hasElevator: z.boolean().optional(),
+  hasTerrace: z.boolean().optional(),
+  hasRenovated: z.boolean().optional(),
+  isNewBuild: z.boolean().optional(),
   region: z.string().min(1, "منطقه الزامی است").max(100),
   address: z.string().max(1000).optional().nullable(),
   ownerId: z.string().min(1, "مالک الزامی است"),
@@ -93,11 +103,15 @@ export const propertyCreateSchema = z.object({
 
 export const propertyUpdateSchema = propertyCreateSchema.partial().omit({ ownerId: true }).extend({
   ownerId: z.string().optional(),
+  /// تغییر مشاور ثبت‌کننده/مسئول فایل — فقط مدیر
+  listedById: z.string().optional(),
 });
 
 export const viewingCreateSchema = z.object({
   customerId: z.string().min(1),
   propertyId: z.string().min(1),
+  /// فقط مدیر می‌تواند بازدید را به مشاور دیگر نسبت دهد
+  agentId: z.string().optional().nullable(),
   startAt: z.string().min(1, "زمان شروع الزامی است"),
   endAt: z.string().optional().nullable(),
   status: z.enum(["SCHEDULED", "DONE", "CANCELED"]).optional(),

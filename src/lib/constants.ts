@@ -40,9 +40,9 @@ export const PROPERTY_TYPE_LABELS: Record<string, string> = Object.fromEntries(
   DEFAULT_PROPERTY_TYPES.map((x) => [x.value, x.label])
 );
 
-// نوع معامله — SALE هم برای فروش هم خرید (مشتری خریدار)؛ شارژ خرید در UI به صورت «خرید/فروش» نمایش داده می‌شود
+// نوع معامله فایل — فقط فروش یا رهن/اجاره (خرید در فایل معنا ندارد)
 export const DEAL_TYPE_LABELS: Record<string, string> = {
-  SALE: "خرید / فروش",
+  SALE: "فروش",
   RENT: "رهن و اجاره",
 };
 

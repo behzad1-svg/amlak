@@ -28,12 +28,23 @@ export async function GET(req: NextRequest) {
   if (agentId) {
     if (session.user.role !== "OWNER" && agentId !== session.user.id) return NextResponse.json({ error: "دسترسی ندارید" }, { status: 403 });
     where.agentId = agentId;
+  } else if (propertyId && session.user.role !== "OWNER") {
+    // روی پرونده فایل: ثبت‌کننده فایل همه یادداشت‌ها را می‌بیند؛ بقیه فقط خودشان
+    const prop = await prisma.property.findUnique({ where: { id: propertyId }, select: { listedById: true } });
+    if (!prop || prop.listedById !== session.user.id) {
+      where.agentId = session.user.id;
+    }
+  } else if (customerId && session.user.role !== "OWNER") {
+    const cust = await prisma.customer.findUnique({ where: { id: customerId }, select: { assignedAgentId: true } });
+    if (!cust || cust.assignedAgentId !== session.user.id) {
+      where.agentId = session.user.id;
+    }
   } else if (session.user.role !== "OWNER") {
     where.agentId = session.user.id;
   }
   const isDefaultPage = !new URL(req.url).searchParams.has("page") && !new URL(req.url).searchParams.has("limit");
   const [activities, total] = await Promise.all([
-    prisma.activity.findMany({ where, include: { agent: { select: { id: true, name: true } } }, orderBy: { createdAt: "desc" }, skip: (page - 1) * limit, take: limit }),
+    prisma.activity.findMany({ where, include: { agent: { select: { id: true, name: true } }, customer: { select: { id: true, name: true } } }, orderBy: { createdAt: "desc" }, skip: (page - 1) * limit, take: limit }),
     prisma.activity.count({ where }),
   ]);
   if (isDefaultPage) return NextResponse.json(serializeBigInt(activities));

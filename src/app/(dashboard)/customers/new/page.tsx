@@ -2,11 +2,11 @@
 import { useState, useEffect } from "react";
 import { useRouter } from "next/navigation";
 import { Header } from "@/components/layout/Header";
-import { PhoneInput, NumberInput, Select, Label, Textarea } from "@/components/ui/Input";
+import { PhoneInput, Select, Label, Textarea } from "@/components/ui/Input";
 import { Button } from "@/components/ui/Button";
 import { JalaliDatePicker } from "@/components/ui/JalaliDatePicker";
 import { Input } from "@/components/ui/Input";
-import { formatTomanWithWords } from "@/lib/money";
+import { MoneyInput } from "@/components/ui/MoneyInput";
 
 function MultiRegionChips({ regions, value, onChange }: { regions: string[]; value: string[]; onChange: (v: string[]) => void }) {
   return (
@@ -58,12 +58,20 @@ export default function NewCustomerPage() {
   async function submit(e: React.FormEvent) {
     e.preventDefault();
     setError(""); setLoading(true);
+    const dealType = form.preferredDealType;
     const body: Record<string, unknown> = { name: form.name, phone: form.phone, type: form.type, stage: "NEW" };
-    if (form.preferredDealType) body.preferredDealType = form.preferredDealType;
+    if (dealType) body.preferredDealType = dealType;
     if (form.preferredType) body.preferredType = form.preferredType;
     if (areas.length > 0) body.preferredAreas = areas;
-    if (form.budgetMax) body.budgetMax = form.budgetMax;
-    if (form.budgetMaxMonthly) body.budgetMaxMonthly = form.budgetMaxMonthly;
+    // بودجه فقط بر اساس نوع معامله — خرید فقط قیمت، رهن فقط ودیعه + اجاره
+    if (dealType === "SALE") {
+      if (form.budgetMax) body.budgetMax = form.budgetMax;
+    } else if (dealType === "RENT") {
+      if (form.budgetMax) body.budgetMax = form.budgetMax; // ودیعه
+      if (form.budgetMaxMonthly) body.budgetMaxMonthly = form.budgetMaxMonthly;
+    } else {
+      if (form.budgetMax) body.budgetMax = form.budgetMax;
+    }
     if (form.preferredSizeMin) body.preferredSizeMin = parseFloat(form.preferredSizeMin);
     if (form.preferredSizeMax) body.preferredSizeMax = parseFloat(form.preferredSizeMax);
     if (form.description) body.description = form.description;
@@ -75,7 +83,7 @@ export default function NewCustomerPage() {
     router.push("/customers");
   }
 
-  const budgetWords = form.budgetMax ? formatTomanWithWords(form.budgetMax).words : "";
+  const dealType = form.preferredDealType;
 
   return (
     <div>
@@ -85,31 +93,100 @@ export default function NewCustomerPage() {
         <div className="grid gap-4 md:grid-cols-2">
           <div><Label>نام و نام خانوادگی *</Label><Input value={form.name} onChange={(e) => upd("name", e.target.value)} required placeholder="مثلا رضا کریمی" className="mt-1" /></div>
           <div><Label>شماره تماس *</Label><PhoneInput value={form.phone} onChange={(e) => upd("phone", e.target.value)} required placeholder="09171234567" className="mt-1" /></div>
-          <div><Label>نوع</Label><Select value={form.type} onChange={(e) => upd("type", e.target.value)} className="mt-1"><option value="BUYER">خریدار</option><option value="SELLER">فروشنده</option><option value="TENANT">مستاجر</option><option value="OWNER">مالک</option></Select></div>
+          <div>
+            <Label>نوع</Label>
+            <Select
+              value={form.type}
+              onChange={(e) => {
+                const t = e.target.value;
+                upd("type", t);
+                // پیشنهاد خودکار نوع معامله بر اساس نقش
+                if (t === "TENANT") upd("preferredDealType", "RENT");
+                if (t === "BUYER" && !form.preferredDealType) upd("preferredDealType", "SALE");
+              }}
+              className="mt-1"
+            >
+              <option value="BUYER">خریدار</option>
+              <option value="SELLER">فروشنده</option>
+              <option value="TENANT">مستاجر</option>
+              <option value="OWNER">مالک</option>
+            </Select>
+          </div>
           {role === "OWNER" && agents.length > 0 && (
             <div>
               <Label>مشاور مسئول</Label>
               <Select value={form.assignedAgentId} onChange={(e) => upd("assignedAgentId", e.target.value)} className="mt-1">
                 <option value="">خودم (مدیر)</option>
-                {agents.filter((a) => a.role !== "OWNER" || true).map((a) => (
+                {agents.map((a) => (
                   <option key={a.id} value={a.id}>{a.name}{a.role === "OWNER" ? " (مدیر)" : ""}</option>
                 ))}
               </Select>
             </div>
           )}
-          <div><Label>نوع معامله</Label><Select value={form.preferredDealType} onChange={(e) => upd("preferredDealType", e.target.value)} className="mt-1"><option value="">—</option><option value="SALE">خرید / فروش</option><option value="RENT">رهن و اجاره</option></Select></div>
+          <div>
+            <Label>نوع معامله *</Label>
+            <Select
+              value={form.preferredDealType}
+              onChange={(e) => {
+                const v = e.target.value;
+                upd("preferredDealType", v);
+                // با تغییر نوع معامله، فیلد بودجه‌ی نوع دیگر پاک شود
+                if (v === "SALE") upd("budgetMaxMonthly", "");
+                if (v === "RENT") { /* budgetMax = ودیعه */ }
+                if (!v) { upd("budgetMax", ""); upd("budgetMaxMonthly", ""); }
+              }}
+              className="mt-1"
+              required
+            >
+              <option value="">انتخاب کنید</option>
+              <option value="SALE">خرید / فروش</option>
+              <option value="RENT">رهن و اجاره</option>
+            </Select>
+          </div>
           <div><Label>نوع ملک</Label><Select value={form.preferredType} onChange={(e) => upd("preferredType", e.target.value)} className="mt-1"><option value="">—</option>{propertyTypes.map((t) => <option key={t.value} value={t.value}>{t.label}</option>)}</Select></div>
-          <div><Label>متراژ از</Label><NumberInput value={form.preferredSizeMin} onChange={(e) => upd("preferredSizeMin", e.target.value)} placeholder="مثلا 80" className="mt-1" /></div>
-          <div><Label>متراژ تا</Label><NumberInput value={form.preferredSizeMax} onChange={(e) => upd("preferredSizeMax", e.target.value)} placeholder="مثلا 120" className="mt-1" /></div>
-          <div>
-            <Label>بودجه سقف (تومان)</Label>
-            <NumberInput value={form.budgetMax} onChange={(e) => upd("budgetMax", e.target.value)} placeholder="3500000000" className="mt-1" />
-            {budgetWords && <p className="mt-1 text-xs text-zinc-500">{budgetWords}</p>}
-          </div>
-          <div>
-            <Label>سقف اجاره ماهانه (تومان) — رهن/اجاره</Label>
-            <NumberInput value={form.budgetMaxMonthly} onChange={(e) => upd("budgetMaxMonthly", e.target.value)} placeholder="15000000" className="mt-1" />
-          </div>
+          <div><Label>متراژ از</Label><Input inputMode="numeric" dir="ltr" value={form.preferredSizeMin} onChange={(e) => upd("preferredSizeMin", e.target.value.replace(/[^0-9]/g, ""))} placeholder="مثلا 80" className="mt-1" /></div>
+          <div><Label>متراژ تا</Label><Input inputMode="numeric" dir="ltr" value={form.preferredSizeMax} onChange={(e) => upd("preferredSizeMax", e.target.value.replace(/[^0-9]/g, ""))} placeholder="مثلا 120" className="mt-1" /></div>
+
+          {/* بودجه — جدا بر اساس نوع معامله */}
+          {dealType === "SALE" && (
+            <div className="md:col-span-2 rounded-[12px] border border-[var(--line)] bg-[var(--paper-2)] p-3">
+              <div className="mb-2 text-[12px] font-bold text-[var(--ink-2)]">بودجه خرید</div>
+              <MoneyInput
+                label="سقف قیمت خرید (تومان)"
+                value={form.budgetMax}
+                onChange={(v) => upd("budgetMax", v)}
+                placeholder="مثلا 3500000000"
+                hint="مبلغ را عددی بنویسید — زیر فیلد خوانده می‌شود"
+              />
+            </div>
+          )}
+          {dealType === "RENT" && (
+            <div className="md:col-span-2 rounded-[12px] border border-[var(--line)] bg-[var(--paper-2)] p-3">
+              <div className="mb-2 text-[12px] font-bold text-[var(--ink-2)]">بودجه رهن و اجاره</div>
+              <div className="grid gap-3 md:grid-cols-2">
+                <MoneyInput
+                  label="سقف ودیعه / رهن (تومان)"
+                  value={form.budgetMax}
+                  onChange={(v) => upd("budgetMax", v)}
+                  placeholder="مثلا 500000000"
+                  hint="ودیعه"
+                />
+                <MoneyInput
+                  label="سقف اجاره ماهانه (تومان)"
+                  value={form.budgetMaxMonthly}
+                  onChange={(v) => upd("budgetMaxMonthly", v)}
+                  placeholder="مثلا 15000000"
+                  hint="اجاره ماه"
+                />
+              </div>
+            </div>
+          )}
+          {!dealType && (
+            <div className="md:col-span-2 rounded-[12px] border border-dashed border-[var(--line-2)] bg-white px-3 py-3 text-[12px] text-[var(--ink-3)]">
+              ابتدا «نوع معامله» را انتخاب کنید تا فیلدهای بودجه درست نمایش داده شوند (خرید ≠ رهن/اجاره).
+            </div>
+          )}
+
           <div className="md:col-span-2">
             <Label>مناطق موردنظر (چندتایی)</Label>
             <div className="mt-1"><MultiRegionChips regions={regions} value={areas} onChange={setAreas} /></div>

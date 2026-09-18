@@ -5,21 +5,17 @@ import { Header } from "@/components/layout/Header";
 import { Card } from "@/components/ui/Card";
 import { Button } from "@/components/ui/Button";
 import { Badge } from "@/components/ui/Badge";
-import { Input, Label, PhoneInput, Select } from "@/components/ui/Input";
+import { Input, Label, Select } from "@/components/ui/Input";
+import { SearchSelect } from "@/components/ui/SearchSelect";
 import { DEAL_STATUS_COLORS, DEAL_STATUS_LABELS } from "@/lib/dealConstants";
 import { DEAL_TYPE_LABELS } from "@/lib/constants";
-import { formatDate, formatToman } from "@/lib/utils";
+import { formatDate } from "@/lib/utils";
 
 type Deal = {
   id: string;
   status: string;
   contractAt: string | null;
   notes: string | null;
-  commissionToman: string | null;
-  commissionPercent: number | null;
-  dealSalePriceToman: string | null;
-  dealDepositToman: string | null;
-  dealMonthlyRentToman: string | null;
   customer: { id: string; name: string; phone?: string };
   property: { id: string; title: string; dealType: string; region?: string };
   agent: { id: string; name: string };
@@ -41,11 +37,6 @@ export default function DealsPage() {
     customerId: "",
     propertyId: "",
     status: "PENDING",
-    dealSalePriceToman: "",
-    dealDepositToman: "",
-    dealMonthlyRentToman: "",
-    commissionToman: "",
-    commissionPercent: "",
     notes: "",
   });
 
@@ -69,7 +60,10 @@ export default function DealsPage() {
     setProperties(props.map((p: { id: string; title: string; region?: string }) => ({ id: p.id, label: `${p.title}${p.region ? ` — ${p.region}` : ""}` })));
   }, [filter]);
 
-  useEffect(() => { load(); }, [load]);
+  useEffect(() => {
+    // eslint-disable-next-line react-hooks/set-state-in-effect
+    load();
+  }, [load]);
 
   async function createDeal(e: React.FormEvent) {
     e.preventDefault();
@@ -78,18 +72,12 @@ export default function DealsPage() {
       return;
     }
     setSaving(true);
-    const body: Record<string, unknown> = {
+    const body = {
       customerId: form.customerId,
       propertyId: form.propertyId,
       status: form.status,
       notes: form.notes || null,
     };
-    if (form.dealSalePriceToman) body.dealSalePriceToman = form.dealSalePriceToman;
-    if (form.dealDepositToman) body.dealDepositToman = form.dealDepositToman;
-    if (form.dealMonthlyRentToman) body.dealMonthlyRentToman = form.dealMonthlyRentToman;
-    if (form.commissionToman) body.commissionToman = form.commissionToman;
-    if (form.commissionPercent) body.commissionPercent = Number(form.commissionPercent);
-
     const res = await fetch("/api/deals", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
@@ -99,17 +87,7 @@ export default function DealsPage() {
     setSaving(false);
     if (!res.ok) return flash("", j.error || "خطا در ثبت معامله");
     setShowForm(false);
-    setForm({
-      customerId: "",
-      propertyId: "",
-      status: "PENDING",
-      dealSalePriceToman: "",
-      dealDepositToman: "",
-      dealMonthlyRentToman: "",
-      commissionToman: "",
-      commissionPercent: "",
-      notes: "",
-    });
+    setForm({ customerId: "", propertyId: "", status: "PENDING", notes: "" });
     flash("معامله ثبت شد");
     load();
   }
@@ -150,20 +128,26 @@ export default function DealsPage() {
         {showForm && (
           <Card>
             <h3 className="font-semibold mb-3">ثبت معامله</h3>
-            <form onSubmit={createDeal} className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
+            <form onSubmit={createDeal} className="grid gap-3 sm:grid-cols-2">
               <div>
-                <Label>مشتری</Label>
-                <Select className="mt-1" value={form.customerId} onChange={(e) => setForm({ ...form, customerId: e.target.value })} required>
-                  <option value="">انتخاب کنید</option>
-                  {customers.map((c) => <option key={c.id} value={c.id}>{c.label}</option>)}
-                </Select>
+                <SearchSelect
+                  label="مشتری"
+                  required
+                  value={form.customerId}
+                  onChange={(id) => setForm({ ...form, customerId: id })}
+                  options={customers}
+                  placeholder="جستجوی مشتری..."
+                />
               </div>
               <div>
-                <Label>فایل</Label>
-                <Select className="mt-1" value={form.propertyId} onChange={(e) => setForm({ ...form, propertyId: e.target.value })} required>
-                  <option value="">انتخاب کنید</option>
-                  {properties.map((p) => <option key={p.id} value={p.id}>{p.label}</option>)}
-                </Select>
+                <SearchSelect
+                  label="فایل"
+                  required
+                  value={form.propertyId}
+                  onChange={(id) => setForm({ ...form, propertyId: id })}
+                  options={properties}
+                  placeholder="جستجوی فایل (کد/عنوان)..."
+                />
               </div>
               <div>
                 <Label>وضعیت</Label>
@@ -173,30 +157,10 @@ export default function DealsPage() {
                 </Select>
               </div>
               <div>
-                <Label>قیمت فروش (تومان)</Label>
-                <PhoneInput className="mt-1" value={form.dealSalePriceToman} onChange={(e) => setForm({ ...form, dealSalePriceToman: e.target.value })} />
-              </div>
-              <div>
-                <Label>ودیعه (تومان)</Label>
-                <PhoneInput className="mt-1" value={form.dealDepositToman} onChange={(e) => setForm({ ...form, dealDepositToman: e.target.value })} />
-              </div>
-              <div>
-                <Label>اجاره ماهانه (تومان)</Label>
-                <PhoneInput className="mt-1" value={form.dealMonthlyRentToman} onChange={(e) => setForm({ ...form, dealMonthlyRentToman: e.target.value })} />
-              </div>
-              <div>
-                <Label>کمیسیون (تومان)</Label>
-                <PhoneInput className="mt-1" value={form.commissionToman} onChange={(e) => setForm({ ...form, commissionToman: e.target.value })} />
-              </div>
-              <div>
-                <Label>کمیسیون (٪)</Label>
-                <Input type="number" min={0} max={100} step={0.1} className="mt-1" value={form.commissionPercent} onChange={(e) => setForm({ ...form, commissionPercent: e.target.value })} />
-              </div>
-              <div className="sm:col-span-2 lg:col-span-3">
                 <Label>یادداشت</Label>
                 <Input className="mt-1" value={form.notes} onChange={(e) => setForm({ ...form, notes: e.target.value })} />
               </div>
-              <div className="sm:col-span-2 lg:col-span-3 flex gap-2">
+              <div className="sm:col-span-2 flex gap-2">
                 <Button type="submit" disabled={saving}>{saving ? "..." : "ثبت معامله"}</Button>
                 <Button type="button" variant="ghost" onClick={() => setShowForm(false)}>انصراف</Button>
               </div>
@@ -225,20 +189,6 @@ export default function DealsPage() {
                       {d.property.region ? ` · ${d.property.region}` : ""}
                       {` · مشاور: ${d.agent.name}`}
                       {d.contractAt ? ` · قرارداد ${formatDate(d.contractAt)}` : ""}
-                    </div>
-                    <div className="mt-2 flex flex-wrap gap-3 text-[12.5px]">
-                      {d.dealSalePriceToman && <span>فروش: <b>{formatToman(d.dealSalePriceToman)}</b></span>}
-                      {d.dealDepositToman && <span>ودیعه: <b>{formatToman(d.dealDepositToman)}</b></span>}
-                      {d.dealMonthlyRentToman && <span>اجاره: <b>{formatToman(d.dealMonthlyRentToman)}</b></span>}
-                      {(d.commissionToman || d.commissionPercent != null) && (
-                        <span>
-                          کمیسیون:{" "}
-                          <b>
-                            {d.commissionToman ? formatToman(d.commissionToman) : ""}
-                            {d.commissionPercent != null ? `${d.commissionToman ? " · " : ""}${d.commissionPercent}٪` : ""}
-                          </b>
-                        </span>
-                      )}
                     </div>
                     {d.notes && <div className="mt-2 text-[12px] text-[var(--ink-3)]">{d.notes}</div>}
                   </div>

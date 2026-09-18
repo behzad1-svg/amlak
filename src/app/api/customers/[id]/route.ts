@@ -77,11 +77,11 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
   if (d.temperature !== undefined) updateData.temperature = d.temperature;
   if (d.source !== undefined) updateData.source = d.source;
   if (d.notes !== undefined) updateData.notes = d.notes;
-  if ((d as any).description !== undefined) updateData.description = (d as any).description;
+  if (d.description !== undefined) updateData.description = d.description;
   if (d.preferredType !== undefined) updateData.preferredType = d.preferredType;
   if (d.preferredDealType !== undefined) updateData.preferredDealType = d.preferredDealType;
   if (d.preferredArea !== undefined) updateData.preferredArea = d.preferredArea;
-  if ((d as any).preferredAreas !== undefined) updateData.preferredAreas = (d as any).preferredAreas;
+  if (d.preferredAreas !== undefined) updateData.preferredAreas = d.preferredAreas;
   if (d.preferredBeds !== undefined) updateData.preferredBeds = d.preferredBeds;
   if (d.preferredSizeMin !== undefined) updateData.preferredSizeMin = d.preferredSizeMin;
   if (d.preferredSizeMax !== undefined) updateData.preferredSizeMax = d.preferredSizeMax;
@@ -145,10 +145,13 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
 export async function DELETE(_req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
   const session = await getSession();
   if (!session) return NextResponse.json({ error: "وارد نشده‌اید" }, { status: 401 });
+  // فقط مدیر می‌تواند حذف کند
+  if (session.user.role !== "OWNER") {
+    return NextResponse.json({ error: "فقط مدیر می‌تواند مشتری را حذف کند" }, { status: 403 });
+  }
   const { id } = await params;
   const existing = await prisma.customer.findUnique({ where: { id } });
   if (!existing || existing.deletedAt) return NextResponse.json({ error: "یافت نشد" }, { status: 404 });
-  if (!canAccessCustomer(session.user, existing)) return NextResponse.json({ error: "دسترسی ندارید" }, { status: 403 });
   await prisma.customer.update({ where: { id }, data: { deletedAt: new Date() } });
   await createAuditLog({ actorId: session.user.id, action: "CUSTOMER_DELETED", entityType: "Customer", entityId: id });
   return NextResponse.json({ ok: true });

@@ -1,0 +1,282 @@
+⚠ The "middleware" file convention is deprecated. Please use "proxy" instead.
+
+  To migrate automatically, run:
+  npx @next/codemod@canary middleware-to-proxy .
+
+  Learn more: https://nextjs.org/docs/messages/middleware-to-proxy
+[browser] Detected `scroll-behavior: smooth` on the `<html>` element. To disable smooth scrolling during route transitions, add `data-scroll-behavior="smooth"` to your <html> element. Learn more: https://nextjs.org/docs/messages/missing-data-scroll-behavior
+[browser] Detected `scroll-behavior: smooth` on the `<html>` element. To disable smooth scrolling during route transitions, add `data-scroll-behavior="smooth"` to your <html> element. Learn more: https://nextjs.org/docs/messages/missing-data-scroll-behavior
+[browser] Detected `scroll-behavior: smooth` on the `<html>` element. To disable smooth scrolling during route transitions, add `data-scroll-behavior="smooth"` to your <html> element. Learn more: https://nextjs.org/docs/messages/missing-data-scroll-behavior
+[browser] Detected `scroll-behavior: smooth` on the `<html>` element. To disable smooth scrolling during route transitions, add `data-scroll-behavior="smooth"` to your <html> element. Learn more: https://nextjs.org/docs/messages/missing-data-scroll-behavior
+[browser] Detected `scroll-behavior: smooth` on the `<html>` element. To disable smooth scrolling during route transitions, add `data-scroll-behavior="smooth"` to your <html> element. Learn more: https://nextjs.org/docs/messages/missing-data-scroll-behavior
+[browser] Detected `scroll-behavior: smooth` on the `<html>` element. To disable smooth scrolling during route transitions, add `data-scroll-behavior="smooth"` to your <html> element. Learn more: https://nextjs.org/docs/messages/missing-data-scroll-behavior
+[browser] Detected `scroll-behavior: smooth` on the `<html>` element. To disable smooth scrolling during route transitions, add `data-scroll-behavior="smooth"` to your <html> element. Learn more: https://nextjs.org/docs/messages/missing-data-scroll-behavior
+[browser] Detected `scroll-behavior: smooth` on the `<html>` element. To disable smooth scrolling during route transitions, add `data-scroll-behavior="smooth"` to your <html> element. Learn more: https://nextjs.org/docs/messages/missing-data-scroll-behavior
+⨯ Error [PrismaClientValidationError]: 
+Invalid `prisma.property.findMany()` invocation:
+
+{
+  where: {
+    code: {
+    ~~~~
+      startsWith: "F-"
+    },
+?   AND?: PropertyWhereInput | PropertyWhereInput[],
+?   OR?: PropertyWhereInput[],
+?   NOT?: PropertyWhereInput | PropertyWhereInput[],
+?   id?: StringFilter | String,
+?   title?: StringFilter | String,
+?   type?: StringFilter | String,
+?   dealType?: EnumPropertyDealTypeFilter | PropertyDealType,
+?   salePriceToman?: BigIntNullableFilter | BigInt | Null,
+?   depositToman?: BigIntNullableFilter | BigInt | Null,
+?   monthlyRentToman?: BigIntNullableFilter | BigInt | Null,
+?   status?: EnumPropertyStatusFilter | PropertyStatus,
+?   sizeSqm?: FloatNullableFilter | Float | Null,
+?   beds?: IntNullableFilter | Int | Null,
+?   builtYear?: IntNullableFilter | Int | Null,
+?   floor?: IntNullableFilter | Int | Null,
+?   totalFloors?: IntNullableFilter | Int | Null,
+?   hasParking?: BoolFilter | Boolean,
+?   hasStorage?: BoolFilter | Boolean,
+?   region?: StringFilter | String,
+?   address?: StringNullableFilter | String | Null,
+?   images?: StringNullableListFilter,
+?   isAdvertised?: BoolFilter | Boolean,
+?   nextOwnerFollowUpAt?: DateTimeNullableFilter | DateTime | Null,
+?   ownerId?: StringFilter | String,
+?   listedById?: StringFilter | String,
+?   visibility?: EnumPropertyVisibilityFilter | PropertyVisibility,
+?   createdAt?: DateTimeFilter | DateTime,
+?   updatedAt?: DateTimeFilter | DateTime,
+?   deletedAt?: DateTimeNullableFilter | DateTime | Null,
+?   owner?: CustomerRelationFilter | CustomerWhereInput,
+?   listedBy?: UserRelationFilter | UserWhereInput,
+?   accessList?: PropertyAccessListRelationFilter,
+?   viewings?: ViewingListRelationFilter,
+?   deals?: DealListRelationFilter,
+?   activities?: ActivityListRelationFilter
+  },
+  select: {
+    code: true
+  }
+}
+
+Unknown argument `code`. Did you mean `id`? Available options are marked with ?.
+    at async nextPropertyCode (src\lib\propertyCode.ts:12:17)
+    at async POST (src\app\api\properties\route.ts:105:16)
+  10 |
+  11 |   // اگر فایل‌هایی از قبل کد دارند، از بیشینه عددی عبور نکن
+> 12 |   const codes = await prisma.property.findMany({
+     |                 ^
+  13 |     where: { code: { startsWith: "F-" } },
+  14 |     select: { code: true },
+  15 |   }); {
+  clientVersion: '5.22.0'
+}
+[browser] ⨯ unhandledRejection: SyntaxError: Failed to execute 'json' on 'Response': Unexpected end of JSON input
+    at submit (src/app/(dashboard)/properties/new/page.tsx:151:28)
+  149 |       body: JSON.stringify(body),
+  150 |     });
+> 151 |     const data = await res.json();
+      |                            ^
+  152 |     if (!res.ok) {
+  153 |       setError(data.error ?? "خطا");
+  154 |       setLoading(false);
+⨯ Error [PrismaClientValidationError]: 
+Invalid `prisma.property.findMany()` invocation:
+
+{
+  where: {
+    code: {
+    ~~~~
+      startsWith: "F-"
+    },
+?   AND?: PropertyWhereInput | PropertyWhereInput[],
+?   OR?: PropertyWhereInput[],
+?   NOT?: PropertyWhereInput | PropertyWhereInput[],
+?   id?: StringFilter | String,
+?   title?: StringFilter | String,
+?   type?: StringFilter | String,
+?   dealType?: EnumPropertyDealTypeFilter | PropertyDealType,
+?   salePriceToman?: BigIntNullableFilter | BigInt | Null,
+?   depositToman?: BigIntNullableFilter | BigInt | Null,
+?   monthlyRentToman?: BigIntNullableFilter | BigInt | Null,
+?   status?: EnumPropertyStatusFilter | PropertyStatus,
+?   sizeSqm?: FloatNullableFilter | Float | Null,
+?   beds?: IntNullableFilter | Int | Null,
+?   builtYear?: IntNullableFilter | Int | Null,
+?   floor?: IntNullableFilter | Int | Null,
+?   totalFloors?: IntNullableFilter | Int | Null,
+?   hasParking?: BoolFilter | Boolean,
+?   hasStorage?: BoolFilter | Boolean,
+?   region?: StringFilter | String,
+?   address?: StringNullableFilter | String | Null,
+?   images?: StringNullableListFilter,
+?   isAdvertised?: BoolFilter | Boolean,
+?   nextOwnerFollowUpAt?: DateTimeNullableFilter | DateTime | Null,
+?   ownerId?: StringFilter | String,
+?   listedById?: StringFilter | String,
+?   visibility?: EnumPropertyVisibilityFilter | PropertyVisibility,
+?   createdAt?: DateTimeFilter | DateTime,
+?   updatedAt?: DateTimeFilter | DateTime,
+?   deletedAt?: DateTimeNullableFilter | DateTime | Null,
+?   owner?: CustomerRelationFilter | CustomerWhereInput,
+?   listedBy?: UserRelationFilter | UserWhereInput,
+?   accessList?: PropertyAccessListRelationFilter,
+?   viewings?: ViewingListRelationFilter,
+?   deals?: DealListRelationFilter,
+?   activities?: ActivityListRelationFilter
+  },
+  select: {
+    code: true
+  }
+}
+
+Unknown argument `code`. Did you mean `id`? Available options are marked with ?.
+    at async nextPropertyCode (src\lib\propertyCode.ts:12:17)
+    at async POST (src\app\api\properties\route.ts:105:16)
+  10 |
+  11 |   // اگر فایل‌هایی از قبل کد دارند، از بیشینه عددی عبور نکن
+> 12 |   const codes = await prisma.property.findMany({
+     |                 ^
+  13 |     where: { code: { startsWith: "F-" } },
+  14 |     select: { code: true },
+  15 |   }); {
+  clientVersion: '5.22.0'
+}
+⨯ Error [PrismaClientValidationError]: 
+Invalid `prisma.property.findMany()` invocation:
+
+{
+  where: {
+    code: {
+    ~~~~
+      startsWith: "F-"
+    },
+?   AND?: PropertyWhereInput | PropertyWhereInput[],
+?   OR?: PropertyWhereInput[],
+?   NOT?: PropertyWhereInput | PropertyWhereInput[],
+?   id?: StringFilter | String,
+?   title?: StringFilter | String,
+?   type?: StringFilter | String,
+?   dealType?: EnumPropertyDealTypeFilter | PropertyDealType,
+?   salePriceToman?: BigIntNullableFilter | BigInt | Null,
+?   depositToman?: BigIntNullableFilter | BigInt | Null,
+?   monthlyRentToman?: BigIntNullableFilter | BigInt | Null,
+?   status?: EnumPropertyStatusFilter | PropertyStatus,
+?   sizeSqm?: FloatNullableFilter | Float | Null,
+?   beds?: IntNullableFilter | Int | Null,
+?   builtYear?: IntNullableFilter | Int | Null,
+?   floor?: IntNullableFilter | Int | Null,
+?   totalFloors?: IntNullableFilter | Int | Null,
+?   hasParking?: BoolFilter | Boolean,
+?   hasStorage?: BoolFilter | Boolean,
+?   region?: StringFilter | String,
+?   address?: StringNullableFilter | String | Null,
+?   images?: StringNullableListFilter,
+?   isAdvertised?: BoolFilter | Boolean,
+?   nextOwnerFollowUpAt?: DateTimeNullableFilter | DateTime | Null,
+?   ownerId?: StringFilter | String,
+?   listedById?: StringFilter | String,
+?   visibility?: EnumPropertyVisibilityFilter | PropertyVisibility,
+?   createdAt?: DateTimeFilter | DateTime,
+?   updatedAt?: DateTimeFilter | DateTime,
+?   deletedAt?: DateTimeNullableFilter | DateTime | Null,
+?   owner?: CustomerRelationFilter | CustomerWhereInput,
+?   listedBy?: UserRelationFilter | UserWhereInput,
+?   accessList?: PropertyAccessListRelationFilter,
+?   viewings?: ViewingListRelationFilter,
+?   deals?: DealListRelationFilter,
+?   activities?: ActivityListRelationFilter
+  },
+  select: {
+    code: true
+  }
+}
+
+Unknown argument `code`. Did you mean `id`? Available options are marked with ?.
+    at async nextPropertyCode (src\lib\propertyCode.ts:12:17)
+    at async POST (src\app\api\properties\route.ts:105:16)
+  10 |
+  11 |   // اگر فایل‌هایی از قبل کد دارند، از بیشینه عددی عبور نکن
+> 12 |   const codes = await prisma.property.findMany({
+     |                 ^
+  13 |     where: { code: { startsWith: "F-" } },
+  14 |     select: { code: true },
+  15 |   }); {
+  clientVersion: '5.22.0'
+}
+⨯ Error [PrismaClientValidationError]: 
+Invalid `prisma.property.findMany()` invocation:
+
+{
+  where: {
+    code: {
+    ~~~~
+      startsWith: "F-"
+    },
+?   AND?: PropertyWhereInput | PropertyWhereInput[],
+?   OR?: PropertyWhereInput[],
+?   NOT?: PropertyWhereInput | PropertyWhereInput[],
+?   id?: StringFilter | String,
+?   title?: StringFilter | String,
+?   type?: StringFilter | String,
+?   dealType?: EnumPropertyDealTypeFilter | PropertyDealType,
+?   salePriceToman?: BigIntNullableFilter | BigInt | Null,
+?   depositToman?: BigIntNullableFilter | BigInt | Null,
+?   monthlyRentToman?: BigIntNullableFilter | BigInt | Null,
+?   status?: EnumPropertyStatusFilter | PropertyStatus,
+?   sizeSqm?: FloatNullableFilter | Float | Null,
+?   beds?: IntNullableFilter | Int | Null,
+?   builtYear?: IntNullableFilter | Int | Null,
+?   floor?: IntNullableFilter | Int | Null,
+?   totalFloors?: IntNullableFilter | Int | Null,
+?   hasParking?: BoolFilter | Boolean,
+?   hasStorage?: BoolFilter | Boolean,
+?   region?: StringFilter | String,
+?   address?: StringNullableFilter | String | Null,
+?   images?: StringNullableListFilter,
+?   isAdvertised?: BoolFilter | Boolean,
+?   nextOwnerFollowUpAt?: DateTimeNullableFilter | DateTime | Null,
+?   ownerId?: StringFilter | String,
+?   listedById?: StringFilter | String,
+?   visibility?: EnumPropertyVisibilityFilter | PropertyVisibility,
+?   createdAt?: DateTimeFilter | DateTime,
+?   updatedAt?: DateTimeFilter | DateTime,
+?   deletedAt?: DateTimeNullableFilter | DateTime | Null,
+?   owner?: CustomerRelationFilter | CustomerWhereInput,
+?   listedBy?: UserRelationFilter | UserWhereInput,
+?   accessList?: PropertyAccessListRelationFilter,
+?   viewings?: ViewingListRelationFilter,
+?   deals?: DealListRelationFilter,
+?   activities?: ActivityListRelationFilter
+  },
+  select: {
+    code: true
+  }
+}
+
+Unknown argument `code`. Did you mean `id`? Available options are marked with ?.
+    at async nextPropertyCode (src\lib\propertyCode.ts:12:17)
+    at async POST (src\app\api\properties\route.ts:105:16)
+  10 |
+  11 |   // اگر فایل‌هایی از قبل کد دارند، از بیشینه عددی عبور نکن
+> 12 |   const codes = await prisma.property.findMany({
+     |                 ^
+  13 |     where: { code: { startsWith: "F-" } },
+  14 |     select: { code: true },
+  15 |   }); {
+  clientVersion: '5.22.0'
+}
+⨯ The directory at "D:\bb\.next\dev" was deleted.
+
+Deleting this directory while Next.js is running can lead to undefined behavior. Restarting the server to recover...
+⚠ The "middleware" file convention is deprecated. Please use "proxy" instead.
+
+  To migrate automatically, run:
+  npx @next/codemod@canary middleware-to-proxy .
+
+  Learn more: https://nextjs.org/docs/messages/middleware-to-proxy
+[browser] Detected `scroll-behavior: smooth` on the `<html>` element. To disable smooth scrolling during route transitions, add `data-scroll-behavior="smooth"` to your <html> element. Learn more: https://nextjs.org/docs/messages/missing-data-scroll-behavior
+[browser] Detected `scroll-behavior: smooth` on the `<html>` element. To disable smooth scrolling during route transitions, add `data-scroll-behavior="smooth"` to your <html> element. Learn more: https://nextjs.org/docs/messages/missing-data-scroll-behavior

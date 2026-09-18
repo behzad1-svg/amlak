@@ -76,14 +76,10 @@ function rentBudgetScore(
     }
   }
 
-  // معادل ماهانه: اجاره + ودیعه/۳۰ — اگر فقط سقف ودیعه داریم و اجاره آزاد است
+  // معادل ماهانه: اجاره + ودیعه/۳۰ — اگر فقط سقف ودیعه داریم
   if (deposit != null && monthlyRent != null && customerMaxDeposit != null && customerMaxMonthly == null) {
     const equivMonthly = monthlyRent + deposit / MATCHING_CONFIG.depositToMonthlyDivisor;
-    // سقف تلویحی ماهانه از ودیعه
-    const impliedMonthlyCap = customerMaxDeposit / MATCHING_CONFIG.depositToMonthlyDivisor + (customerMaxDeposit / BigInt(100));
-    // ساده‌تر: اگر ودیعه در سقف بود، معادل ماهانه را با سقف معادل ودیعه بسنج
     const capFromDeposit = customerMaxDeposit / MATCHING_CONFIG.depositToMonthlyDivisor;
-    // کمی انعطاف: ۱۲۰٪ سقف معادل
     const softCap = (capFromDeposit * BigInt(120)) / BigInt(100);
     if (equivMonthly > softCap && deposit > customerMaxDeposit) return null;
   }
@@ -238,7 +234,7 @@ export async function findMatchesForProperty(propertyId: string): Promise<MatchR
   return results.sort((a, b) => b.score - a.score);
 }
 
-async function alreadyNotified(userId: string, relatedId: string, sourceId: string): Promise<boolean> {
+async function alreadyNotified(userId: string, relatedId: string): Promise<boolean> {
   const since = new Date(Date.now() - 24 * 60 * 60 * 1000);
   const exact = await prisma.notification.findFirst({
     where: { userId, relatedId, type: "MATCH_SUGGESTION", createdAt: { gte: since } },
@@ -269,9 +265,9 @@ export async function createMatchNotifications(
     const dedupKey = `${sourceType}:${sourceId}→${targetId}`;
     const alreadyForTarget =
       targetAgentId !== sourceAgentId
-        ? await alreadyNotified(targetAgentId, sourceType === "customer" ? targetId : sourceId, sourceId)
+        ? await alreadyNotified(targetAgentId, sourceType === "customer" ? targetId : sourceId)
         : false;
-    const alreadyForSource = await alreadyNotified(sourceAgentId, targetId, sourceId);
+    const alreadyForSource = await alreadyNotified(sourceAgentId, targetId);
     if (alreadyForTarget && alreadyForSource) continue;
 
     const score = match.score;

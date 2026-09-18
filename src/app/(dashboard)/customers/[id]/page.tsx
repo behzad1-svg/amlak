@@ -3,12 +3,12 @@ import { useEffect, useState } from "react";
 import { useParams, useRouter } from "next/navigation";
 import { Header } from "@/components/layout/Header";
 import { Button } from "@/components/ui/Button";
-import { Input, Textarea, Select, Label, PhoneInput, NumberInput } from "@/components/ui/Input";
+import { Input, Textarea, Select, Label, PhoneInput } from "@/components/ui/Input";
 import { Card } from "@/components/ui/Card";
 import { Badge } from "@/components/ui/Badge";
 import { formatDate, formatToman } from "@/lib/utils";
 import { JalaliDatePicker } from "@/components/ui/JalaliDatePicker";
-import { formatTomanWithWords } from "@/lib/money";
+import { MoneyInput } from "@/components/ui/MoneyInput";
 import {
   CUSTOMER_STAGE_LABELS,
   CUSTOMER_STAGE_COLORS,
@@ -22,6 +22,8 @@ import {
   TEMPERATURE_COLORS,
 } from "@/lib/constants";
 import { Phone, MapPin, Home, Wallet, Ruler, BedDouble, Calendar, User, StickyNote, AlertTriangle, Pencil, Trash2, Plus } from "lucide-react";
+import { StageOutcomeModal, type OutcomeKind } from "@/components/customers/StageOutcomeModal";
+import { useRole } from "@/hooks/useRole";
 
 type Customer = Record<string, unknown> & {
   id: string; name: string; phone: string; type: string; stage: string; temperature: string;
@@ -38,13 +40,47 @@ type Customer = Record<string, unknown> & {
 type Activity = { id: string; type: string; description: string | null; createdAt: string; agent: { name: string } };
 type FollowUp = { id: string; dueAt: string; note: string | null; done: boolean };
 
+type CustomerForm = {
+  name: string;
+  phone: string;
+  notes: string;
+  description: string;
+  nextFollowUpAt: string;
+  stage: string;
+  temperature: string;
+  type: string;
+  source: string;
+  preferredType: string;
+  preferredDealType: string;
+  preferredArea: string;
+  preferredAreas: string[];
+  preferredBeds: string;
+  preferredSizeMin: string;
+  preferredSizeMax: string;
+  budgetMin: string;
+  budgetMax: string;
+  budgetMaxMonthly: string;
+  lostReasonCategory: string;
+  lostReasonDetail: string;
+  needsManagerReview: string;
+  managerReviewReason: string;
+};
+
 export default function CustomerDetailPage() {
   const { id } = useParams<{ id: string }>();
   const router = useRouter();
+  const { isOwner } = useRole();
   const [c, setC] = useState<Customer | null>(null);
   const [activities, setActivities] = useState<Activity[]>([]);
   const [editing, setEditing] = useState(false);
-  const [form, setForm] = useState<Record<string, any>>({});
+  const [form, setForm] = useState<CustomerForm>({
+    name: "", phone: "", notes: "", description: "", nextFollowUpAt: "",
+    stage: "", temperature: "", type: "", source: "",
+    preferredType: "", preferredDealType: "", preferredArea: "",
+    preferredAreas: [], preferredBeds: "", preferredSizeMin: "", preferredSizeMax: "",
+    budgetMin: "", budgetMax: "", budgetMaxMonthly: "", lostReasonCategory: "", lostReasonDetail: "",
+    needsManagerReview: "false", managerReviewReason: "",
+  });
   const [error, setError] = useState("");
   const [activityText, setActivityText] = useState("");
   const [activityType, setActivityType] = useState("NOTE");
@@ -55,6 +91,8 @@ export default function CustomerDetailPage() {
   const [newFollowUpNote, setNewFollowUpNote] = useState("");
   const [regions, setRegions] = useState<string[]>([]);
   const [propertyTypes, setPropertyTypes] = useState<{ value: string; label: string }[]>([]);
+  const [outcome, setOutcome] = useState<OutcomeKind | null>(null);
+  const [outcomeMsg, setOutcomeMsg] = useState("");
 
   function load() {
     fetch(`/api/customers/${id}`)
@@ -73,6 +111,7 @@ export default function CustomerDetailPage() {
             preferredSizeMin: d.preferredSizeMin != null ? String(d.preferredSizeMin) : "",
             preferredSizeMax: d.preferredSizeMax != null ? String(d.preferredSizeMax) : "",
             budgetMin: d.budgetMin ?? "", budgetMax: d.budgetMax ?? "",
+            budgetMaxMonthly: d.budgetMaxMonthly ?? "",
             lostReasonCategory: d.lostReasonCategory ?? "", lostReasonDetail: d.lostReasonDetail ?? "",
             needsManagerReview: d.needsManagerReview ? "true" : "false",
             managerReviewReason: d.managerReviewReason ?? "",
@@ -98,10 +137,12 @@ export default function CustomerDetailPage() {
       preferredType: form.preferredType || null,
       preferredDealType: form.preferredDealType || null,
       preferredArea: form.preferredArea || null, preferredAreas: form.preferredAreas ?? [],
-      preferredBeds: form.preferredBeds ? parseInt(form.preferredBeds) : null,
+      preferredBeds: form.preferredBeds ? parseInt(form.preferredBeds, 10) : null,
       preferredSizeMin: form.preferredSizeMin ? parseFloat(form.preferredSizeMin) : null,
       preferredSizeMax: form.preferredSizeMax ? parseFloat(form.preferredSizeMax) : null,
-      budgetMin: form.budgetMin || null, budgetMax: form.budgetMax || null,
+      budgetMin: form.budgetMin || null,
+      budgetMax: form.budgetMax || null,
+      budgetMaxMonthly: form.preferredDealType === "RENT" ? (form.budgetMaxMonthly || null) : null,
       nextFollowUpAt: form.nextFollowUpAt || null,
       needsManagerReview: form.needsManagerReview === "true",
       managerReviewReason: form.managerReviewReason || null,
@@ -115,8 +156,14 @@ export default function CustomerDetailPage() {
   }
 
   async function handleDelete() {
-    if (!confirm("حذف مشتری؟")) return;
-    await fetch(`/api/customers/${id}`, { method: "DELETE" });
+    if (!confirm("حذف مشتری؟ فقط مدیر می‌تواند حذف کند.")) return;
+    const res = await fetch(`/api/customers/${id}`, { method: "DELETE" });
+    if (!res.ok) {
+      const j = await res.json().catch(() => ({}));
+      setOutcomeMsg(j.error || "حذف مجاز نیست");
+      setTimeout(() => setOutcomeMsg(""), 3000);
+      return;
+    }
     router.push("/customers");
   }
 
@@ -129,6 +176,75 @@ export default function CustomerDetailPage() {
     });
     if (res.ok) { setActivityText(""); load(); }
     setSavingActivity(false);
+  }
+
+  async function submitOutcome(payload: {
+    stage: OutcomeKind;
+    notes?: string | null;
+    lostReasonCategory?: string;
+    lostReasonDetail?: string | null;
+    propertyId?: string | null;
+  }) {
+    // ۱) اگر موفق و فایل انتخاب شده: معامله قطعی → فایل SOLD/RENTED (بایگانی)
+    if (payload.stage === "WON" && payload.propertyId) {
+      const dealRes = await fetch("/api/deals", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          customerId: id,
+          propertyId: payload.propertyId,
+          status: "COMPLETED",
+          notes: payload.notes || "موفق — از پروفایل مشتری ثبت شد",
+        }),
+      });
+      if (!dealRes.ok) {
+        const j = await dealRes.json().catch(() => ({}));
+        // اگر برای این فایل قبلا معامله باز هست، فقط مرحله مشتری را بزن
+        if (dealRes.status !== 409) {
+          throw new Error(j.error || "خطا در ثبت معامله/بایگانی فایل");
+        }
+      }
+    }
+
+    // ۲) مرحله مشتری + یادداشت/دلیل
+    const body: Record<string, unknown> = { stage: payload.stage };
+    if (payload.stage === "WON") {
+      body.notes = payload.notes || null;
+      body.nextFollowUpAt = null;
+    } else {
+      body.lostReasonCategory = payload.lostReasonCategory || "OTHER";
+      body.lostReasonDetail = payload.lostReasonDetail || null;
+      body.nextFollowUpAt = null;
+    }
+
+    const res = await fetch(`/api/customers/${id}`, {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(body),
+    });
+    const data = await res.json().catch(() => ({}));
+    if (!res.ok) throw new Error(data.error || "خطا در تغییر مرحله مشتری");
+
+    // ۳) یادداشت در تایم‌لاین فعالیت
+    const actDesc =
+      payload.stage === "WON"
+        ? `موفق${payload.notes ? `: ${payload.notes}` : ""}${payload.propertyId ? " — فایل تگ و بایگانی شد" : ""}`
+        : `ناموفق (${payload.lostReasonCategory})${payload.lostReasonDetail ? `: ${payload.lostReasonDetail}` : ""}`;
+    await fetch("/api/activities", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        type: "STAGE_CHANGE",
+        customerId: id,
+        description: actDesc,
+        newValue: payload.stage,
+      }),
+    }).catch(() => {});
+
+    setOutcome(null);
+    setOutcomeMsg(payload.stage === "WON" ? "موفق ثبت شد — فایل بایگانی شد" : "ناموفق ثبت شد");
+    setTimeout(() => setOutcomeMsg(""), 3500);
+    load();
   }
 
   if (!c) return <div className="p-8 text-center text-zinc-400">بارگذاری...</div>;
@@ -144,20 +260,46 @@ export default function CustomerDetailPage() {
         action={
           <div className="flex gap-2 flex-wrap">
             {c.stage !== "WON" && c.stage !== "FAILED" && c.stage !== "LOST" && <>
-              <Button variant="outline" onClick={async () => { if (!confirm("این مشتری موفق شود؟")) return; const r = await fetch(`/api/customers/${id}`, { method: "PATCH", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ stage: "WON" }) }); if (r.ok) load(); }} className="gap-1.5 bg-emerald-50 border-emerald-200 text-emerald-700 hover:bg-emerald-100">✓ موفق</Button>
-              <Button variant="outline" onClick={async () => { const reason = prompt("دلیل ناموفق؟") ?? ""; const r = await fetch(`/api/customers/${id}`, { method: "PATCH", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ stage: "FAILED", lostReasonDetail: reason }) }); if (r.ok) load(); }} className="gap-1.5 bg-red-50 border-red-200 text-red-700 hover:bg-red-100">✕ ناموفق</Button>
+              <Button
+                variant="outline"
+                onClick={() => setOutcome("WON")}
+                className="gap-1.5 bg-emerald-50 border-emerald-200 text-emerald-700 hover:bg-emerald-100"
+              >
+                ✓ موفق
+              </Button>
+              <Button
+                variant="outline"
+                onClick={() => setOutcome("FAILED")}
+                className="gap-1.5 bg-red-50 border-red-200 text-red-700 hover:bg-red-100"
+              >
+                ✕ ناموفق
+              </Button>
             </>}
             <Button variant="outline" onClick={() => setEditing(!editing)} className="gap-1.5">
               <Pencil className="h-4 w-4" /> {editing ? "انصراف" : "ویرایش"}
             </Button>
-            <Button variant="ghost" onClick={handleDelete} className="gap-1.5 text-red-600 hover:bg-red-50">
-              <Trash2 className="h-4 w-4" /> حذف
-            </Button>
+            {isOwner && (
+              <Button variant="ghost" onClick={handleDelete} className="gap-1.5 text-red-600 hover:bg-red-50">
+                <Trash2 className="h-4 w-4" /> حذف
+              </Button>
+            )}
           </div>
         }
       />
 
       {error && <div className="mx-6 mt-4 rounded-lg bg-red-50 px-3 py-2 text-sm text-red-700">{error}</div>}
+      {outcomeMsg && <div className="mx-6 mt-4 rounded-lg bg-emerald-50 px-3 py-2 text-sm text-emerald-700">{outcomeMsg}</div>}
+
+      {outcome && (
+        <StageOutcomeModal
+          kind={outcome}
+          customerPhone={c.phone}
+          preferredDealType={(c.preferredDealType as string) || null}
+          preferredType={(c.preferredType as string) || null}
+          onClose={() => setOutcome(null)}
+          onSubmit={submitOutcome}
+        />
+      )}
 
       {editing && (
         <div className="mx-6 mt-4">
@@ -170,14 +312,55 @@ export default function CustomerDetailPage() {
               <div><Label>مرحله</Label><Select value={form.stage} onChange={(e) => setForm({ ...form, stage: e.target.value })} className="mt-1"><option value="INITIAL_CONTACT">تماس اولیه</option><option value="QUALIFIED">ارزیابی‌شده</option><option value="VIEWING">بازدید</option><option value="CONTRACT">قرارداد</option><option value="WON">موفق</option><option value="FAILED">ناموفق</option><option value="LOST">بایگانی</option></Select></div>
               <div><Label>دما</Label><Select value={form.temperature} onChange={(e) => setForm({ ...form, temperature: e.target.value })} className="mt-1"><option value="HOT">داغ</option><option value="WARM">گرم</option><option value="COLD">سرد</option></Select></div>
               <div><Label>منبع</Label><Select value={form.source} onChange={(e) => setForm({ ...form, source: e.target.value })} className="mt-1"><option value="">—</option><option value="INSTAGRAM">اینستاگرام</option><option value="DIVAR">دیوار</option><option value="DIRECT_CALL">تماس مستقیم</option><option value="REFERRAL">معرفی</option><option value="SIGN_BOARD">تابلو</option><option value="WEBSITE">وب‌سایت</option><option value="OTHER">سایر</option></Select></div>
-              <div><Label>نوع معامله موردنظر</Label><Select value={form.preferredDealType} onChange={(e) => setForm({ ...form, preferredDealType: e.target.value })} className="mt-1"><option value="">—</option><option value="SALE">خرید / فروش</option><option value="RENT">رهن و اجاره</option></Select></div>
+              <div>
+                <Label>نوع معامله موردنظر</Label>
+                <Select
+                  value={form.preferredDealType}
+                  onChange={(e) => {
+                    const v = e.target.value;
+                    setForm((f) => ({
+                      ...f,
+                      preferredDealType: v,
+                      budgetMaxMonthly: v === "SALE" ? "" : f.budgetMaxMonthly,
+                    }));
+                  }}
+                  className="mt-1"
+                >
+                  <option value="">—</option>
+                  <option value="SALE">خرید / فروش</option>
+                  <option value="RENT">رهن و اجاره</option>
+                </Select>
+              </div>
               <div><Label>نوع ملک موردنظر</Label><Select value={form.preferredType} onChange={(e) => setForm({ ...form, preferredType: e.target.value })} className="mt-1"><option value="">—</option>{propertyTypes.map((pt) => <option key={pt.value} value={pt.value}>{pt.label}</option>)}</Select></div>
-              <div className="md:col-span-2"><Label>مناطق موردنظر (چندتایی)</Label><div className="mt-1 flex flex-wrap gap-1.5 mb-2">{(form.preferredAreas as string[] ?? []).map((a: string) => <span key={a} className="inline-flex items-center gap-1 rounded-full border border-[var(--line)] bg-[var(--paper-2)] px-2.5 py-1 text-[12px]">{a}<button type="button" onClick={() => { const arr = (form.preferredAreas as string[] ?? []).filter((x: string) => x !== a); setForm({ ...form, preferredAreas: arr }); }} className="text-[var(--ink-3)] hover:text-red-600">×</button></span>)}<select value="" onChange={(e) => { const v = e.target.value; if (!v) return; const arr = (form.preferredAreas as string[] ?? []); if (!arr.includes(v)) setForm({ ...form, preferredAreas: [...arr, v] }); e.target.value = ""; }} className="rounded-full border border-dashed border-[var(--line-2)] bg-white px-3 py-1 text-[12px]"><option value="">+ افزودن منطقه</option>{regions.filter((r) => !(form.preferredAreas as string[] ?? []).includes(r)).map((r) => <option key={r} value={r}>{r}</option>)}</select></div></div>
-              <div><Label>تعداد خواب</Label><NumberInput value={form.preferredBeds} onChange={(e) => setForm({ ...form, preferredBeds: e.target.value })} placeholder="مثلا ۲" className="mt-1" /></div>
-              <div><Label>متراژ از</Label><NumberInput value={form.preferredSizeMin} onChange={(e) => setForm({ ...form, preferredSizeMin: e.target.value })} placeholder="80" className="mt-1" /></div>
-              <div><Label>متراژ تا</Label><NumberInput value={form.preferredSizeMax} onChange={(e) => setForm({ ...form, preferredSizeMax: e.target.value })} placeholder="120" className="mt-1" /></div>
-              <div><Label>بودجه از (تومان)</Label><NumberInput value={form.budgetMin} onChange={(e) => setForm({ ...form, budgetMin: e.target.value })} className="mt-1" />{form.budgetMin ? <p className="mt-1 text-xs text-zinc-500">{formatTomanWithWords(form.budgetMin).words}</p> : null}</div>
-              <div><Label>بودجه تا (تومان)</Label><NumberInput value={form.budgetMax} onChange={(e) => setForm({ ...form, budgetMax: e.target.value })} className="mt-1" />{form.budgetMax ? <p className="mt-1 text-xs text-zinc-500">{formatTomanWithWords(form.budgetMax).words}</p> : null}</div>
+              <div className="md:col-span-2"><Label>مناطق موردنظر (چندتایی)</Label><div className="mt-1 flex flex-wrap gap-1.5 mb-2">{form.preferredAreas.map((a: string) => <span key={a} className="inline-flex items-center gap-1 rounded-full border border-[var(--line)] bg-[var(--paper-2)] px-2.5 py-1 text-[12px]">{a}<button type="button" onClick={() => { const arr = form.preferredAreas.filter((x: string) => x !== a); setForm({ ...form, preferredAreas: arr }); }} className="text-[var(--ink-3)] hover:text-red-600">×</button></span>)}<select value="" onChange={(e) => { const v = e.target.value; if (!v) return; const arr = form.preferredAreas; if (!arr.includes(v)) setForm({ ...form, preferredAreas: [...arr, v] }); e.target.value = ""; }} className="rounded-full border border-dashed border-[var(--line-2)] bg-white px-3 py-1 text-[12px]"><option value="">+ افزودن منطقه</option>{regions.filter((r) => !form.preferredAreas.includes(r)).map((r) => <option key={r} value={r}>{r}</option>)}</select></div></div>
+              <div><Label>تعداد خواب</Label><Input inputMode="numeric" dir="ltr" value={form.preferredBeds} onChange={(e) => setForm({ ...form, preferredBeds: e.target.value.replace(/[^0-9]/g, "") })} placeholder="مثلا ۲" className="mt-1" /></div>
+              <div><Label>متراژ از</Label><Input inputMode="numeric" dir="ltr" value={form.preferredSizeMin} onChange={(e) => setForm({ ...form, preferredSizeMin: e.target.value.replace(/[^0-9]/g, "") })} placeholder="80" className="mt-1" /></div>
+              <div><Label>متراژ تا</Label><Input inputMode="numeric" dir="ltr" value={form.preferredSizeMax} onChange={(e) => setForm({ ...form, preferredSizeMax: e.target.value.replace(/[^0-9]/g, "") })} placeholder="120" className="mt-1" /></div>
+
+              {form.preferredDealType === "SALE" && (
+                <div className="md:col-span-2 rounded-[12px] border border-[var(--line)] bg-[var(--paper-2)] p-3">
+                  <div className="mb-2 text-[12px] font-bold text-[var(--ink-2)]">بودجه خرید</div>
+                  <div className="grid gap-3 md:grid-cols-2">
+                    <MoneyInput label="بودجه از (تومان)" value={form.budgetMin} onChange={(v) => setForm({ ...form, budgetMin: v })} placeholder="مثلا 2000000000" />
+                    <MoneyInput label="سقف قیمت خرید (تومان)" value={form.budgetMax} onChange={(v) => setForm({ ...form, budgetMax: v })} placeholder="مثلا 3500000000" />
+                  </div>
+                </div>
+              )}
+              {form.preferredDealType === "RENT" && (
+                <div className="md:col-span-2 rounded-[12px] border border-[var(--line)] bg-[var(--paper-2)] p-3">
+                  <div className="mb-2 text-[12px] font-bold text-[var(--ink-2)]">بودجه رهن و اجاره</div>
+                  <div className="grid gap-3 md:grid-cols-2">
+                    <MoneyInput label="سقف ودیعه / رهن (تومان)" value={form.budgetMax} onChange={(v) => setForm({ ...form, budgetMax: v })} placeholder="مثلا 500000000" />
+                    <MoneyInput label="سقف اجاره ماهانه (تومان)" value={form.budgetMaxMonthly} onChange={(v) => setForm({ ...form, budgetMaxMonthly: v })} placeholder="مثلا 15000000" />
+                  </div>
+                </div>
+              )}
+              {!form.preferredDealType && (
+                <div className="md:col-span-2 rounded-[12px] border border-dashed border-[var(--line-2)] bg-white px-3 py-3 text-[12px] text-[var(--ink-3)]">
+                  برای نمایش فیلدهای بودجه، «نوع معامله» را انتخاب کنید.
+                </div>
+              )}
+
               <div><Label>پیگیری بعدی (شمسی)</Label><div className="mt-1"><JalaliDatePicker value={form.nextFollowUpAt || null} onChange={(v) => setForm({ ...form, nextFollowUpAt: v ?? "" })} /></div></div>
               <div className="flex items-center gap-2 pt-6"><input type="checkbox" checked={form.needsManagerReview === "true"} onChange={(e) => setForm({ ...form, needsManagerReview: e.target.checked ? "true" : "false" })} /><Label>نیاز به بررسی مدیر</Label></div>
               {form.needsManagerReview === "true" && <div className="md:col-span-2"><Label>دلیل بررسی</Label><Textarea value={form.managerReviewReason} onChange={(e) => setForm({ ...form, managerReviewReason: e.target.value })} className="mt-1" /></div>}
@@ -237,68 +420,179 @@ export default function CustomerDetailPage() {
 
           <Card className={overdue ? "border-[var(--pomegranate-line)] bg-[var(--pomegranate-soft)]" : ""}>
             <h3 className="flex items-center gap-2 text-sm font-semibold mb-3">
-              <Calendar className={`h-4 w-4 ${overdue ? "text-[var(--pomegranate)]" : "text-zinc-500"}`} /> پیگیری بعدی
+              <Calendar className={`h-4 w-4 ${overdue ? "text-[var(--pomegranate)]" : "text-zinc-500"}`} /> پیگیری
+              <span className="rounded-full border border-[var(--line)] bg-[var(--paper-2)] px-2 py-0.5 text-[11px] font-bold">
+                {followUps.filter((f) => !f.done).length} باز
+              </span>
               {overdue && <span className="rounded-full bg-[var(--pomegranate)] px-2 py-0.5 text-[11px] font-bold text-white">عقب‌افتاده</span>}
             </h3>
-            {followUpSaving !== null ? (
-              <div className="rounded-[12px] border border-[var(--line)] bg-white p-3">
-                <JalaliDatePicker value={followUpSaving} onChange={(v) => setFollowUpSaving(v)} />
-                <div className="mt-2 flex gap-2">
-                  <Button size="sm" disabled={!followUpSaving} onClick={async () => {
-                    if (!followUpSaving) return;
-                    const res = await fetch(`/api/customers/${id}`, { method: "PATCH", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ nextFollowUpAt: followUpSaving }) });
-                    if (res.ok) { setFollowUpSaving(null); load(); }
-                  }}>ذخیره</Button>
-                  <Button variant="ghost" size="sm" onClick={() => setFollowUpSaving(null)}>انصراف</Button>
-                </div>
-              </div>
-            ) : c.nextFollowUpAt ? (
-              <div className={`rounded-[12px] border px-3 py-3 text-sm ${overdue ? "border-[var(--pomegranate-line)] bg-white text-[var(--pomegranate)]" : "border-[var(--line)] bg-[var(--paper-2)]"}`}>
-                <div className="flex items-center justify-between gap-2">
-                  <span className="font-bold">{formatDate(c.nextFollowUpAt)}</span>
-                  <span className={`rounded-full px-2 py-0.5 text-[11px] font-bold ${overdue ? "bg-[var(--pomegranate)] text-white" : "bg-white border border-[var(--line)]"}`}>{overdue ? "نیاز به تماس" : "در نوبت"}</span>
-                </div>
-                <div className="mt-2 flex gap-2">
-                  <a href={`tel:${c.phone}`} className="inline-flex items-center gap-1 rounded-[10px] bg-[var(--ink)] px-3 py-1.5 text-[12px] font-medium text-white hover:bg-black">تماس</a>
-                  <button onClick={() => setFollowUpSaving(c.nextFollowUpAt)} className="inline-flex items-center gap-1 rounded-[10px] border border-[var(--line)] bg-white px-3 py-1.5 text-[12px] font-medium hover:bg-[var(--paper-2)]">تغییر تاریخ</button>
-                </div>
+
+            {/* Only list — earliest open item is the "next" follow-up (actions live on that row) */}
+            {followUps.length === 0 ? (
+              <div className="mb-3 rounded-[12px] border border-dashed border-[var(--line-2)] bg-white px-3 py-4 text-center">
+                <p className="text-sm text-[var(--ink-3)]">
+                  {c.nextFollowUpAt
+                    ? `پیگیری بعدی: ${formatDate(c.nextFollowUpAt)} — برای ثبت در لیست، تاریخ را از پایین اضافه کنید`
+                    : "هنوز پیگیری ثبت نشده"}
+                </p>
               </div>
             ) : (
-              <div className="rounded-[12px] border border-dashed border-[var(--line-2)] bg-white px-3 py-4 text-center">
-                <p className="text-sm text-[var(--ink-3)]">تاریخ پیگیری تعیین نشده</p>
-                <button onClick={() => setFollowUpSaving(new Date().toISOString())} className="mt-2 text-[12px] font-medium text-[var(--pomegranate)] hover:underline">تعیین تاریخ پیگیری</button>
-              </div>
-            )}
-          </Card>
-
-          <Card>
-            <h3 className="flex items-center gap-2 text-sm font-semibold mb-3">
-              <Calendar className="h-4 w-4 text-zinc-500" /> پیگیری‌ها
-              <span className="rounded-full border border-[var(--line)] bg-[var(--paper-2)] px-2 py-0.5 text-[11px] font-bold">{followUps.length} مورد</span>
-            </h3>
-            {followUps.length > 0 && (
               <div className="space-y-2 mb-3">
-                {followUps.map((f) => {
+                {followUps.map((f, idx) => {
                   const isOverdue = !f.done && new Date(f.dueAt) < new Date();
+                  const isNext = !f.done && idx === followUps.findIndex((x) => !x.done);
                   return (
-                    <div key={f.id} className={`flex items-center gap-2 rounded-[12px] border px-3 py-2 text-[13px] ${f.done ? "bg-zinc-50 opacity-60 border-[var(--line)]" : isOverdue ? "bg-[var(--pomegranate-soft)] border-[var(--pomegranate-line)]" : "bg-white border-[var(--line)]"}`}>
-                      <input type="checkbox" checked={f.done} onChange={async (e) => { await fetch(`/api/follow-ups/${f.id}`, { method: "PATCH", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ done: e.target.checked }) }); const r = await fetch(`/api/customers/${id}/follow-ups`).then((x) => x.json()); setFollowUps(Array.isArray(r) ? r : []); load(); }} />
-                      <span className={`flex-1 ${f.done ? "line-through text-[var(--ink-3)]" : isOverdue ? "text-[var(--pomegranate)] font-medium" : ""}`}>{formatDate(f.dueAt)} {f.note ? `— ${f.note}` : ""}</span>
-                      <button onClick={async () => { await fetch(`/api/follow-ups/${f.id}`, { method: "DELETE" }); const r = await fetch(`/api/customers/${id}/follow-ups`).then((x) => x.json()); setFollowUps(Array.isArray(r) ? r : []); load(); }} className="text-[11px] text-[var(--ink-3)] hover:text-red-600">حذف</button>
+                    <div
+                      key={f.id}
+                      className={`rounded-[12px] border px-3 py-2 text-[13px] ${
+                        f.done
+                          ? "bg-zinc-50 opacity-60 border-[var(--line)]"
+                          : isOverdue
+                            ? "bg-[var(--pomegranate-soft)] border-[var(--pomegranate-line)]"
+                            : isNext
+                              ? "bg-white border-[var(--ink)]/20"
+                              : "bg-white border-[var(--line)]"
+                      }`}
+                    >
+                      <div className="flex items-center gap-2">
+                        <input
+                          type="checkbox"
+                          checked={f.done}
+                          onChange={async (e) => {
+                            await fetch(`/api/follow-ups/${f.id}`, {
+                              method: "PATCH",
+                              headers: { "Content-Type": "application/json" },
+                              body: JSON.stringify({ done: e.target.checked }),
+                            });
+                            const r = await fetch(`/api/customers/${id}/follow-ups`).then((x) => x.json());
+                            setFollowUps(Array.isArray(r) ? r : []);
+                            load();
+                          }}
+                        />
+                        <span className={`flex-1 ${f.done ? "line-through text-[var(--ink-3)]" : isOverdue ? "text-[var(--pomegranate)] font-medium" : ""}`}>
+                          {formatDate(f.dueAt)}
+                          {f.note ? ` — ${f.note}` : ""}
+                          {isNext && (
+                            <span className="mr-2 rounded-full bg-[var(--ink)] px-2 py-0.5 text-[10px] text-white">بعدی</span>
+                          )}
+                          {isOverdue && (
+                            <span className="mr-2 rounded-full bg-[var(--pomegranate)] px-2 py-0.5 text-[10px] text-white">عقب‌افتاده</span>
+                          )}
+                        </span>
+                        {isOwner && (
+                          <button
+                            onClick={async () => {
+                              const del = await fetch(`/api/follow-ups/${f.id}`, { method: "DELETE" });
+                              if (!del.ok) return;
+                              const r = await fetch(`/api/customers/${id}/follow-ups`).then((x) => x.json());
+                              setFollowUps(Array.isArray(r) ? r : []);
+                              load();
+                            }}
+                            className="text-[11px] text-[var(--ink-3)] hover:text-red-600"
+                          >
+                            حذف
+                          </button>
+                        )}
+                      </div>
+
+                      {isNext && !f.done && (
+                        <div className="mt-2 flex flex-wrap items-center gap-2 border-t border-[var(--line)] pt-2">
+                          <a
+                            href={`tel:${c.phone}`}
+                            className="inline-flex items-center gap-1 rounded-[10px] bg-[var(--ink)] px-3 py-1.5 text-[12px] font-medium text-white hover:bg-black"
+                          >
+                            تماس
+                          </a>
+                          {followUpSaving !== null ? (
+                            <>
+                              <JalaliDatePicker value={followUpSaving} onChange={(v) => setFollowUpSaving(v)} />
+                              <Button
+                                size="sm"
+                                disabled={!followUpSaving}
+                                onClick={async () => {
+                                  if (!followUpSaving) return;
+                                  await fetch(`/api/follow-ups/${f.id}`, {
+                                    method: "PATCH",
+                                    headers: { "Content-Type": "application/json" },
+                                    body: JSON.stringify({ dueAt: followUpSaving }),
+                                  });
+                                  setFollowUpSaving(null);
+                                  const r = await fetch(`/api/customers/${id}/follow-ups`).then((x) => x.json());
+                                  setFollowUps(Array.isArray(r) ? r : []);
+                                  load();
+                                }}
+                              >
+                                ذخیره
+                              </Button>
+                              <Button variant="ghost" size="sm" onClick={() => setFollowUpSaving(null)}>
+                                انصراف
+                              </Button>
+                            </>
+                          ) : (
+                            <button
+                              onClick={() => setFollowUpSaving(f.dueAt)}
+                              className="inline-flex items-center gap-1 rounded-[10px] border border-[var(--line)] bg-white px-3 py-1.5 text-[12px] font-medium hover:bg-[var(--paper-2)]"
+                            >
+                              تغییر تاریخ
+                            </button>
+                          )}
+                          <Button
+                            size="sm"
+                            variant="outline"
+                            onClick={async () => {
+                              await fetch(`/api/follow-ups/${f.id}`, {
+                                method: "PATCH",
+                                headers: { "Content-Type": "application/json" },
+                                body: JSON.stringify({ done: true }),
+                              });
+                              const r = await fetch(`/api/customers/${id}/follow-ups`).then((x) => x.json());
+                              setFollowUps(Array.isArray(r) ? r : []);
+                              load();
+                            }}
+                          >
+                            انجام شد
+                          </Button>
+                        </div>
+                      )}
                     </div>
                   );
                 })}
               </div>
             )}
+
             <div className="flex gap-2 items-end">
-              <div className="flex-1"><JalaliDatePicker value={newFollowUpDate} onChange={setNewFollowUpDate} placeholder="تاریخ پیگیری جدید" /></div>
-              <Input value={newFollowUpNote} onChange={(e) => setNewFollowUpNote(e.target.value)} placeholder="یادداشت (اختیاری)" className="flex-1" />
-              <Button size="sm" onClick={async () => {
-                if (!newFollowUpDate) return;
-                await fetch(`/api/customers/${id}/follow-ups`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ dueAt: newFollowUpDate, note: newFollowUpNote || undefined }) });
-                setNewFollowUpDate(null); setNewFollowUpNote(""); const r = await fetch(`/api/customers/${id}/follow-ups`).then((x) => x.json()); setFollowUps(Array.isArray(r) ? r : []); load();
-              }} disabled={!newFollowUpDate}>افزودن</Button>
+              <div className="flex-1">
+                <JalaliDatePicker value={newFollowUpDate} onChange={setNewFollowUpDate} placeholder="تاریخ پیگیری جدید" />
+              </div>
+              <Input
+                value={newFollowUpNote}
+                onChange={(e) => setNewFollowUpNote(e.target.value)}
+                placeholder="یادداشت (اختیاری)"
+                className="flex-1"
+              />
+              <Button
+                size="sm"
+                onClick={async () => {
+                  if (!newFollowUpDate) return;
+                  await fetch(`/api/customers/${id}/follow-ups`, {
+                    method: "POST",
+                    headers: { "Content-Type": "application/json" },
+                    body: JSON.stringify({ dueAt: newFollowUpDate, note: newFollowUpNote || undefined }),
+                  });
+                  setNewFollowUpDate(null);
+                  setNewFollowUpNote("");
+                  const r = await fetch(`/api/customers/${id}/follow-ups`).then((x) => x.json());
+                  setFollowUps(Array.isArray(r) ? r : []);
+                  load();
+                }}
+                disabled={!newFollowUpDate}
+              >
+                افزودن
+              </Button>
             </div>
+            <p className="mt-2 text-[11px] text-[var(--ink-3)]">
+              فقط یک لیست پیگیری — ردیف «بعدی» اولین مورد باز است؛ با تیک، خودکار جلو می‌رود.
+            </p>
           </Card>
 
           <Card>
@@ -333,9 +627,17 @@ export default function CustomerDetailPage() {
               <div className="flex justify-between gap-2">
                 <dt className="flex items-center gap-1.5 text-zinc-500"><Wallet className="h-3.5 w-3.5" /> بودجه</dt>
                 <dd className="font-medium text-left" dir="ltr">
-                  {c.budgetMin || c.budgetMax
-                    ? `${c.budgetMin ? formatToman(c.budgetMin) : "—"} تا ${c.budgetMax ? formatToman(c.budgetMax) : "—"}`
-                    : "—"}
+                  {c.preferredDealType === "RENT" ? (
+                    c.budgetMax || (c as { budgetMaxMonthly?: string | null }).budgetMaxMonthly ? (
+                      <span className="text-right" dir="rtl">
+                        ودیعه {c.budgetMax ? formatToman(c.budgetMax) : "—"}
+                        {" · "}
+                        اجاره {(c as { budgetMaxMonthly?: string | null }).budgetMaxMonthly ? formatToman((c as { budgetMaxMonthly?: string | null }).budgetMaxMonthly) : "—"}
+                      </span>
+                    ) : "—"
+                  ) : c.budgetMin || c.budgetMax ? (
+                    `${c.budgetMin ? formatToman(c.budgetMin) : "—"} تا ${c.budgetMax ? formatToman(c.budgetMax) : "—"}`
+                  ) : "—"}
                 </dd>
               </div>
             </dl>

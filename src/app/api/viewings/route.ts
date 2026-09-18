@@ -33,8 +33,28 @@ export async function GET(req: NextRequest) {
   const where: Record<string, unknown> = {};
   if (customerId) where.customerId = customerId;
   if (propertyId) where.propertyId = propertyId;
-  if (session.user.role !== "OWNER") where.agentId = session.user.id;
-  const viewings = await prisma.viewing.findMany({ where, include: { customer: { select: { id: true, name: true } }, property: { select: { id: true, title: true } }, agent: { select: { id: true, name: true } } }, orderBy: { startAt: "desc" } });
+
+  // مشاور فقط بازدیدهای خودش؛ مدیر (یا ثبت‌کننده فایل) همه بازدیدهای آن فایل را می‌بیند
+  if (session.user.role !== "OWNER") {
+    if (propertyId) {
+      const prop = await prisma.property.findUnique({ where: { id: propertyId }, select: { listedById: true } });
+      if (!prop || prop.listedById !== session.user.id) {
+        where.agentId = session.user.id;
+      }
+    } else {
+      where.agentId = session.user.id;
+    }
+  }
+
+  const viewings = await prisma.viewing.findMany({
+    where,
+    include: {
+      customer: { select: { id: true, name: true } },
+      property: { select: { id: true, title: true, code: true } },
+      agent: { select: { id: true, name: true } },
+    },
+    orderBy: { startAt: "desc" },
+  });
   return NextResponse.json(serializeBigInt(viewings));
 }
 
@@ -48,7 +68,18 @@ export async function POST(req: NextRequest) {
   if (d.endAt && new Date(d.endAt) <= new Date(d.startAt)) return NextResponse.json({ error: "زمان پایان باید بعد از شروع باشد" }, { status: 400 });
   if (d.status === "DONE" && !d.endAt) return NextResponse.json({ error: "برای بازدید انجام‌شده، زمان پایان الزامی است" }, { status: 400 });
 
-  // گارد بین‌مشاوری: باید به مشتری و فایل دسترسی داشته باشد
+  // نسبت دادن بازدید به مشاور — فقط مدیر
+  let agentId = session.user.id;
+  if (d.agentId && d.agentId !== session.user.id) {
+    if (session.user.role !== "OWNER") {
+      return NextResponse.json({ error: "فقط مدیر می‌تواند بازدید را به مشاور دیگر نسبت دهد" }, { status: 403 });
+    }
+    const agent = await prisma.user.findUnique({ where: { id: d.agentId } });
+    if (!agent || !agent.active) return NextResponse.json({ error: "مشاور معتبر نیست" }, { status: 400 });
+    agentId = agent.id;
+  }
+
+  // گارد بین‌مشاوری
   if (session.user.role !== "OWNER") {
     const customer = await prisma.customer.findUnique({ where: { id: d.customerId } });
     if (!customer || !canAccessCustomer(session.user, customer)) return NextResponse.json({ error: "به این مشتری دسترسی ندارید" }, { status: 403 });
@@ -59,11 +90,33 @@ export async function POST(req: NextRequest) {
   }
 
   const viewing = await prisma.viewing.create({
-    data: { customerId: d.customerId, propertyId: d.propertyId, agentId: session.user.id, startAt: new Date(d.startAt), endAt: d.endAt ? new Date(d.endAt) : null, status: (d.status as never) ?? "SCHEDULED", feedback: d.feedback },
+    data: {
+      customerId: d.customerId,
+      propertyId: d.propertyId,
+      agentId,
+      startAt: new Date(d.startAt),
+      endAt: d.endAt ? new Date(d.endAt) : null,
+      status: (d.status as never) ?? "SCHEDULED",
+      feedback: d.feedback,
+    },
   });
-  await createAuditLog({ actorId: session.user.id, action: "VIEWING_CREATED", entityType: "Viewing", entityId: viewing.id, newValue: { customerId: d.customerId, propertyId: d.propertyId } as never });
-  if (viewing.status === "DONE") {
-    await prisma.activity.create({ data: { type: "VIEWING_DONE", agentId: session.user.id, customerId: d.customerId, propertyId: d.propertyId, description: `بازدید انجام شد` } });
-  }
+  await createAuditLog({
+    actorId: session.user.id,
+    action: "VIEWING_CREATED",
+    entityType: "Viewing",
+    entityId: viewing.id,
+    newValue: { customerId: d.customerId, propertyId: d.propertyId, agentId } as never,
+  });
+  // یادداشت در پرونده فایل + مشتری تا فعالیت مشاور دیده شود
+  const statusLabel = viewing.status === "DONE" ? "بازدید انجام شد" : "بازدید ثبت شد";
+  await prisma.activity.create({
+    data: {
+      type: viewing.status === "DONE" ? "VIEWING_DONE" : "NOTE",
+      agentId,
+      customerId: d.customerId,
+      propertyId: d.propertyId,
+      description: d.feedback ? `${statusLabel}: ${d.feedback}` : statusLabel,
+    },
+  });
   return NextResponse.json(serializeBigInt(viewing), { status: 201 });
 }

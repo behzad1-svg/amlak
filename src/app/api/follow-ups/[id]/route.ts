@@ -19,7 +19,7 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
   const { id } = await params;
   const existing = await prisma.followUp.findUnique({ where: { id }, include: { customer: true } });
   if (!existing) return NextResponse.json({ error: "یافت نشد" }, { status: 404 });
-  if (existing.customer.deletedAt || !canAccessCustomer(session.user, existing.customer as any)) return NextResponse.json({ error: "دسترسی ندارید" }, { status: 403 });
+  if (existing.customer.deletedAt || !canAccessCustomer(session.user, { assignedAgentId: existing.customer.assignedAgentId })) return NextResponse.json({ error: "دسترسی ندارید" }, { status: 403 });
   const body = await req.json();
   const parsed = followUpUpdateSchema.safeParse(body);
   if (!parsed.success) return NextResponse.json({ error: parsed.error.issues[0].message }, { status: 400 });
@@ -40,10 +40,14 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
 export async function DELETE(_req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
   const session = await getSession();
   if (!session) return NextResponse.json({ error: "وارد نشده‌اید" }, { status: 401 });
+  // حذف پیگیری هم فقط مدیر — مشاور می‌تواند «انجام شد» بزند
+  if (session.user.role !== "OWNER") {
+    return NextResponse.json({ error: "فقط مدیر می‌تواند پیگیری را حذف کند" }, { status: 403 });
+  }
   const { id } = await params;
   const existing = await prisma.followUp.findUnique({ where: { id }, include: { customer: true } });
   if (!existing) return NextResponse.json({ error: "یافت نشد" }, { status: 404 });
-  if (existing.customer.deletedAt || !canAccessCustomer(session.user, existing.customer as any)) return NextResponse.json({ error: "دسترسی ندارید" }, { status: 403 });
+  if (existing.customer.deletedAt || !canAccessCustomer(session.user, { assignedAgentId: existing.customer.assignedAgentId })) return NextResponse.json({ error: "دسترسی ندارید" }, { status: 403 });
   await prisma.followUp.delete({ where: { id } });
   const next = await prisma.followUp.findFirst({ where: { customerId: existing.customerId, done: false }, orderBy: { dueAt: "asc" } });
   await prisma.customer.update({ where: { id: existing.customerId }, data: { nextFollowUpAt: next?.dueAt ?? null } });
