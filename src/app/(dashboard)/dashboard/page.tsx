@@ -6,7 +6,7 @@ import { Card, CardHeader, CardTitle } from "@/components/ui/Card";
 import { Badge } from "@/components/ui/Badge";
 import { formatDate } from "@/lib/utils";
 import { CUSTOMER_STAGE_LABELS } from "@/lib/constants";
-import { AlertTriangle, Clock, Calendar, Users, ArrowUpLeft, Eye } from "lucide-react";
+import { AlertTriangle, Clock, Users, ArrowUpLeft, Eye } from "lucide-react";
 
 type DashboardData = {
   overdueCustomers: { id: string; name: string; phone: string; stage: string; nextFollowUpAt: string }[];
@@ -25,7 +25,6 @@ export default function DashboardPage() {
   const overdue = data.overdueCustomers ?? [];
   const today = data.todayFollowUps ?? [];
   const needsReview = data.needsReview ?? [];
-  const viewings = data.viewings ?? [];
   const teamStats = data.teamStats;
 
   return (
@@ -34,7 +33,7 @@ export default function DashboardPage() {
 
       <div className="p-6 space-y-6 max-w-[1120px]">
         {/* Stats strip — the memorable one element */}
-        <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
+        <div className="grid grid-cols-2 lg:grid-cols-3 gap-3">
           <div className="rounded-[16px] border border-[var(--pomegranate-line)] bg-[var(--pomegranate-soft)] p-4">
             <div className="text-[11px] tracking-widest text-[var(--pomegranate)]">عقب‌افتاده</div>
             <div className="mt-1 flex items-baseline gap-2">
@@ -58,14 +57,6 @@ export default function DashboardPage() {
               <span className="text-[12px] text-[var(--ink-3)]">مورد</span>
             </div>
             <div className="mt-2 text-[12px] leading-5 text-[var(--ink-3)]">برای مدیر</div>
-          </div>
-          <div className="rounded-[16px] border border-[var(--line)] bg-white p-4">
-            <div className="text-[11px] tracking-widest text-[var(--ink-3)]">بازدید امروز</div>
-            <div className="mt-1 flex items-baseline gap-2">
-              <span className="text-[28px] font-extrabold leading-none tracking-tight">{viewings.length}</span>
-              <span className="text-[12px] text-[var(--ink-3)]">بازدید</span>
-            </div>
-            <div className="mt-2 text-[12px] leading-5 text-[var(--ink-3)]">ثبت‌شده</div>
           </div>
         </div>
 
@@ -110,7 +101,7 @@ export default function DashboardPage() {
         )}
 
         <div className="grid gap-4 lg:grid-cols-2">
-          <Card className="p-0 overflow-hidden">
+          <Card className="p-0 overflow-hidden lg:col-span-2">
             <CardHeader className="px-4 pt-4">
               <CardTitle className="flex items-center gap-2"><span className="flex h-7 w-7 items-center justify-center rounded-[10px] bg-[var(--ink)] text-white"><Clock className="h-4 w-4" /></span> پیگیری امروز</CardTitle>
               <span className="rounded-full border border-[var(--line)] bg-[var(--paper-2)] px-2 py-0.5 text-[11px] font-bold">{today.length}</span>
@@ -120,20 +111,6 @@ export default function DashboardPage() {
                 <Link key={c.id} href={`/customers/${c.id}`} className="flex items-center justify-between rounded-[12px] px-3 py-2.5 hover:bg-[var(--paper-2)]">
                   <span className="text-[13.5px] font-medium">{c.name}</span><span className="text-[12px] text-[var(--ink-3)]">{formatDate(c.nextFollowUpAt)}</span>
                 </Link>
-              ))}
-            </div>
-          </Card>
-
-          <Card className="p-0 overflow-hidden">
-            <CardHeader className="px-4 pt-4">
-              <CardTitle className="flex items-center gap-2"><span className="flex h-7 w-7 items-center justify-center rounded-[10px] bg-white border border-[var(--line)]"><Calendar className="h-4 w-4" /></span> بازدیدهای امروز</CardTitle>
-              <Link href="/viewings" className="text-[11px] font-medium text-[var(--ink-3)] hover:text-[var(--ink)]">همه بازدیدها</Link>
-            </CardHeader>
-            <div className="px-2 pb-2">
-              {viewings.length === 0 ? <p className="px-3 py-6 text-center text-[13px] text-[var(--ink-3)]">بازدیدی برای امروز ثبت نشده.</p> : viewings.map((v) => (
-                <div key={v.id} className="flex items-center justify-between rounded-[12px] px-3 py-2.5 text-[13px]">
-                  <span>{v.customer?.name} — {v.property?.title}</span><span className="text-[12px] text-[var(--ink-3)]">{formatDate(v.startAt)}</span>
-                </div>
               ))}
             </div>
           </Card>
@@ -155,20 +132,6 @@ export default function DashboardPage() {
             </div>
           </Card>
         )}
-
-        <Card className="p-0 overflow-hidden">
-          <CardHeader className="px-4 pt-4">
-            <CardTitle className="flex items-center gap-2"><span className="flex h-7 w-7 items-center justify-center rounded-[10px] bg-white border border-[var(--line)]"><Calendar className="h-4 w-4" /></span> بازدیدهای امروز</CardTitle>
-            <Link href="/viewings" className="text-[11px] font-medium text-[var(--ink-3)] hover:text-[var(--ink)]">همه بازدیدها</Link>
-          </CardHeader>
-          <div className="px-2 pb-2">
-            {viewings.length === 0 ? <p className="px-3 py-6 text-center text-[13px] text-[var(--ink-3)]">بازدیدی برای امروز ثبت نشده.</p> : viewings.map((v) => (
-              <div key={v.id} className="flex items-center justify-between rounded-[12px] px-3 py-2.5 text-[13px]">
-                <span>{v.customer?.name} — {v.property?.title}</span><span className="text-[12px] text-[var(--ink-3)]">{formatDate(v.startAt)}</span>
-              </div>
-            ))}
-          </div>
-        </Card>
 
         {teamStats && (
           <Card className="p-0 overflow-hidden">

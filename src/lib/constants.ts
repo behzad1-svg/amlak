@@ -46,11 +46,11 @@ export const DEAL_TYPE_LABELS: Record<string, string> = {
   RENT: "رهن و اجاره",
 };
 
-// مرحله مشتری
+// مرحله مشتری — pipeline فروش فقط ۴ ستون اصلی
 export const CUSTOMER_STAGE_LABELS: Record<string, string> = {
-  NEW: "جدید",
+  NEW: "تماس اولیه",
   INITIAL_CONTACT: "تماس اولیه",
-  QUALIFIED: "ارزیابی‌شده",
+  QUALIFIED: "مذاکره",
   VIEWING: "بازدید",
   CONTRACT: "قرارداد",
   WON: "موفق",
@@ -59,24 +59,18 @@ export const CUSTOMER_STAGE_LABELS: Record<string, string> = {
 };
 
 export const CUSTOMER_STAGE_ORDER = [
-  "NEW",
   "INITIAL_CONTACT",
-  "QUALIFIED",
   "VIEWING",
+  "QUALIFIED",
   "CONTRACT",
-  "WON",
-  "FAILED",
 ] as const;
 
-/** Kanban columns: full pipeline + outcome; LOST is optional via showLost */
+/** کانبان فروش — فقط ۴ ستون */
 export const CUSTOMER_KANBAN_COLUMNS = [
-  "NEW",
   "INITIAL_CONTACT",
-  "QUALIFIED",
   "VIEWING",
+  "QUALIFIED",
   "CONTRACT",
-  "WON",
-  "FAILED",
 ] as const;
 
 export const CUSTOMER_STAGE_COLORS: Record<string, string> = {

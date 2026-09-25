@@ -9,6 +9,7 @@ import { Button } from "@/components/ui/Button";
 import { Input, Select, Label, Textarea } from "@/components/ui/Input";
 import { SearchSelect } from "@/components/ui/SearchSelect";
 import { JalaliDatePicker } from "@/components/ui/JalaliDatePicker";
+import { AppraisalCheck } from "@/components/properties/AppraisalCheck";
 import { formatToman, formatDate } from "@/lib/utils";
 import {
   PROPERTY_TYPE_LABELS,
@@ -47,8 +48,11 @@ type Prop = Record<string, unknown> & {
   hasTerrace?: boolean;
   hasRenovated?: boolean;
   isNewBuild?: boolean;
+  isAppraised?: boolean;
+  appraisedAt?: string | null;
   listedBy?: { id: string; name: string } | null;
   owner?: { id: string; name: string; phone?: string } | null;
+  appraisedBy?: { id: string; name: string } | null;
 };
 
 type Activity = {
@@ -108,6 +112,7 @@ export default function PropertyDetailPage() {
   const [visAgent, setVisAgent] = useState("");
   const [visStatus, setVisStatus] = useState("SCHEDULED");
   const [savingVis, setSavingVis] = useState(false);
+  const [agentsForAppraisal, setAgentsForAppraisal] = useState<{ id: string; name: string }[]>([]);
 
   const flash = (ok: string, bad?: string) => {
     setMsg(ok);
@@ -141,9 +146,44 @@ export default function PropertyDetailPage() {
     setCustomers(custs.map((c: { id: string; name: string; phone?: string }) => ({ id: c.id, name: c.name, phone: c.phone })));
     const us = Array.isArray(usersRes) ? usersRes : [];
     setAgents(us.map((u: { id: string; name: string }) => ({ id: u.id, name: u.name })));
+    setAgentsForAppraisal(us.map((u: { id: string; name: string }) => ({ id: u.id, name: u.name })));
   }, [id]);
 
-  useEffect(() => { load(); }, [load]);
+  useEffect(() => {
+    let alive = true;
+    (async () => {
+      const [propRes, actRes, visRes, custRes, usersRes] = await Promise.all([
+        fetch(`/api/properties/${id}`).then((r) => r.json()),
+        fetch(`/api/activities?propertyId=${id}`).then((r) => r.json()),
+        fetch(`/api/viewings?propertyId=${id}`).then((r) => r.json()),
+        fetch("/api/customers?limit=200").then((r) => r.json()),
+        fetch("/api/users").then((r) => r.json()),
+      ]);
+      if (!alive) return;
+      if (propRes?.id) {
+        setP(propRes);
+        setForm({
+          title: propRes.title ?? "",
+          region: propRes.region ?? "",
+          status: propRes.status ?? "",
+          salePriceToman: propRes.salePriceToman ?? "",
+          depositToman: propRes.depositToman ?? "",
+          monthlyRentToman: propRes.monthlyRentToman ?? "",
+          listedById: propRes.listedBy?.id ?? "",
+        });
+      }
+      setActivities(Array.isArray(actRes) ? actRes : []);
+      setViewings(Array.isArray(visRes) ? visRes : []);
+      const custs = Array.isArray(custRes) ? custRes : custRes?.customers ?? [];
+      setCustomers(custs.map((c: { id: string; name: string; phone?: string }) => ({ id: c.id, name: c.name, phone: c.phone })));
+      const us = Array.isArray(usersRes) ? usersRes : [];
+      setAgents(us.map((u: { id: string; name: string }) => ({ id: u.id, name: u.name })));
+      setAgentsForAppraisal(us.map((u: { id: string; name: string }) => ({ id: u.id, name: u.name })));
+    })();
+    return () => {
+      alive = false;
+    };
+  }, [id, load]);
 
   async function save() {
     setError("");
@@ -263,16 +303,31 @@ export default function PropertyDetailPage() {
             <Badge>{typeLabel}</Badge>
             <Badge>{DEAL_TYPE_LABELS[p.dealType] ?? p.dealType}</Badge>
             <Badge>{PROPERTY_STATUS_LABELS[p.status] ?? p.status}</Badge>
+            {p.isAppraised ? (
+              <Badge className="bg-[var(--sea-soft)] text-[var(--sea)] border-[#C7E5E0]">کارشناسی‌شده</Badge>
+            ) : (
+              <Badge className="bg-amber-50 text-amber-700 border-amber-200">کارشناسی نشده</Badge>
+            )}
           </div>
           <dl className="text-sm">
             <Row label="مشاور فایل" value={p.listedBy?.name ?? "—"} />
             <Row
+              label="کارشناسی"
+              value={
+                p.isAppraised && p.appraisedBy
+                  ? `${p.appraisedBy.name}${p.appraisedAt ? ` · ${formatDate(p.appraisedAt as string)}` : ""}`
+                  : "—"
+              }
+            />
+            <Row
               label="مالک"
               value={
                 p.owner ? (
-                  <span>
-                    {p.owner.name}
-                    {p.owner.phone ? <span dir="ltr" className="mr-2 text-[var(--ink-3)]">{p.owner.phone}</span> : null}
+                  <span className="text-left">
+                    <span>{String(p.owner.name || "").trim() || "—"}</span>
+                    {p.owner.phone ? (
+                      <span dir="ltr" className="block text-[12px] text-[var(--ink-3)]">{p.owner.phone}</span>
+                    ) : null}
                   </span>
                 ) : "—"
               }
@@ -303,6 +358,20 @@ export default function PropertyDetailPage() {
             <Row label="تراس" value={yesNo(p.hasTerrace)} />
             <Row label="بازسازی‌شده" value={yesNo(p.hasRenovated)} />
             <Row label="نوساز" value={yesNo(p.isNewBuild)} />
+            <div className="flex items-center justify-between gap-3 py-2 border-b border-[var(--line)] last:border-0">
+              <dt className="text-[12.5px] text-[var(--ink-3)]">کارشناسی</dt>
+              <dd>
+                <AppraisalCheck
+                  key={`${p.id}-${p.isAppraised ? "on" : "off"}`}
+                  propertyId={p.id}
+                  isAppraised={!!p.isAppraised}
+                  appraisedByName={p.appraisedBy?.name}
+                  appraisedAt={(p.appraisedAt as string) || null}
+                  isOwner={isOwner}
+                  onChanged={load}
+                />
+              </dd>
+            </div>
           </dl>
         </Card>
 

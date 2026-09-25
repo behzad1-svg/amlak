@@ -42,6 +42,7 @@ export async function GET(req: NextRequest) {
   const hasTerrace = searchParams.get("hasTerrace") === "true";
   const hasRenovated = searchParams.get("hasRenovated") === "true";
   const isNewBuild = searchParams.get("isNewBuild") === "true";
+  const appraised = searchParams.get("appraised"); // true | false | ""
 
   const and: Record<string, unknown>[] = [{ deletedAt: null }];
   if (region) and.push({ region });
@@ -108,6 +109,8 @@ export async function GET(req: NextRequest) {
   if (hasTerrace) and.push({ hasTerrace: true });
   if (hasRenovated) and.push({ hasRenovated: true });
   if (isNewBuild) and.push({ isNewBuild: true });
+  if (appraised === "true") and.push({ isAppraised: true });
+  if (appraised === "false") and.push({ isAppraised: false });
 
   // AGENT: only own + TEAM_VISIBLE, plus RESTRICTED with active access
   if (session.user.role !== "OWNER") {
@@ -130,7 +133,7 @@ export async function GET(req: NextRequest) {
   const [properties, total] = await Promise.all([
     prisma.property.findMany({
       where,
-      include: { listedBy: { select: { id: true, name: true } }, owner: { select: { id: true, name: true } } },
+      include: { listedBy: { select: { id: true, name: true } }, owner: { select: { id: true, name: true } }, appraisedBy: { select: { id: true, name: true } } },
       orderBy: { createdAt: "desc" },
       skip: (page - 1) * limit,
       take: limit,
@@ -204,6 +207,9 @@ export async function POST(req: NextRequest) {
       listedById: session.user.id,
       visibility: (d.visibility as never) ?? "TEAM_VISIBLE",
       isAdvertised: d.isAdvertised ?? false,
+      isAppraised: (d as { isAppraised?: boolean }).isAppraised ?? false,
+      appraisedById: (d as { isAppraised?: boolean }).isAppraised ? session.user.id : null,
+      appraisedAt: (d as { isAppraised?: boolean }).isAppraised ? new Date() : null,
       nextOwnerFollowUpAt: d.nextOwnerFollowUpAt ? new Date(d.nextOwnerFollowUpAt) : null,
     },
   });

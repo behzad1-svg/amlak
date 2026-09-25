@@ -1,7 +1,7 @@
 "use client";
 import { useEffect, useState } from "react";
 import { Button } from "@/components/ui/Button";
-import { Input, Label, Textarea } from "@/components/ui/Input";
+import { Label, Textarea } from "@/components/ui/Input";
 import { SearchSelect } from "@/components/ui/SearchSelect";
 import { LOST_REASON_LABELS, PROPERTY_TYPE_LABELS, DEAL_TYPE_LABELS } from "@/lib/constants";
 import { formatToman } from "@/lib/utils";
@@ -22,14 +22,12 @@ export type OutcomeKind = "WON" | "FAILED";
 
 export function StageOutcomeModal({
   kind,
-  customerPhone,
   preferredDealType,
   preferredType,
   onClose,
   onSubmit,
 }: {
   kind: OutcomeKind;
-  customerPhone?: string;
   preferredDealType?: string | null;
   preferredType?: string | null;
   onClose: () => void;

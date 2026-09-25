@@ -84,6 +84,7 @@ export default function NewPropertyPage() {
     sizeSqm: "", landSizeSqm: "", builtYear: "", address: "",
     floor: "", totalFloors: "", unitsPerFloor: "", unitCount: "",
     beds: "", passageWidth: "", buildingFrontage: "", buildingFloors: "",
+    isAppraised: "false",
   });
   const [flags, setFlags] = useState<Flags>(emptyFlags);
   const [error, setError] = useState("");
@@ -134,6 +135,7 @@ export default function NewPropertyPage() {
         hasTerrace: flags.hasTerrace,
         hasRenovated: flags.hasRenovated,
         isNewBuild: flags.isNewBuild,
+        isAppraised: form.isAppraised === "true",
       };
 
       if (form.dealType === "SALE") body.salePriceToman = form.salePriceToman || null;
@@ -324,6 +326,16 @@ export default function NewPropertyPage() {
                 keys={["hasParking", "hasStorage", "hasRenovated"]}
               />
             )}
+            <div className="md:col-span-2 flex items-center gap-2 pt-1 border-t border-[var(--line)] mt-1">
+              <label className="flex items-center gap-2 text-[13px] cursor-pointer">
+                <input
+                  type="checkbox"
+                  checked={form.isAppraised === "true"}
+                  onChange={(e) => upd("isAppraised", e.target.checked ? "true" : "false")}
+                />
+                فایل از قبل کارشناسی شده (مشاور حضوری دیده)
+              </label>
+            </div>
           </div>
         </div>
 

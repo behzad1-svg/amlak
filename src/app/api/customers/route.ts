@@ -107,7 +107,7 @@ export async function POST(req: NextRequest) {
       name: d.name,
       phone: d.phone,
       type: d.type as never,
-      stage: (d.stage as never) ?? "NEW",
+      stage: (d.stage as never) ?? "INITIAL_CONTACT",
       temperature: (d.temperature as never) ?? "WARM",
       source: d.source as never,
       notes: d.notes,

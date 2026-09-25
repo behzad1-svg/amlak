@@ -37,6 +37,9 @@ type Property = {
   hasTerrace?: boolean;
   hasRenovated?: boolean;
   isNewBuild?: boolean;
+  isAppraised?: boolean;
+  appraisedBy?: { id: string; name: string } | null;
+  appraisedAt?: string | null;
   listedBy?: { id: string; name: string } | null;
 };
 
@@ -58,6 +61,7 @@ const emptyFilters = {
   hasTerrace: false,
   hasRenovated: false,
   isNewBuild: false,
+  appraised: "", // "" | true | false
 };
 
 export default function PropertiesPage() {
@@ -89,6 +93,7 @@ export default function PropertiesPage() {
     if (filters.hasTerrace) params.set("hasTerrace", "true");
     if (filters.hasRenovated) params.set("hasRenovated", "true");
     if (filters.isNewBuild) params.set("isNewBuild", "true");
+    if (filters.appraised) params.set("appraised", filters.appraised);
     params.set("limit", "100");
     params.set("page", "1");
 
@@ -193,6 +198,11 @@ export default function PropertiesPage() {
               <option value="RESERVED">رزرو</option>
               <option value="SOLD">فروخته‌شده</option>
               <option value="RENTED">اجاره‌رفته</option>
+            </Select>
+            <Select value={filters.appraised} onChange={(e) => setFilters({ ...filters, appraised: e.target.value })}>
+              <option value="">کارشناسی (همه)</option>
+              <option value="true">کارشناسی‌شده</option>
+              <option value="false">کارشناسی نشده</option>
             </Select>
           </div>
 
@@ -373,11 +383,20 @@ export default function PropertiesPage() {
                     />
                     <div className="p-3.5">
                       <div className="flex items-center justify-between gap-2">
-                        <div className="flex items-center gap-1.5 min-w-0">
+                        <div className="flex items-center gap-1.5 min-w-0 flex-wrap">
                           {p.code && (
                             <span className="text-[12px] font-bold text-[var(--ink-2)]" dir="ltr">{p.code}</span>
                           )}
                           <Badge className="text-[11px]">{PROPERTY_TYPE_LABELS[p.type] ?? p.type}</Badge>
+                          {p.isAppraised ? (
+                            <span className="rounded-md bg-[var(--sea-soft)] border border-[#C7E5E0] px-1.5 py-0.5 text-[10.5px] text-[var(--sea)] font-bold">
+                              کارشناسی ✓
+                            </span>
+                          ) : (
+                            <span className="rounded-md bg-amber-50 border border-amber-200 px-1.5 py-0.5 text-[10.5px] text-amber-700">
+                              بدون کارشناسی
+                            </span>
+                          )}
                         </div>
                         <Badge
                           className={`text-[11px] ${

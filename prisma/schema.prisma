@@ -130,6 +130,7 @@ model User {
 
   customersManaged Customer[]          @relation("CustomerAgent")
   listedProperties Property[]          @relation("PropertyLister")
+  appraisedProperties Property[]       @relation("PropertyAppraiser")
   propertyAccess   PropertyAccess[]
   accessGranted    PropertyAccess[]    @relation("AccessGrantedBy")
   viewings         Viewing[]           @relation("ViewingAgent")
@@ -250,6 +251,12 @@ model Property {
 
   isAdvertised        Boolean   @default(false)
   nextOwnerFollowUpAt DateTime?
+
+  /// آیا مشاور فایل را حضوری کارشناسی کرده؟
+  isAppraised     Boolean    @default(false)
+  appraisedById   String?
+  appraisedBy     User?      @relation("PropertyAppraiser", fields: [appraisedById], references: [id])
+  appraisedAt     DateTime?
 
   ownerId     String
   owner       Customer           @relation("PropertyOwner", fields: [ownerId], references: [id])

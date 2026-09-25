@@ -59,7 +59,7 @@ export default function NewCustomerPage() {
     e.preventDefault();
     setError(""); setLoading(true);
     const dealType = form.preferredDealType;
-    const body: Record<string, unknown> = { name: form.name, phone: form.phone, type: form.type, stage: "NEW" };
+    const body: Record<string, unknown> = { name: form.name, phone: form.phone, type: form.type, stage: "INITIAL_CONTACT" };
     if (dealType) body.preferredDealType = dealType;
     if (form.preferredType) body.preferredType = form.preferredType;
     if (areas.length > 0) body.preferredAreas = areas;

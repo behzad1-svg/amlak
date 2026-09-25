@@ -98,6 +98,8 @@ export const propertyCreateSchema = z.object({
   ownerId: z.string().min(1, "مالک الزامی است"),
   visibility: z.enum(["TEAM_VISIBLE", "RESTRICTED"]).optional(),
   isAdvertised: z.boolean().optional(),
+  isAppraised: z.boolean().optional(),
+  appraisedById: z.string().optional().nullable(),
   nextOwnerFollowUpAt: z.string().optional().nullable(),
 });
 
@@ -153,6 +155,7 @@ export const activityCreateSchema = z.object({
 
 export const taskCreateSchema = z.object({
   title: z.string().min(1, "عنوان الزامی است").max(300),
+  description: z.string().max(2000).optional().nullable(),
   dueAt: z.string().optional().nullable(),
   priority: z.number().int().min(0).max(2).optional(),
   customerId: z.string().optional().nullable(),

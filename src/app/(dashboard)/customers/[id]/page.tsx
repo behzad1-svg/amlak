@@ -293,7 +293,6 @@ export default function CustomerDetailPage() {
       {outcome && (
         <StageOutcomeModal
           kind={outcome}
-          customerPhone={c.phone}
           preferredDealType={(c.preferredDealType as string) || null}
           preferredType={(c.preferredType as string) || null}
           onClose={() => setOutcome(null)}
@@ -309,7 +308,7 @@ export default function CustomerDetailPage() {
               <div><Label>نام و نام خانوادگی</Label><Input value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })} className="mt-1" /></div>
               <div><Label>شماره تماس</Label><PhoneInput value={form.phone} onChange={(e) => setForm({ ...form, phone: e.target.value })} className="mt-1" /></div>
               <div><Label>نوع</Label><Select value={form.type} onChange={(e) => setForm({ ...form, type: e.target.value })} className="mt-1"><option value="BUYER">خریدار</option><option value="SELLER">فروشنده</option><option value="TENANT">مستاجر</option><option value="OWNER">مالک</option></Select></div>
-              <div><Label>مرحله</Label><Select value={form.stage} onChange={(e) => setForm({ ...form, stage: e.target.value })} className="mt-1"><option value="INITIAL_CONTACT">تماس اولیه</option><option value="QUALIFIED">ارزیابی‌شده</option><option value="VIEWING">بازدید</option><option value="CONTRACT">قرارداد</option><option value="WON">موفق</option><option value="FAILED">ناموفق</option><option value="LOST">بایگانی</option></Select></div>
+              <div><Label>مرحله</Label><Select value={form.stage === "NEW" ? "INITIAL_CONTACT" : form.stage} onChange={(e) => setForm({ ...form, stage: e.target.value })} className="mt-1"><option value="INITIAL_CONTACT">تماس اولیه</option><option value="VIEWING">بازدید</option><option value="QUALIFIED">مذاکره</option><option value="CONTRACT">قرارداد</option><option value="WON">موفق</option><option value="FAILED">ناموفق</option><option value="LOST">بایگانی</option></Select></div>
               <div><Label>دما</Label><Select value={form.temperature} onChange={(e) => setForm({ ...form, temperature: e.target.value })} className="mt-1"><option value="HOT">داغ</option><option value="WARM">گرم</option><option value="COLD">سرد</option></Select></div>
               <div><Label>منبع</Label><Select value={form.source} onChange={(e) => setForm({ ...form, source: e.target.value })} className="mt-1"><option value="">—</option><option value="INSTAGRAM">اینستاگرام</option><option value="DIVAR">دیوار</option><option value="DIRECT_CALL">تماس مستقیم</option><option value="REFERRAL">معرفی</option><option value="SIGN_BOARD">تابلو</option><option value="WEBSITE">وب‌سایت</option><option value="OTHER">سایر</option></Select></div>
               <div>
@@ -678,6 +677,8 @@ export default function CustomerDetailPage() {
                 <option value="CALL">تماس</option>
                 <option value="MESSAGE">پیام</option>
                 <option value="MEETING">جلسه</option>
+                <option value="VIEWING_DONE">بازدید</option>
+                <option value="APPRAISAL">کارشناسی</option>
                 <option value="OTHER">سایر</option>
               </Select>
               <Input

@@ -14,7 +14,7 @@ export const metadata: Metadata = {
   description: "سامانه مدیریت بنگاه املاک ساج بوشهر",
 };
 
-export default function RootLayout({ children }: LayoutProps<"/">) {
+export default function RootLayout({ children }: { children: React.ReactNode }) {
   return (
     <html lang="fa" dir="rtl" className={`h-full ${vazir.variable}`}>
       <body className="min-h-full flex flex-col bg-[var(--paper)] text-[var(--ink)] font-[var(--font-vazir)] antialiased">

@@ -26,7 +26,14 @@ export async function GET(_req: NextRequest, { params }: { params: Promise<{ id:
   const session = await getSession();
   if (!session) return NextResponse.json({ error: "وارد نشده‌اید" }, { status: 401 });
   const { id } = await params;
-  const property = await prisma.property.findUnique({ where: { id }, include: { listedBy: { select: { id: true, name: true } }, owner: { select: { id: true, name: true, phone: true } } } });
+  const property = await prisma.property.findUnique({
+    where: { id },
+    include: {
+      listedBy: { select: { id: true, name: true } },
+      owner: { select: { id: true, name: true, phone: true } },
+      appraisedBy: { select: { id: true, name: true } },
+    },
+  });
   if (!property || property.deletedAt) return NextResponse.json({ error: "یافت نشد" }, { status: 404 });
   const allowed = await canViewProperty(session.user, property);
   if (!allowed) return NextResponse.json({ error: "دسترسی ندارید" }, { status: 403 });

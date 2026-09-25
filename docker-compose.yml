@@ -6,8 +6,9 @@ services:
       POSTGRES_USER: ${POSTGRES_USER:-saj_user}
       POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?set POSTGRES_PASSWORD in .env}
       POSTGRES_DB: ${POSTGRES_DB:-saj_crm_db}
-    ports:
-      - "${POSTGRES_PORT:-5432}:5432"
+    # Production: do NOT publish 5432 — app-only network. Dev may map it.
+    # ports:
+    #   - "${POSTGRES_PORT:-5432}:5432"
     volumes:
       - postgres_data:/var/lib/postgresql/data
     healthcheck:
