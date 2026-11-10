@@ -1,0 +1,27 @@
+# Netlify config for the SAJ CRM (Next.js via the OpenNext adapter).
+# The adapter generates .netlify/ artifacts during build; the catch-all
+# rewrite below is required because CLI manual deploys do not apply the
+# adapter manifest's /* route to the server handler on their own.
+# Static files in the publish dir are still served first (no force=true).
+
+[build]
+  command = "npm run build"
+  publish = ".next"
+
+[functions]
+  directory = ".netlify/functions"
+
+[[redirects]]
+  from = "/_next/image"
+  to = "/.netlify/images?url=:url&w=:width&q=:quality"
+  status = 200
+
+[[redirects]]
+  from = "/_ipx/*"
+  to = "/.netlify/images?url=:url&w=:width&q=:quality"
+  status = 200
+
+[[redirects]]
+  from = "/*"
+  to = "/.netlify/functions/___netlify-server-handler/:splat"
+  status = 200
