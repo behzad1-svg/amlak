@@ -1,3 +1,0 @@
-module.exports=[14354,a=>{"use strict";var b=a.i(7997),c=a.i(5246);a.i(70396);var d=a.i(73727),e=a.i(61681);async function f({children:a}){let g=await (0,c.cookies)(),h=g.get("saj_token")?.value,i=await (0,e.validateSession)(h);return i&&"OWNER"===i.user.role||(0,d.redirect)("/dashboard"),(0,b.jsx)(b.Fragment,{children:a})}a.s(["default",0,f])},76033,function(a){a.n(a.i(14354))}];
-
-//# sourceMappingURL=src_app_%28dashboard%29_admin_layout_tsx_1-no-8f._.js.map
