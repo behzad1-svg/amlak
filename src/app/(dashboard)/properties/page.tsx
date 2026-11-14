@@ -8,7 +8,10 @@ import { Card } from "@/components/ui/Card";
 import { Input, Select } from "@/components/ui/Input";
 import { PROPERTY_TYPE_LABELS, DEAL_TYPE_LABELS, PROPERTY_STATUS_LABELS } from "@/lib/constants";
 import { useRole } from "@/hooks/useRole";
-import { formatToman } from "@/lib/utils";
+import { MoneyText } from "@/components/ui/MoneyText";
+import { PageError, PageSkeleton } from "@/components/ui/LoadState";
+import { apiJson, errorMessage } from "@/lib/api";
+import { toFaDigits } from "@/lib/utils";
 
 type Property = {
   id: string;
@@ -73,6 +76,11 @@ const emptyFilters = {
 export default function PropertiesPage() {
   const [list, setList] = useState<Property[]>([]);
   const [total, setTotal] = useState<number | null>(null);
+  const [page, setPage] = useState(1);
+  const [loading, setLoading] = useState(true);
+  const [loadingMore, setLoadingMore] = useState(false);
+  const [loadError, setLoadError] = useState<string | null>(null);
+  const [msg, setMsg] = useState("");
   const [regions, setRegions] = useState<string[]>([]);
   const [types, setTypes] = useState<{ value: string; label: string }[]>([]);
   const [selectedRegions, setSelectedRegions] = useState<string[]>([]);
@@ -82,7 +90,8 @@ export default function PropertiesPage() {
   const [agents, setAgents] = useState<{ id: string; name: string }[]>([]);
   const { isOwner } = useRole();
 
-  const load = useCallback(async () => {
+  // نقد ۱ و ۳ — بارگذاری با کمک‌کنندهٔ مرکزی + صفحه‌بندی صادقانه (۱۰۰ ردیف در هر صفحه)
+  const load = useCallback(async (pageNum = 1, append = false) => {
     const params = new URLSearchParams();
     if (filters.search.trim()) params.set("search", filters.search.trim());
     selectedRegions.forEach((r) => params.append("regions", r));
@@ -109,19 +118,25 @@ export default function PropertiesPage() {
     if (filters.isNewBuild) params.set("isNewBuild", "true");
     if (filters.appraised) params.set("appraised", filters.appraised);
     params.set("limit", "100");
-    params.set("page", "1");
+    params.set("page", String(pageNum));
 
-    const res = await fetch(`/api/properties?${params.toString()}`);
-    const d = await res.json();
-    if (Array.isArray(d)) {
-      setList(d);
-      setTotal(d.length);
-    } else if (d?.properties) {
-      setList(d.properties);
-      setTotal(d.total ?? d.properties.length);
-    } else {
-      setList([]);
-      setTotal(0);
+    if (append) setLoadingMore(true);
+    else {
+      setLoading(true);
+      setLoadError(null);
+    }
+    try {
+      const d = await apiJson<{ properties?: Property[]; total?: number } | Property[]>(`/api/properties?${params.toString()}`);
+      const items = Array.isArray(d) ? d : d.properties ?? [];
+      setList((prev) => (append ? [...prev, ...items] : items));
+      setTotal(Array.isArray(d) ? d.length : d.total ?? items.length);
+      setPage(pageNum);
+    } catch (e) {
+      if (append) setMsg(errorMessage(e));
+      else setLoadError(errorMessage(e));
+    } finally {
+      setLoading(false);
+      setLoadingMore(false);
     }
   }, [filters, selectedRegions]);
 
@@ -129,18 +144,22 @@ export default function PropertiesPage() {
     filters.search || filters.priceMin || filters.priceMax || filters.rentMin || filters.rentMax ||
     filters.sizeMin || filters.sizeMax || filters.landSizeMin || filters.landSizeMax;
   useEffect(() => {
-    const t = setTimeout(load, hasTextFilter ? 280 : 0);
+    const t = setTimeout(() => load(1, false), hasTextFilter ? 280 : 0);
     return () => clearTimeout(t);
   }, [load, hasTextFilter]);
 
   useEffect(() => {
-    fetch("/api/settings").then((r) => r.json()).then((d) => {
-      if (d.regions) setRegions(d.regions);
-      if (d.propertyTypes) setTypes(d.propertyTypes);
-    });
-    fetch("/api/users").then((r) => r.json()).then((d) => {
-      if (Array.isArray(d)) setAgents(d.map((u: { id: string; name: string }) => ({ id: u.id, name: u.name })));
-    }).catch(() => {});
+    apiJson<{ regions?: string[]; propertyTypes?: { value: string; label: string }[] }>("/api/settings")
+      .then((d) => {
+        if (d.regions) setRegions(d.regions);
+        if (d.propertyTypes) setTypes(d.propertyTypes);
+      })
+      .catch(() => {});
+    apiJson<{ id: string; name: string }[]>("/api/users")
+      .then((d) => {
+        if (Array.isArray(d)) setAgents(d.map((u) => ({ id: u.id, name: u.name })));
+      })
+      .catch(() => {});
   }, []);
 
   const isSale = filters.dealType === "SALE";
@@ -195,23 +214,28 @@ export default function PropertiesPage() {
     return items;
   }
 
+  if (loading && list.length === 0) return <PageSkeleton rows={4} />;
+  if (loadError && list.length === 0) return <PageError message={loadError} onRetry={() => load(1, false)} />;
+
   return (
     <div>
       <Header
         title="فایل‌ها"
-        subtitle={total != null ? `${total} فایل` : "جستجوی فایل"}
+        subtitle={total != null ? `نمایش ${toFaDigits(String(list.length))} از ${toFaDigits(String(total))} فایل` : "جستجوی فایل"}
         action={
-          <div className="flex gap-2">
+          <div className="flex flex-wrap gap-2">
             <Button variant="outline" onClick={clearFilters} size="sm">پاک کردن فیلتر</Button>
             <Link href="/properties/new"><Button>＋ فایل جدید</Button></Link>
           </div>
         }
       />
+      {msg && <div className="mx-4 sm:mx-6 mt-3 rounded-lg bg-red-50 px-3 py-2 text-sm text-red-700" role="alert">{msg}</div>}
       <div className="p-4 sm:p-6 space-y-4 max-w-[1200px]">
         <Card className="p-3 sm:p-4">
           <div className="grid gap-2 sm:grid-cols-2 lg:grid-cols-4">
             <Input
               placeholder="کد، عنوان، منطقه یا آدرس..."
+              aria-label="جستجوی کد، عنوان، منطقه یا آدرس"
               value={filters.search}
               onChange={(e) => setFilters({ ...filters, search: e.target.value })}
             />
@@ -225,20 +249,21 @@ export default function PropertiesPage() {
               <option value="RENT">رهن و اجاره</option>
             </Select>
             <Select value={filters.status} onChange={(e) => setFilters({ ...filters, status: e.target.value })}>
-              <option value="">همه وضعیت‌ها</option>
+              <option value="">همه به‌جز بایگانی‌شده</option>
               <option value="ACTIVE">فعال</option>
               <option value="RESERVED">رزرو</option>
               <option value="SOLD">فروخته‌شده</option>
               <option value="RENTED">اجاره‌رفته</option>
+              <option value="ARCHIVED">بایگانی‌شده</option>
             </Select>
           </div>
           <div className="mt-2 flex items-center gap-2">
             <Button variant="outline" size="sm" onClick={() => setShowAdvanced((v) => !v)}>
               {showAdvanced ? "▲" : "▼"} جستجوی پیشرفته
-              {advancedCount > 0 ? ` (${advancedCount})` : ""}
+              {advancedCount > 0 ? ` (${toFaDigits(String(advancedCount))})` : ""}
             </Button>
             {advancedCount > 0 && (
-              <span className="text-[12px] text-[var(--ink-3)]">{advancedCount} فیلتر فعال است</span>
+              <span className="text-[12px] text-[var(--ink-3)]">{toFaDigits(String(advancedCount))} فیلتر فعال است</span>
             )}
           </div>
           {showAdvanced && (
@@ -521,20 +546,22 @@ export default function PropertiesPage() {
                       )}
 
                       <div className="mt-3 flex items-end justify-between gap-2">
-                        <div>
-                          <div className="text-[14px] font-extrabold tracking-tight">
-                            {p.dealType === "SALE"
-                              ? formatToman(p.salePriceToman)
-                              : formatToman(p.depositToman)}
+                        <div className="min-w-0">
+                          <div className="text-[14px] font-extrabold tracking-tight break-words">
+                            {p.dealType === "SALE" ? (
+                              <MoneyText value={p.salePriceToman} />
+                            ) : (
+                              <MoneyText value={p.depositToman} />
+                            )}
                           </div>
-                          <div className="text-[11px] text-[var(--ink-3)]">
+                          <div className="text-[11px] text-[var(--ink-3)] break-words">
                             {p.dealType === "SALE" ? "فروش" : "رهن"}
-                            {p.dealType === "RENT" && p.monthlyRentToman
-                              ? ` · اجاره ${formatToman(p.monthlyRentToman)}`
-                              : ""}
+                            {p.dealType === "RENT" && p.monthlyRentToman ? (
+                              <> · اجاره <MoneyText value={p.monthlyRentToman} /></>
+                            ) : ""}
                           </div>
                         </div>
-                        <span className="rounded-full border border-[var(--line)] bg-white px-2 py-0.5 text-[10.5px] text-[var(--ink-3)]">
+                        <span className="shrink-0 whitespace-nowrap rounded-full border border-[var(--line)] bg-white px-2 py-0.5 text-[10.5px] text-[var(--ink-3)]">
                           {PROPERTY_STATUS_LABELS[p.status] ?? p.status}
                         </span>
                       </div>
@@ -546,6 +573,13 @@ export default function PropertiesPage() {
                 </Link>
               );
             })}
+          </div>
+        )}
+        {total != null && list.length < total && (
+          <div className="text-center">
+            <Button variant="outline" onClick={() => load(page + 1, true)} disabled={loadingMore}>
+              {loadingMore ? "در حال بارگذاری..." : `بارگذاری بیشتر (نمایش ${toFaDigits(String(list.length))} از ${toFaDigits(String(total))})`}
+            </Button>
           </div>
         )}
       </div>

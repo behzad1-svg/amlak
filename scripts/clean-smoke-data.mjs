@@ -1,8 +1,6 @@
 import { PrismaClient } from "@prisma/client";
 const p = new PrismaClient();
 
-const junkName = /^(Smoke|Owner)\b/i;
-
 try {
   // Soft-delete smoke properties
   const props = await p.property.findMany({

@@ -10,6 +10,7 @@ import { DEFAULT_BUSHEHR_REGIONS } from "@/lib/constants";
  * - non-production: requires OWNER session + SEED_ENABLED=true
  * - never creates users with a non-bcrypt hash
  * - wipe is opt-in via body/query `wipe=true` (customers only), never implicit full wipe of users
+ * - نقد ۱۳: هندلر GET حذف شد تا seed با یک لینک ساده قابل اجرا نباشد؛ فقط POST
  */
 
 async function getSession() {
@@ -24,10 +25,6 @@ function seedEnabled(): boolean {
 
 function isProduction(): boolean {
   return process.env.NODE_ENV === "production";
-}
-
-export async function GET(req: NextRequest) {
-  return handleSeed(req);
 }
 
 export async function POST(req: NextRequest) {

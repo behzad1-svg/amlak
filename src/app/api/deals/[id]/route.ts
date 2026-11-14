@@ -55,6 +55,31 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
     return NextResponse.json({ error: parsed.error.issues[0].message }, { status: 400 });
   }
   const d = parsed.data;
+
+  // کمیسیون را فقط مدیر تعیین می‌کند
+  const wantsCommission =
+    Boolean(d.commissionToman) || (d.commissionPercent !== undefined && d.commissionPercent !== null);
+  if (session.user.role !== "OWNER" && wantsCommission) {
+    return NextResponse.json({ error: "کمیسیون را فقط مدیر تعیین می‌کند" }, { status: 403 });
+  }
+
+  // معامله تکمیل‌شده برای مشاور قفل است — فقط لغو مجاز است، نه تغییر مبلغ/کمیسیون/تاریخ
+  if (existing.status === "COMPLETED" && session.user.role !== "OWNER") {
+    const onlyCancel =
+      d.status === "CANCELED" &&
+      d.contractAt === undefined &&
+      d.notes === undefined &&
+      d.dealSalePriceToman === undefined &&
+      d.dealDepositToman === undefined &&
+      d.dealMonthlyRentToman === undefined;
+    if (!onlyCancel) {
+      return NextResponse.json(
+        { error: "معامله تکمیل‌شده فقط توسط مدیر قابل ویرایش است؛ مشاور فقط می‌تواند آن را لغو کند" },
+        { status: 403 }
+      );
+    }
+  }
+
   const nextStatus = d.status ?? existing.status;
 
   // گارد ماشین وضعیت: انتقال غیرمجاز رد می‌شود (۴۰۹)
@@ -87,9 +112,11 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
   const data: Record<string, unknown> = {};
   if (d.contractAt !== undefined) data.contractAt = d.contractAt ? new Date(d.contractAt) : null;
   if (d.notes !== undefined) data.notes = d.notes;
-  if (d.commissionToman !== undefined)
-    data.commissionToman = d.commissionToman ? BigInt(d.commissionToman) : null;
-  if (d.commissionPercent !== undefined) data.commissionPercent = d.commissionPercent;
+  if (session.user.role === "OWNER") {
+    if (d.commissionToman !== undefined)
+      data.commissionToman = d.commissionToman ? BigInt(d.commissionToman) : null;
+    if (d.commissionPercent !== undefined) data.commissionPercent = d.commissionPercent;
+  }
   if (d.dealSalePriceToman !== undefined)
     data.dealSalePriceToman = d.dealSalePriceToman ? BigInt(d.dealSalePriceToman) : null;
   if (d.dealDepositToman !== undefined)
@@ -112,10 +139,11 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
     if (nextStatus === "COMPLETED" && existing.status !== "COMPLETED") {
       const newStatus = prop.dealType === "SALE" ? "SOLD" : "RENTED";
       await tx.property.update({ where: { id: prop.id }, data: { status: newStatus as never } });
-      if (cust.stage !== "CONTRACT" && cust.stage !== "WON" && cust.stage !== "LOST") {
+      // تکمیل معامله یعنی مشتری «موفق» شد — فقط مسیر معامله مرحله را WON می‌کند
+      if (cust.stage !== "WON" && cust.stage !== "LOST") {
         await tx.customer.update({
           where: { id: cust.id },
-          data: { stage: "CONTRACT" as never, nextFollowUpAt: null },
+          data: { stage: "WON" as never, nextFollowUpAt: null },
         });
       }
     }

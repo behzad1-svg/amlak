@@ -36,7 +36,7 @@ export function Sidebar({ role, unreadCount, onClose }: { role?: string; unreadC
       <div className="px-3 pt-3">
         <div className="rounded-[12px] border border-[var(--line)] bg-[var(--paper-2)] px-3 py-2.5">
           <div className="text-[11px] font-medium tracking-widest text-[var(--ink-3)]">سامانه مدیریت</div>
-          <div className="mt-1 text-[12px] leading-5 text-[var(--ink-2)]">پیگیری اجباری · تطبیق هوشمند</div>
+          <div className="mt-1 text-[12px] leading-5 text-[var(--ink-2)]">پیگیری منظم · تطبیق هوشمند</div>
         </div>
       </div>
 

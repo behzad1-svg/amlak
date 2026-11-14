@@ -6,7 +6,7 @@ export default function TasksPage() {
   return (
     <div>
       <Header title="وظایف" subtitle="این بخش فعلاً از منو حذف شده" />
-      <div className="p-6 max-w-md">
+      <div className="p-4 sm:p-6 max-w-md">
         <div className="rounded-[16px] border border-dashed border-[var(--line-2)] bg-white px-6 py-10 text-center">
           <div className="text-[14px] font-bold">بخش وظایف موقتاً غیرفعال است</div>
           <div className="mt-2 text-[13px] leading-6 text-[var(--ink-3)]">

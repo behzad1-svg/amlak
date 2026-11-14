@@ -12,6 +12,8 @@ const vazir = Vazirmatn({
 export const metadata: Metadata = {
   title: "املاک ساج — سامانه مدیریت",
   description: "سامانه مدیریت بنگاه املاک ساج بوشهر",
+  // سامانهٔ داخلی و خصوصی — هیچ صفحه‌ای در موتور جستجو ایندکس نشود (نقد ۱۳)
+  robots: { index: false, follow: false },
 };
 
 export default function RootLayout({ children }: { children: React.ReactNode }) {

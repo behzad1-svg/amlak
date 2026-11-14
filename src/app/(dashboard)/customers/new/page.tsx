@@ -4,9 +4,19 @@ import { useRouter } from "next/navigation";
 import { Header } from "@/components/layout/Header";
 import { PhoneInput, Select, Label, Textarea } from "@/components/ui/Input";
 import { Button } from "@/components/ui/Button";
-import { JalaliDatePicker } from "@/components/ui/JalaliDatePicker";
+import dynamic from "next/dynamic";
 import { Input } from "@/components/ui/Input";
 import { MoneyInput } from "@/components/ui/MoneyInput";
+import { useRole } from "@/hooks/useRole";
+import { apiFetch, apiJson, errorMessage } from "@/lib/api";
+import Link from "next/link";
+import { CUSTOMER_SOURCE_LABELS, CUSTOMER_SOURCE_OPTIONS } from "@/lib/constants";
+
+// نقد ۹ — انتخابگر تاریخ تنبل بارگذاری می‌شود
+const JalaliDatePicker = dynamic(
+  () => import("@/components/ui/JalaliDatePicker").then((m) => m.JalaliDatePicker),
+  { ssr: false, loading: () => <div className="h-10 rounded-[12px] border border-[var(--line)] bg-[var(--paper-2)] animate-pulse" /> }
+);
 
 function MultiRegionChips({ regions, value, onChange }: { regions: string[]; value: string[]; onChange: (v: string[]) => void }) {
   return (
@@ -32,34 +42,57 @@ export default function NewCustomerPage() {
   const [regions, setRegions] = useState<string[]>([]);
   const [propertyTypes, setPropertyTypes] = useState<{ value: string; label: string }[]>([]);
   const [agents, setAgents] = useState<{ id: string; name: string; role?: string }[]>([]);
-  const [role, setRole] = useState<string>("");
-  const [form, setForm] = useState<Record<string, string>>({ name: "", phone: "", type: "BUYER", preferredDealType: "", preferredType: "", budgetMax: "", budgetMaxMonthly: "", nextFollowUpAt: "", description: "", preferredSizeMin: "", preferredSizeMax: "", assignedAgentId: "" });
+  const { role } = useRole();
+  const [form, setForm] = useState<Record<string, string>>({ name: "", phone: "", type: "BUYER", source: "", preferredDealType: "", preferredType: "", budgetMax: "", budgetMaxMonthly: "", nextFollowUpAt: "", description: "", preferredSizeMin: "", preferredSizeMax: "", assignedAgentId: "" });
+  const [dup, setDup] = useState<{ id: string; name: string } | null>(null);
   const [areas, setAreas] = useState<string[]>([]);
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(false);
   const upd = (k: string, v: string) => setForm((f) => ({ ...f, [k]: v }));
 
   useEffect(() => {
-    fetch("/api/settings").then((r) => r.json()).then((d) => {
-      if (d.regions) setRegions(d.regions);
-      if (d.propertyTypes) setPropertyTypes(d.propertyTypes);
-    });
-    fetch("/api/auth/me").then((r) => r.json()).then((d) => {
-      const r = d?.user?.role ?? "";
-      setRole(r);
-      if (r === "OWNER") {
-        fetch("/api/users").then((res) => res.json()).then((users) => {
-          if (Array.isArray(users)) setAgents(users);
-        });
-      }
-    });
+    apiJson<{ regions?: string[]; propertyTypes?: { value: string; label: string }[] }>("/api/settings")
+      .then((d) => {
+        if (d.regions) setRegions(d.regions);
+        if (d.propertyTypes) setPropertyTypes(d.propertyTypes);
+      })
+      .catch(() => {});
   }, []);
+  // هشدار شماره تکراری — با ۳۰۰ میلی‌ثانیه تأخیر، فقط وقتی شماره کامل است
+  useEffect(() => {
+    const phone = form.phone.trim();
+    if (!/^[0-9]{10,15}$/.test(phone)) return;
+    let cancelled = false;
+    const t = setTimeout(() => {
+      apiJson<{ customers?: { id: string; name: string; phone: string }[] }>(`/api/customers?search=${encodeURIComponent(phone)}&limit=100`)
+        .then((d) => {
+          if (cancelled) return;
+          const list = Array.isArray(d) ? d : (d.customers ?? []);
+          const hit = list.find((x) => x.phone === phone);
+          setDup(hit ? { id: hit.id, name: hit.name } : null);
+        })
+        .catch(() => {});
+    }, 300);
+    return () => { cancelled = true; clearTimeout(t); };
+  }, [form.phone]);
+
+  useEffect(() => {
+    if (role !== "OWNER") return;
+    apiJson<{ id: string; name: string; role?: string }[]>("/api/users")
+      .then((users) => {
+        if (Array.isArray(users)) setAgents(users);
+      })
+      .catch(() => {});
+  }, [role]);
 
   async function submit(e: React.FormEvent) {
     e.preventDefault();
-    setError(""); setLoading(true);
+    setError("");
+    if (!form.source) { setError("شیوه آشنایی را انتخاب کنید"); return; }
+    if (dup && !confirm(`این شماره قبلاً برای «${dup.name}» ثبت شده است. باز هم مشتری جدید بسازم؟`)) return;
+    setLoading(true);
     const dealType = form.preferredDealType;
-    const body: Record<string, unknown> = { name: form.name, phone: form.phone, type: form.type, stage: "INITIAL_CONTACT" };
+    const body: Record<string, unknown> = { name: form.name, phone: form.phone, type: form.type, stage: "INITIAL_CONTACT", source: form.source };
     if (dealType) body.preferredDealType = dealType;
     if (form.preferredType) body.preferredType = form.preferredType;
     if (areas.length > 0) body.preferredAreas = areas;
@@ -77,9 +110,13 @@ export default function NewCustomerPage() {
     if (form.description) body.description = form.description;
     if (form.nextFollowUpAt) body.nextFollowUpAt = form.nextFollowUpAt;
     if (role === "OWNER" && form.assignedAgentId) body.assignedAgentId = form.assignedAgentId;
-    const res = await fetch("/api/customers", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) });
-    const data = await res.json();
-    if (!res.ok) { setError(data.error ?? "خطا"); setLoading(false); return; }
+    try {
+      await apiFetch("/api/customers", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) });
+    } catch (e) {
+      setError(errorMessage(e));
+      setLoading(false);
+      return;
+    }
     router.push("/customers");
   }
 
@@ -91,11 +128,24 @@ export default function NewCustomerPage() {
       <form onSubmit={submit} className="p-6 max-w-2xl space-y-4">
         {error && <div className="rounded-lg bg-red-50 px-3 py-2 text-sm text-red-700">{error}</div>}
         <div className="grid gap-4 md:grid-cols-2">
-          <div><Label>نام و نام خانوادگی *</Label><Input value={form.name} onChange={(e) => upd("name", e.target.value)} required placeholder="مثلا رضا کریمی" className="mt-1" /></div>
-          <div><Label>شماره تماس *</Label><PhoneInput value={form.phone} onChange={(e) => upd("phone", e.target.value)} required placeholder="09171234567" className="mt-1" /></div>
+          <div><Label htmlFor="f-name">نام و نام خانوادگی *</Label><Input id="f-name" value={form.name} onChange={(e) => upd("name", e.target.value)} required placeholder="مثلا رضا کریمی" className="mt-1" /></div>
+          <div><Label htmlFor="f-phone">شماره تماس *</Label><PhoneInput id="f-phone" value={form.phone} onChange={(e) => { upd("phone", e.target.value); setDup(null); }} required placeholder="09171234567" className="mt-1" /></div>
+          {dup && (
+            <div className="md:col-span-2 rounded-[12px] border border-amber-300 bg-amber-50 px-3 py-2.5 text-[13px] text-amber-800">
+              ⚠️ این شماره قبلاً برای «{dup.name}» ثبت شده است — همین مشتری است؟{" "}
+              <Link href={`/customers/${dup.id}`} className="font-bold underline">مشاهده پروفایل</Link>
+            </div>
+          )}
           <div>
-            <Label>نوع</Label>
-            <Select
+            <Label htmlFor="f-source">شیوه آشنایی *</Label>
+            <Select id="f-source" value={form.source} onChange={(e) => upd("source", e.target.value)} className="mt-1" required>
+              <option value="">انتخاب کنید</option>
+              {CUSTOMER_SOURCE_OPTIONS.map((s) => <option key={s} value={s}>{CUSTOMER_SOURCE_LABELS[s] ?? s}</option>)}
+            </Select>
+          </div>
+          <div>
+            <Label htmlFor="f-type">نوع</Label>
+            <Select id="f-type"
               value={form.type}
               onChange={(e) => {
                 const t = e.target.value;
@@ -114,8 +164,8 @@ export default function NewCustomerPage() {
           </div>
           {role === "OWNER" && agents.length > 0 && (
             <div>
-              <Label>مشاور مسئول</Label>
-              <Select value={form.assignedAgentId} onChange={(e) => upd("assignedAgentId", e.target.value)} className="mt-1">
+              <Label htmlFor="f-assignedAgentId">مشاور مسئول</Label>
+              <Select id="f-assignedAgentId" value={form.assignedAgentId} onChange={(e) => upd("assignedAgentId", e.target.value)} className="mt-1">
                 <option value="">خودم (مدیر)</option>
                 {agents.map((a) => (
                   <option key={a.id} value={a.id}>{a.name}{a.role === "OWNER" ? " (مدیر)" : ""}</option>
@@ -124,8 +174,8 @@ export default function NewCustomerPage() {
             </div>
           )}
           <div>
-            <Label>نوع معامله *</Label>
-            <Select
+            <Label htmlFor="f-preferredDealType">نوع معامله *</Label>
+            <Select id="f-preferredDealType"
               value={form.preferredDealType}
               onChange={(e) => {
                 const v = e.target.value;
@@ -143,9 +193,9 @@ export default function NewCustomerPage() {
               <option value="RENT">رهن و اجاره</option>
             </Select>
           </div>
-          <div><Label>نوع ملک</Label><Select value={form.preferredType} onChange={(e) => upd("preferredType", e.target.value)} className="mt-1"><option value="">—</option>{propertyTypes.map((t) => <option key={t.value} value={t.value}>{t.label}</option>)}</Select></div>
-          <div><Label>متراژ از</Label><Input inputMode="numeric" dir="ltr" value={form.preferredSizeMin} onChange={(e) => upd("preferredSizeMin", e.target.value.replace(/[^0-9]/g, ""))} placeholder="مثلا 80" className="mt-1" /></div>
-          <div><Label>متراژ تا</Label><Input inputMode="numeric" dir="ltr" value={form.preferredSizeMax} onChange={(e) => upd("preferredSizeMax", e.target.value.replace(/[^0-9]/g, ""))} placeholder="مثلا 120" className="mt-1" /></div>
+          <div><Label htmlFor="f-preferredType">نوع ملک</Label><Select id="f-preferredType" value={form.preferredType} onChange={(e) => upd("preferredType", e.target.value)} className="mt-1"><option value="">—</option>{propertyTypes.map((t) => <option key={t.value} value={t.value}>{t.label}</option>)}</Select></div>
+          <div><Label htmlFor="f-preferredSizeMin">متراژ از</Label><Input id="f-preferredSizeMin" inputMode="numeric" dir="ltr" value={form.preferredSizeMin} onChange={(e) => upd("preferredSizeMin", e.target.value.replace(/[^0-9]/g, ""))} placeholder="مثلا 80" className="mt-1" /></div>
+          <div><Label htmlFor="f-preferredSizeMax">متراژ تا</Label><Input id="f-preferredSizeMax" inputMode="numeric" dir="ltr" value={form.preferredSizeMax} onChange={(e) => upd("preferredSizeMax", e.target.value.replace(/[^0-9]/g, ""))} placeholder="مثلا 120" className="mt-1" /></div>
 
           {/* بودجه — جدا بر اساس نوع معامله */}
           {dealType === "SALE" && (
@@ -191,8 +241,8 @@ export default function NewCustomerPage() {
             <Label>مناطق موردنظر (چندتایی)</Label>
             <div className="mt-1"><MultiRegionChips regions={regions} value={areas} onChange={setAreas} /></div>
           </div>
-          <div className="md:col-span-2"><Label>توضیحات</Label><Textarea value={form.description} onChange={(e) => upd("description", e.target.value)} placeholder="توضیحات کلی درباره مشتری..." rows={3} className="mt-1" /></div>
-          <div><Label>پیگیری بعدی (شمسی)</Label><div className="mt-1"><JalaliDatePicker value={form.nextFollowUpAt || null} onChange={(v) => upd("nextFollowUpAt", v ?? "")} placeholder="انتخاب تاریخ" /></div></div>
+          <div className="md:col-span-2"><Label htmlFor="f-description">توضیحات</Label><Textarea id="f-description" value={form.description} onChange={(e) => upd("description", e.target.value)} placeholder="توضیحات کلی درباره مشتری..." rows={3} className="mt-1" /></div>
+          <div><Label htmlFor="f-nextFollowUpAt">پیگیری بعدی (شمسی)</Label><div className="mt-1"><JalaliDatePicker id="f-nextFollowUpAt" value={form.nextFollowUpAt || null} onChange={(v) => upd("nextFollowUpAt", v ?? "")} placeholder="انتخاب تاریخ" /></div></div>
         </div>
         <Button type="submit" disabled={loading}>{loading ? "در حال ثبت..." : "ثبت مشتری"}</Button>
       </form>

@@ -4,9 +4,10 @@ import { prisma } from "@/lib/prisma";
 import { validateSession } from "@/lib/auth";
 import { propertyCreateSchema, findInvalidQueryParam } from "@/lib/validation";
 import { serializeBigInt } from "@/lib/utils";
-import { maskPropertyForTeam } from "@/lib/access";
+import { maskPropertyForTeam, syncPropertyAccess } from "@/lib/access";
 import { runMatchingForProperty } from "@/lib/matching";
 import { createAuditLog } from "@/lib/audit";
+import { hasPermission } from "@/lib/permissions";
 import { nextPropertyCode } from "@/lib/propertyCode";
 
 async function getSession() {
@@ -76,6 +77,7 @@ export async function GET(req: NextRequest) {
   if (type) and.push({ type });
   if (dealType) and.push({ dealType });
   if (status) and.push({ status });
+  else and.push({ status: { not: "ARCHIVED" } }); // بایگانی‌شده‌ها در فهرست پیش‌فرض دیده نمی‌شوند
 
   if (search) {
     and.push({
@@ -146,12 +148,15 @@ export async function GET(req: NextRequest) {
   if (appraised === "false") and.push({ isAppraised: false });
 
   // AGENT: only own + TEAM_VISIBLE, plus RESTRICTED with active access
+  // (شناسه فایل‌های دارای دسترسی صریح — برای ماسک‌نکردن در پایین هم لازم است)
+  let grantedPropertyIds: string[] = [];
   if (session.user.role !== "OWNER") {
     const accessibleIds = await prisma.propertyAccess.findMany({
       where: { userId: session.user.id, revokedAt: null, OR: [{ expiresAt: null }, { expiresAt: { gt: new Date() } }] },
       select: { propertyId: true },
     });
     const ids = accessibleIds.map((a) => a.propertyId);
+    grantedPropertyIds = ids;
     and.push({
       OR: [
         { listedById: session.user.id },
@@ -180,11 +185,13 @@ export async function GET(req: NextRequest) {
     prisma.property.count({ where }),
   ]);
 
-  // برای مشاور غیرمالک: فایل TEAM_VISIBLE دیگران بدون آدرس/مالک (حریم خصوصی)
+  // برای مشاور غیرمالک: فایل TEAM_VISIBLE دیگران بدون آدرس/مالک (حریم خصوصی) —
+  // مگر مشاوری که در فرم ثبت/ویرایش تیک خورده (دسترسی صریح دارد)
   let result: unknown = properties;
   if (session.user.role !== "OWNER") {
+    const grantedIds = new Set(grantedPropertyIds);
     result = properties.map((p) => {
-      if (p.listedById !== session.user.id && p.visibility === "TEAM_VISIBLE") {
+      if (p.listedById !== session.user.id && p.visibility === "TEAM_VISIBLE" && !grantedIds.has(p.id)) {
         return maskPropertyForTeam(p as unknown as Record<string, unknown>);
       }
       return p;
@@ -201,6 +208,9 @@ export async function GET(req: NextRequest) {
 export async function POST(req: NextRequest) {
   const session = await getSession();
   if (!session) return NextResponse.json({ error: "وارد نشده‌اید" }, { status: 401 });
+  if (!hasPermission(session.user, "canCreateProperty")) {
+    return NextResponse.json({ error: "اجازه ثبت فایل ندارید" }, { status: 403 });
+  }
   const body = await req.json();
   const parsed = propertyCreateSchema.safeParse(body);
   if (!parsed.success) return NextResponse.json({ error: parsed.error.issues[0].message }, { status: 400 });
@@ -209,6 +219,17 @@ export async function POST(req: NextRequest) {
   // Validation: sale vs rent pricing
   if (d.dealType === "SALE" && !d.salePriceToman) return NextResponse.json({ error: "قیمت فروش الزامی است" }, { status: 400 });
   if (d.dealType === "RENT" && (!d.depositToman || !d.monthlyRentToman)) return NextResponse.json({ error: "رهن و اجاره الزامی است" }, { status: 400 });
+
+  // مالک باید وجود داشته باشد؛ مشاور فقط می‌تواند فایل را به مشتری خودش وصل کند
+  // (بدون این چک، ownerId نامعتبر → خطای ۵۰۰ دیتابیس، و مالکِ مشتریِ مشاور دیگر → نشت شماره مالک)
+  const owner = await prisma.customer.findUnique({ where: { id: d.ownerId } });
+  if (!owner || owner.deletedAt) return NextResponse.json({ error: "مالک یافت نشد" }, { status: 400 });
+  if (session.user.role !== "OWNER" && owner.assignedAgentId !== session.user.id) {
+    return NextResponse.json({ error: "به این مشتری دسترسی ندارید" }, { status: 403 });
+  }
+
+  // وضعیت فروخته/اجاره‌داده‌شده فقط از مسیر معامله می‌آید — مشاور نمی‌تواند مستقیم SOLD/RENTED بسازد
+  const status = session.user.role === "OWNER" ? ((d.status as never) ?? "ACTIVE") : "ACTIVE";
 
   // کد فایل همیشه خودکار — ورودی دستی پذیرفته نمی‌شود
   const code = await nextPropertyCode();
@@ -222,7 +243,7 @@ export async function POST(req: NextRequest) {
       salePriceToman: d.salePriceToman ? BigInt(d.salePriceToman) : null,
       depositToman: d.depositToman ? BigInt(d.depositToman) : null,
       monthlyRentToman: d.monthlyRentToman ? BigInt(d.monthlyRentToman) : null,
-      status: (d.status as never) ?? "ACTIVE",
+      status,
       sizeSqm: d.sizeSqm,
       beds: d.beds,
       builtYear: d.builtYear,
@@ -247,9 +268,10 @@ export async function POST(req: NextRequest) {
       listedById: session.user.id,
       visibility: (d.visibility as never) ?? "TEAM_VISIBLE",
       isAdvertised: d.isAdvertised ?? false,
-      isAppraised: (d as { isAppraised?: boolean }).isAppraised ?? false,
-      appraisedById: (d as { isAppraised?: boolean }).isAppraised ? session.user.id : null,
-      appraisedAt: (d as { isAppraised?: boolean }).isAppraised ? new Date() : null,
+      // کارشناسی فقط از مسیر /api/appraise ثبت می‌شود — ورودی مستقیم نادیده گرفته می‌شود
+      isAppraised: false,
+      appraisedById: null,
+      appraisedAt: null,
       nextOwnerFollowUpAt: d.nextOwnerFollowUpAt ? new Date(d.nextOwnerFollowUpAt) : null,
     },
   });
@@ -257,7 +279,17 @@ export async function POST(req: NextRequest) {
   await createAuditLog({ actorId: session.user.id, action: "PROPERTY_CREATED", entityType: "Property", entityId: property.id, newValue: { code: property.code, title: d.title } as never });
   await prisma.activity.create({ data: { type: "NOTE", agentId: session.user.id, propertyId: property.id, description: `فایل جدید ${property.code}: ${d.title}` } });
 
-  try { await runMatchingForProperty(property.id, session.user.id); } catch {}
+  // مشاورهای تیک‌خورده در فرم ثبت: دسترسی کامل به فایل
+  if (d.accessUserIds !== undefined) {
+    const { grantedIds } = await syncPropertyAccess(prisma as never, property.id, d.title, d.accessUserIds, session.user.id);
+    for (const accessId of grantedIds) {
+      await createAuditLog({ actorId: session.user.id, action: "ACCESS_GRANTED", entityType: "PropertyAccess", entityId: accessId });
+    }
+  }
+
+  try { await runMatchingForProperty(property.id, session.user.id); } catch (e) {
+    console.error("[matching] runMatchingForProperty failed for", property.id, e instanceof Error ? e.message : e);
+  }
 
   return NextResponse.json(serializeBigInt(property), { status: 201 });
 }

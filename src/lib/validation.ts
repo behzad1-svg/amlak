@@ -24,7 +24,12 @@ export const loginSchema = z.object({
 });
 
 const phoneSchema = z.string().regex(/^[0-9]{10,15}$/, "شماره تماس فقط عدد و ۱۰ تا ۱۵ رقم");
-const passwordSchema = z.string().min(8, "رمز عبور باید حداقل ۸ کاراکتر باشد").max(100);
+const passwordSchema = z
+  .string()
+  .min(12, "رمز عبور باید حداقل ۱۲ کاراکتر باشد")
+  .max(100)
+  .regex(/[A-Za-z]/, "رمز عبور باید حداقل یک حرف لاتین داشته باشد")
+  .regex(/[0-9]/, "رمز عبور باید حداقل یک رقم داشته باشد");
 
 export const userCreateSchema = z.object({
   name: z.string().min(1, "نام الزامی است").max(120),
@@ -38,6 +43,7 @@ export const userUpdateSchema = z.object({
   phone: phoneSchema.optional(),
   role: z.enum(["OWNER", "AGENT"]).optional(),
   active: z.boolean().optional(),
+  permissions: z.record(z.string(), z.boolean()).optional(),
   password: passwordSchema.optional(),
 });
 
@@ -52,7 +58,8 @@ export const customerCreateSchema = z.object({
   type: z.enum(["BUYER", "SELLER", "TENANT", "OWNER"]),
   stage: z.enum(["NEW", "INITIAL_CONTACT", "QUALIFIED", "VIEWING", "CONTRACT", "WON", "FAILED", "LOST"]).optional(),
   temperature: z.enum(["HOT", "WARM", "COLD"]).optional(),
-  source: z.enum(["INSTAGRAM", "DIVAR", "DIRECT_CALL", "REFERRAL", "SIGN_BOARD", "WEBSITE", "OTHER"]).optional().nullable(),
+  source: z.enum(["INSTAGRAM", "DIVAR", "DIRECT_CALL", "REFERRAL", "SIGN_BOARD", "WEBSITE", "IN_PERSON", "ADVERTISEMENT", "OTHER"]).optional().nullable(),
+  tags: z.array(z.string().min(1).max(30)).max(10).optional(),
   notes: z.string().max(2000).optional().nullable(),
   description: z.string().max(3000).optional().nullable(),
   preferredType: z.string().max(30).optional().nullable(),
@@ -93,7 +100,7 @@ export const propertyCreateSchema = z.object({
   salePriceToman: z.string().regex(/^[0-9]*$/, "فقط عدد").optional().nullable(),
   depositToman: z.string().regex(/^[0-9]*$/, "فقط عدد").optional().nullable(),
   monthlyRentToman: z.string().regex(/^[0-9]*$/, "فقط عدد").optional().nullable(),
-  status: z.enum(["ACTIVE", "RESERVED", "SOLD", "RENTED"]).optional(),
+  status: z.enum(["ACTIVE", "RESERVED", "SOLD", "RENTED", "ARCHIVED"]).optional(),
   sizeSqm: z.number().min(0).optional().nullable(),
   beds: z.number().int().min(0).max(20).optional().nullable(),
   builtYear: z.number().int().min(1300).max(1500).optional().nullable(),
@@ -116,6 +123,8 @@ export const propertyCreateSchema = z.object({
   description: z.string().max(2000).optional().nullable(),
   ownerId: z.string().min(1, "مالک الزامی است"),
   visibility: z.enum(["TEAM_VISIBLE", "RESTRICTED"]).optional(),
+  /// مشاورهایی که به اطلاعات کامل فایل دسترسی دارند (تیک در فرم ثبت/ویرایش)
+  accessUserIds: z.array(z.string()).optional(),
   isAdvertised: z.boolean().optional(),
   isAppraised: z.boolean().optional(),
   appraisedById: z.string().optional().nullable(),

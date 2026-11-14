@@ -1,25 +1,35 @@
 "use client";
-import { useEffect, useState } from "react";
+import { useContext, useEffect, useState } from "react";
+import { RoleContext } from "@/components/layout/DashboardShell";
 
-/** نقش کاربر واردشده — برای نمایش/پنهان‌کردن دکمه‌های مدیریتی */
+/** نقش کاربر واردشده — برای نمایش/پنهان‌کردن دکمه‌های مدیریتی.
+ *  نقش را اول از کانتکست می‌خواند (layout سرور آن را از پروکسی گرفته است)؛
+ *  فقط وقتی بیرون از DashboardShell استفاده شود، به /api/auth/me برمی‌گردد.
+ *  این کار هم رفت‌وبرگشت اضافه را حذف می‌کند و هم پرش نقش (role flash) را. */
 export function useRole(): { role: string | null; isOwner: boolean; loading: boolean } {
-  const [role, setRole] = useState<string | null>(null);
-  const [loading, setLoading] = useState(true);
+  const ctxRole = useContext(RoleContext);
+  const [fetchedRole, setFetchedRole] = useState<string | null>(null);
+  const [fetchedLoading, setFetchedLoading] = useState(true);
+
   useEffect(() => {
+    if (ctxRole != null) return; // نقش از کانتکست می‌آید؛ فراخوانی لازم نیست
     let alive = true;
     fetch("/api/auth/me")
       .then((r) => r.json())
       .then((d) => {
         if (!alive) return;
-        setRole(d?.user?.role ?? null);
-        setLoading(false);
+        setFetchedRole(d?.user?.role ?? null);
+        setFetchedLoading(false);
       })
       .catch(() => {
-        if (alive) setLoading(false);
+        if (alive) setFetchedLoading(false);
       });
     return () => {
       alive = false;
     };
-  }, []);
+  }, [ctxRole]);
+
+  const role = ctxRole ?? fetchedRole;
+  const loading = ctxRole == null && fetchedLoading;
   return { role, isOwner: role === "OWNER", loading };
 }

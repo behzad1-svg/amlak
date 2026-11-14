@@ -185,8 +185,17 @@ function scorePair(cust: CustLike, prop: PropLike): { score: number; reasons: st
 }
 
 export async function findMatchesForCustomer(customerId: string): Promise<MatchResult[]> {
-  const customer = await prisma.customer.findUnique({ where: { id: customerId } });
-  if (!customer || (customer as { deletedAt?: Date | null }).deletedAt) return [];
+  // نقد ۷ — فقط فیلدهای لازم برای امتیازدهی خوانده می‌شود
+  const customer = await prisma.customer.findUnique({
+    where: { id: customerId },
+    select: {
+      id: true, deletedAt: true, preferredDealType: true, preferredType: true,
+      preferredArea: true, preferredAreas: true, preferredBeds: true,
+      preferredSizeMin: true, preferredSizeMax: true,
+      budgetMin: true, budgetMax: true, budgetMaxMonthly: true,
+    },
+  });
+  if (!customer || customer.deletedAt) return [];
 
   const where: Record<string, unknown> = {
     deletedAt: null,
@@ -199,7 +208,13 @@ export async function findMatchesForCustomer(customerId: string): Promise<MatchR
   const areas = effectiveAreas(cust);
   if (areas.length > 0) where.region = { in: areas };
 
-  const properties = await prisma.property.findMany({ where });
+  const properties = await prisma.property.findMany({
+    where,
+    select: {
+      id: true, listedById: true, title: true, dealType: true, type: true, region: true,
+      salePriceToman: true, depositToman: true, monthlyRentToman: true, sizeSqm: true, beds: true,
+    },
+  });
 
   const results: MatchResult[] = [];
   for (const prop of properties) {
@@ -214,12 +229,24 @@ export async function findMatchesForCustomer(customerId: string): Promise<MatchR
 }
 
 export async function findMatchesForProperty(propertyId: string): Promise<MatchResult[]> {
-  const property = await prisma.property.findUnique({ where: { id: propertyId } });
-  if (!property || (property as { deletedAt?: Date | null }).deletedAt) return [];
+  const property = await prisma.property.findUnique({
+    where: { id: propertyId },
+    select: {
+      id: true, deletedAt: true, dealType: true, type: true, region: true,
+      salePriceToman: true, depositToman: true, monthlyRentToman: true, sizeSqm: true, beds: true,
+    },
+  });
+  if (!property || property.deletedAt) return [];
 
   const prop = property as unknown as PropLike;
   const customers = await prisma.customer.findMany({
     where: { deletedAt: null, stage: { notIn: ["LOST", "FAILED", "WON"] } },
+    select: {
+      id: true, assignedAgentId: true, name: true, preferredDealType: true, preferredType: true,
+      preferredArea: true, preferredAreas: true, preferredBeds: true,
+      preferredSizeMin: true, preferredSizeMax: true,
+      budgetMin: true, budgetMax: true, budgetMaxMonthly: true,
+    },
   });
 
   const results: MatchResult[] = [];
@@ -234,89 +261,122 @@ export async function findMatchesForProperty(propertyId: string): Promise<MatchR
   return results.sort((a, b) => b.score - a.score);
 }
 
-async function alreadyNotified(userId: string, relatedId: string): Promise<boolean> {
-  const since = new Date(Date.now() - 24 * 60 * 60 * 1000);
-  const exact = await prisma.notification.findFirst({
-    where: { userId, relatedId, type: "MATCH_SUGGESTION", createdAt: { gte: since } },
-  });
-  return !!exact;
-}
-
 export async function createMatchNotifications(
   matches: MatchResult[],
   sourceType: "customer" | "property",
   sourceId: string,
   sourceAgentId: string
 ) {
+  if (matches.length === 0) return;
+  const since = new Date(Date.now() - 24 * 60 * 60 * 1000);
+  // نام موجودیت تازه‌ساخته‌شده (منبع تطبیق) یک بار خوانده می‌شود تا متن
+  // هر دو اعلان، نام مشتری و عنوان فایل را با هم داشته باشد.
+  let sourceName: string | null = null;
+  if (sourceType === "customer") {
+    const src = await prisma.customer.findUnique({ where: { id: sourceId }, select: { name: true } });
+    sourceName = src?.name ?? null;
+  } else {
+    const src = await prisma.property.findUnique({ where: { id: sourceId }, select: { title: true } });
+    sourceName = src?.title ?? null;
+  }
+
+  // نقد ۷ — ردیف‌های اعلان اول در حافظه ساخته می‌شوند، بعد با یک کوئری
+  // بررسی می‌شود کدام‌ها در ۲۴ ساعت گذشته ساخته شده‌اند، و بقیه با یک
+  // createMany نوشته می‌شوند. قبلاً برای هر تطبیق دو findFirst و تا دو
+  // create جداگانه اجرا می‌شد (N+1).
+  type Row = { userId: string; type: string; relatedId: string; relatedType: string; priority: string; message: string };
+  const rows: Row[] = [];
   for (const match of matches) {
     const targetId = match.id;
     let targetAgentId: string | null = null;
+    let custName: string | null = null;
+    let propTitle: string | null = null;
 
     if (sourceType === "customer") {
+      custName = sourceName;
       const prop = match.property as { listedById: string; title: string } | undefined;
-      if (prop) targetAgentId = prop.listedById;
+      if (prop) {
+        targetAgentId = prop.listedById;
+        propTitle = prop.title;
+      }
     } else {
+      propTitle = sourceName;
       const cust = match.customer as { assignedAgentId: string; name: string } | undefined;
-      if (cust) targetAgentId = cust.assignedAgentId;
+      if (cust) {
+        targetAgentId = cust.assignedAgentId;
+        custName = cust.name;
+      }
     }
 
     if (!targetAgentId) continue;
 
-    const dedupKey = `${sourceType}:${sourceId}→${targetId}`;
-    const alreadyForTarget =
-      targetAgentId !== sourceAgentId
-        ? await alreadyNotified(targetAgentId, sourceType === "customer" ? targetId : sourceId)
-        : false;
-    const alreadyForSource = await alreadyNotified(sourceAgentId, targetId);
-    if (alreadyForTarget && alreadyForSource) continue;
-
     const score = match.score;
-    const reasons = match.reasons.join(" — ");
+    const reasons = match.reasons.join("، ");
     const priority = score >= 90 ? "HIGH" : score >= 80 ? "NORMAL" : "LOW";
-    const sourceLabel = sourceType === "customer" ? "مشتری" : "فایل";
+    const custLabel = custName ? `مشتری ${custName}` : "مشتری";
+    const propLabel = propTitle ? `فایل «${propTitle}»` : "فایل";
+    const pair = `${custLabel} با ${propLabel} ${score}% تطبیق دارد — ${reasons}`;
+    // ردیف مالکِ طرفِ مقابل به موجودیت تازه (منبع) اشاره می‌کند تا لینک،
+    // مشتری/فایل جدید را باز کند، نه موجودیتِ خودِ او؛ ردیف سازندهٔ اعلان
+    // به موجودیت تطبیق‌یافته اشاره می‌کند.
+    const sourceRelatedType = sourceType === "customer" ? "Customer" : "Property";
+    const matchRelatedType = sourceType === "customer" ? "Property" : "Customer";
 
-    if (targetAgentId !== sourceAgentId && !alreadyForTarget) {
-      await prisma.notification.create({
-        data: {
-          userId: targetAgentId,
-          type: "MATCH_SUGGESTION",
-          priority: priority as never,
-          relatedType: sourceType === "customer" ? "Property" : "Customer",
-          relatedId: sourceType === "customer" ? targetId : sourceId,
-          message: `${score}% — ${reasons} — یه ${sourceLabel} جدید با فایل/مشتری شما تطبیق دارد، برای هماهنگی تماس بگیرید. [${dedupKey}]`,
-        },
+    if (targetAgentId !== sourceAgentId) {
+      rows.push({
+        userId: targetAgentId,
+        type: "MATCH_SUGGESTION",
+        priority,
+        relatedType: sourceRelatedType,
+        relatedId: sourceId,
+        message: `${pair} — برای هماهنگی تماس بگیرید.`,
       });
     }
 
-    if (!alreadyForSource) {
-      await prisma.notification.create({
-        data: {
-          userId: sourceAgentId,
-          type: "MATCH_SUGGESTION",
-          priority: priority as never,
-          relatedType: sourceType === "customer" ? "Property" : "Customer",
-          relatedId: targetId,
-          message: `${score}% — ${reasons} — تطبیق یافت. [${dedupKey}]`,
-        },
-      });
-    }
+    rows.push({
+      userId: sourceAgentId,
+      type: "MATCH_SUGGESTION",
+      priority,
+      relatedType: matchRelatedType,
+      relatedId: targetId,
+      message: `${pair} — تطبیق یافت.`,
+    });
   }
+  if (rows.length === 0) return;
+
+  const userIds = [...new Set(rows.map((r) => r.userId))];
+  const relatedIds = [...new Set(rows.map((r) => r.relatedId))];
+  const existing = await prisma.notification.findMany({
+    where: { userId: { in: userIds }, relatedId: { in: relatedIds }, type: "MATCH_SUGGESTION", createdAt: { gte: since } },
+    select: { userId: true, relatedId: true },
+  });
+  const seen = new Set(existing.map((n) => `${n.userId}:${n.relatedId}`));
+  const fresh = rows.filter((r) => !seen.has(`${r.userId}:${r.relatedId}`));
+  // اگر یک جفت (کاربر، فایل/مشتری) چند بار در همین دسته آمده باشد، فقط یک اعلان
+  const deduped = [...new Map(fresh.map((r) => [`${r.userId}:${r.relatedId}`, r] as [string, Row])).values()];
+  if (deduped.length === 0) return;
+  await prisma.notification.createMany({
+    data: deduped.map((r) => ({
+      userId: r.userId,
+      type: "MATCH_SUGGESTION" as never,
+      priority: r.priority as never,
+      relatedType: r.relatedType,
+      relatedId: r.relatedId,
+      message: r.message,
+    })),
+  });
 }
 
 export async function runMatchingForCustomer(customerId: string, agentId: string) {
-  // صف async هنوز پیاده‌سازی نشده — همیشه همگام اجرا می‌شود تا تطبیق از دست نرود
-  if (process.env.MATCHING_ASYNC === "true") {
-    console.warn("MATCHING_ASYNC=true but no queue is implemented; running sync matching instead");
-  }
+  // نقد ۷ — تطبیق همگام در مسیر درخواست اجرا می‌شود (بعد از دسته‌ای‌شدن
+  // اعلان‌ها و select حداقلی، سریع است). پرچم جعلی MATCHING_ASYNC حذف شد؛
+  // صف واقعی (جدول + scheduled function) قدم بعدی است، نه این تغییر.
   const matches = await findMatchesForCustomer(customerId);
   await createMatchNotifications(matches, "customer", customerId, agentId);
   return matches;
 }
 
 export async function runMatchingForProperty(propertyId: string, agentId: string) {
-  if (process.env.MATCHING_ASYNC === "true") {
-    console.warn("MATCHING_ASYNC=true but no queue is implemented; running sync matching instead");
-  }
   const matches = await findMatchesForProperty(propertyId);
   await createMatchNotifications(matches, "property", propertyId, agentId);
   return matches;

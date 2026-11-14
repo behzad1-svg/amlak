@@ -2,7 +2,8 @@
 // استک: PostgreSQL + Prisma، یک اپ Next.js واحد
 
 generator client {
-  provider = "prisma-client-js"
+  provider      = "prisma-client-js"
+  binaryTargets = ["native", "rhel-openssl-3.0.x"]
 }
 
 datasource db {
@@ -50,6 +51,7 @@ enum PropertyStatus {
   RESERVED
   SOLD
   RENTED
+  ARCHIVED
 }
 
 enum PropertyVisibility {
@@ -95,6 +97,8 @@ enum CustomerSource {
   REFERRAL
   SIGN_BOARD
   WEBSITE
+  IN_PERSON
+  ADVERTISEMENT
   OTHER
 }
 
@@ -124,6 +128,7 @@ model User {
   passwordHash String
   role         UserRole @default(AGENT)
   active       Boolean  @default(true)
+  permissions  Json     @default("{}")
   tokenVersion Int      @default(1)
   createdAt    DateTime @default(now())
   updatedAt    DateTime @updatedAt
@@ -139,7 +144,6 @@ model User {
   notifications    Notification[]
   activities       Activity[]
   auditLogs        AuditLog[]
-  passwordResetTokens PasswordResetToken[]
 }
 
 model Customer {
@@ -150,6 +154,7 @@ model Customer {
   stage           CustomerPipelineStage @default(NEW)
   temperature     CustomerTemperature  @default(WARM)
   source          CustomerSource?
+  tags            String[] @default([])
   notes           String?
 
   preferredType     String?
@@ -320,18 +325,6 @@ model AuditLog {
   @@index([entityType, entityId, createdAt])
 }
 
-model PasswordResetToken {
-  id        String    @id @default(cuid())
-  userId    String
-  user      User      @relation(fields: [userId], references: [id])
-  tokenHash String    @unique
-  expiresAt DateTime
-  usedAt    DateTime?
-  createdAt DateTime  @default(now())
-
-  @@index([userId])
-}
-
 model Viewing {
   id         String        @id @default(cuid())
   customerId String
@@ -453,4 +446,31 @@ model Activity {
   @@index([agentId, createdAt])
   @@index([customerId, createdAt])
   @@index([propertyId, createdAt])
+}
+
+
+/// ثبت خطاهای سمت سرور برای مشاهده توسط مدیر (نقد ۶ — مشاهده‌پذیری).
+/// اگر جدول در دیتابیس نباشد، logApiError به console.error برمی‌گردد و خطا نمی‌دهد.
+model ApiErrorLog {
+  id        String   @id @default(cuid())
+  route     String
+  method    String
+  status    Int
+  message   String
+  userId    String?
+  createdAt DateTime @default(now())
+
+  @@index([createdAt])
+  @@index([route, createdAt])
+}
+
+/// شمارندهٔ محدودیت نرخ ورود (نقد ۱۳) — جایگزین دیتابیسیِ محدودیت درون‌حافظه‌ای.
+/// اگر جدول نباشد، rateLimitDb به حافظه برمی‌گردد.
+model RateLimitHit {
+  key         String   @id
+  windowStart DateTime
+  count       Int      @default(1)
+  updatedAt   DateTime @updatedAt
+
+  @@index([windowStart])
 }

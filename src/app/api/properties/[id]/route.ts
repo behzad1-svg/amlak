@@ -4,9 +4,10 @@ import { prisma } from "@/lib/prisma";
 import { validateSession } from "@/lib/auth";
 import { propertyUpdateSchema } from "@/lib/validation";
 import { serializeBigInt } from "@/lib/utils";
-import { hasRestrictedAccess, maskPropertyForTeam } from "@/lib/access";
+import { hasRestrictedAccess, maskPropertyForTeam, syncPropertyAccess } from "@/lib/access";
 import { runMatchingForProperty } from "@/lib/matching";
 import { createAuditLog } from "@/lib/audit";
+import { hasPermission } from "@/lib/permissions";
 
 async function getSession() {
   const cookieStore = await cookies();
@@ -32,16 +33,38 @@ export async function GET(_req: NextRequest, { params }: { params: Promise<{ id:
       listedBy: { select: { id: true, name: true } },
       owner: { select: { id: true, name: true, phone: true } },
       appraisedBy: { select: { id: true, name: true } },
+      accessList: {
+        where: { revokedAt: null, OR: [{ expiresAt: null }, { expiresAt: { gt: new Date() } }] },
+        select: { userId: true, user: { select: { id: true, name: true } } },
+      },
     },
   });
   if (!property || property.deletedAt) return NextResponse.json({ error: "یافت نشد" }, { status: 404 });
   const allowed = await canViewProperty(session.user, property);
   if (!allowed) return NextResponse.json({ error: "دسترسی ندارید" }, { status: 403 });
 
-  // RESTRICTED بدون دسترسی را قبلا canViewProperty رد کرده؛ اینجا فقط TEAM_VISIBLE دیگران را ماسک می‌کنیم
+  // RESTRICTED بدون دسترسی را قبلا canViewProperty رد کرده؛ اینجا فقط TEAM_VISIBLE دیگران را ماسک می‌کنیم —
+  // مگر مشاوری که در فرم ثبت/ویرایش تیک خورده (دسترسی صریح دارد) که اطلاعات کامل را می‌بیند
+  const hasGrant =
+    session.user.role !== "OWNER" && property.listedById !== session.user.id
+      ? await hasRestrictedAccess(prisma as never, property.id, session.user.id)
+      : false;
   let result: unknown = property;
-  if (session.user.role !== "OWNER" && property.listedById !== session.user.id && property.visibility === "TEAM_VISIBLE") {
+  if (
+    session.user.role !== "OWNER" &&
+    property.listedById !== session.user.id &&
+    property.visibility === "TEAM_VISIBLE" &&
+    !hasGrant
+  ) {
     result = maskPropertyForTeam(property as unknown as Record<string, unknown>);
+  }
+
+  // لیست دسترسی کامل فقط برای مدیر و ثبت‌کننده فایل؛
+  // برای مشاور دارای دسترسی (بدون ماسک) هم باید حذف شود، چون در کوئری خوانده شده
+  if (session.user.role === "OWNER" || property.listedById === session.user.id) {
+    (result as Record<string, unknown>).accessList = property.accessList;
+  } else {
+    delete (result as Record<string, unknown>).accessList;
   }
 
   return NextResponse.json(serializeBigInt(result));
@@ -60,6 +83,21 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
   const parsed = propertyUpdateSchema.safeParse(body);
   if (!parsed.success) return NextResponse.json({ error: parsed.error.issues[0].message }, { status: 400 });
   const d = parsed.data;
+
+  // وضعیت فروخته/اجاره‌داده‌شده فقط از مسیر معامله می‌آید — مشاور نمی‌تواند مستقیم SOLD/RENTED بگذارد
+  if (d.status !== undefined && (d.status === "SOLD" || d.status === "RENTED") && session.user.role !== "OWNER") {
+    return NextResponse.json({ error: "تغییر وضعیت به فروخته/اجاره‌داده‌شده فقط با ثبت معامله انجام می‌شود" }, { status: 403 });
+  }
+
+  // بایگانی و بازگردانی از بایگانی فقط با مجوز بایگانی (پیش‌فرض: مشاور دارد، مدیر همیشه)
+  if (
+    d.status !== undefined &&
+    (d.status === "ARCHIVED" || existing.status === "ARCHIVED") &&
+    !hasPermission(session.user, "canArchiveProperty")
+  ) {
+    return NextResponse.json({ error: "اجازه بایگانی یا بازگردانی فایل را ندارید" }, { status: 403 });
+  }
+
   const updateData: Record<string, unknown> = {};
   if (d.title !== undefined) updateData.title = d.title;
   if (d.type !== undefined) updateData.type = d.type;
@@ -89,7 +127,14 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
   if (d.region !== undefined) updateData.region = d.region;
   if (d.address !== undefined) updateData.address = d.address;
   if (d.description !== undefined) updateData.description = d.description;
-  if (d.ownerId !== undefined) updateData.ownerId = d.ownerId;
+  if (d.ownerId !== undefined) {
+    const owner = await prisma.customer.findUnique({ where: { id: d.ownerId } });
+    if (!owner || owner.deletedAt) return NextResponse.json({ error: "مالک یافت نشد" }, { status: 400 });
+    if (session.user.role !== "OWNER" && owner.assignedAgentId !== session.user.id) {
+      return NextResponse.json({ error: "به این مشتری دسترسی ندارید" }, { status: 403 });
+    }
+    updateData.ownerId = d.ownerId;
+  }
   if ((d as { listedById?: string }).listedById !== undefined) {
     if (session.user.role !== "OWNER") {
       return NextResponse.json({ error: "فقط مدیر می‌تواند مشاور فایل را عوض کند" }, { status: 403 });
@@ -107,9 +152,19 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
   const property = await prisma.property.update({ where: { id }, data: updateData });
   await createAuditLog({ actorId: session.user.id, action: "PROPERTY_UPDATED", entityType: "Property", entityId: id });
 
+  // همگام‌سازی لیست تیک‌خورده مشاورها (از فرم ویرایش)
+  if (d.accessUserIds !== undefined) {
+    const { grantedIds } = await syncPropertyAccess(prisma as never, id, property.title, d.accessUserIds, session.user.id);
+    for (const accessId of grantedIds) {
+      await createAuditLog({ actorId: session.user.id, action: "ACCESS_GRANTED", entityType: "PropertyAccess", entityId: accessId });
+    }
+  }
+
   const matchingFields = ["region", "type", "dealType", "salePriceToman", "depositToman", "sizeSqm"];
   if (matchingFields.some((f) => f in d)) {
-    try { await runMatchingForProperty(id, property.listedById); } catch {}
+    try { await runMatchingForProperty(id, property.listedById); } catch (e) {
+      console.error("[matching] runMatchingForProperty failed for", id, e instanceof Error ? e.message : e);
+    }
   }
 
   return NextResponse.json(serializeBigInt(property));
@@ -118,8 +173,8 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
 export async function DELETE(_req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
   const session = await getSession();
   if (!session) return NextResponse.json({ error: "وارد نشده‌اید" }, { status: 401 });
-  // فقط مدیر می‌تواند فایل را حذف کند
-  if (session.user.role !== "OWNER") {
+  // حذف فایل فقط با مجوز حذف (پیش‌فرض فقط مدیر دارد)
+  if (!hasPermission(session.user, "canDeleteProperty")) {
     return NextResponse.json({ error: "فقط مدیر می‌تواند فایل را حذف کند" }, { status: 403 });
   }
   const { id } = await params;

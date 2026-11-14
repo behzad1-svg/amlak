@@ -1,5 +1,5 @@
 import { prisma } from "./prisma";
-import { DEFAULT_BUSHEHR_REGIONS, DEFAULT_PROPERTY_TYPES } from "./constants";
+import { DEFAULT_BUSHEHR_REGIONS, DEFAULT_PROPERTY_TYPES, DEFAULT_CUSTOMER_TAGS } from "./constants";
 
 export async function getRegions(): Promise<string[]> {
   try {
@@ -7,6 +7,14 @@ export async function getRegions(): Promise<string[]> {
     if (row) return JSON.parse(row.value) as string[];
   } catch {}
   return [...DEFAULT_BUSHEHR_REGIONS];
+}
+
+export async function getCustomerTags(): Promise<string[]> {
+  try {
+    const row = await prisma.appSetting.findUnique({ where: { key: "customerTags" } });
+    if (row) return JSON.parse(row.value) as string[];
+  } catch {}
+  return [...DEFAULT_CUSTOMER_TAGS];
 }
 
 export async function getPropertyTypes(): Promise<{ value: string; label: string }[]> {

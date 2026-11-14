@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { cookies } from "next/headers";
 import { prisma } from "@/lib/prisma";
 import { validateSession } from "@/lib/auth";
-import { activityCreateSchema } from "@/lib/validation";
+import { activityCreateSchema, findInvalidQueryParam } from "@/lib/validation";
 import { serializeBigInt } from "@/lib/utils";
 import { canAccessCustomer, hasRestrictedAccess } from "@/lib/access";
 import { createAuditLog } from "@/lib/audit";
@@ -20,6 +20,13 @@ export async function GET(req: NextRequest) {
   const customerId = searchParams.get("customerId");
   const propertyId = searchParams.get("propertyId");
   const agentId = searchParams.get("agentId");
+  const invalidParam = findInvalidQueryParam([
+    { name: "page", value: searchParams.get("page") },
+    { name: "limit", value: searchParams.get("limit") },
+  ]);
+  if (invalidParam) {
+    return NextResponse.json({ error: `مقدار «${invalidParam}» معتبر نیست` }, { status: 400 });
+  }
   const page = Math.max(1, parseInt(searchParams.get("page") ?? "1"));
   const limit = Math.min(100, Math.max(1, parseInt(searchParams.get("limit") ?? "50")));
   const where: Record<string, unknown> = {};

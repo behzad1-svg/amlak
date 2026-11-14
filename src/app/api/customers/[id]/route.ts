@@ -41,7 +41,7 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
     const phoneClash = await prisma.customer.findUnique({ where: { phone: d.phone } });
     if (phoneClash) {
       return NextResponse.json(
-        { error: "مشتری دیگری با این شماره ثبت شده است", existingId: phoneClash.id },
+        { error: "مشتری دیگری با این شماره ثبت شده است" },
         { status: 409 }
       );
     }
@@ -53,6 +53,14 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
   }
   if (d.stage === "LOST" && !d.lostReasonCategory && !existing.lostReasonCategory) {
     return NextResponse.json({ error: "دلیل از دست رفتن الزامی است" }, { status: 400 });
+  }
+
+  // مرحله «موفق» فقط از مسیر معامله می‌آید — تغییر مستقیم به WON مجاز نیست
+  if (d.stage === "WON" && existing.stage !== "WON") {
+    return NextResponse.json(
+      { error: "مرحله «موفق» فقط با ثبت معامله قطعی ثبت می‌شود؛ ابتدا معامله را قطعی کنید" },
+      { status: 409 }
+    );
   }
 
   const wasNeedsReview = existing.needsManagerReview;
@@ -76,6 +84,7 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
   }
   if (d.temperature !== undefined) updateData.temperature = d.temperature;
   if (d.source !== undefined) updateData.source = d.source;
+  if (d.tags !== undefined) updateData.tags = d.tags;
   if (d.notes !== undefined) updateData.notes = d.notes;
   if (d.description !== undefined) updateData.description = d.description;
   if (d.preferredType !== undefined) updateData.preferredType = d.preferredType;
@@ -113,7 +122,9 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
       const existingFU = await prisma.followUp.findFirst({ where: { customerId: id, done: false }, orderBy: { dueAt: "asc" } });
       if (existingFU) await prisma.followUp.update({ where: { id: existingFU.id }, data: { dueAt: new Date(d.nextFollowUpAt as string) } });
       else await prisma.followUp.create({ data: { customerId: id, dueAt: new Date(d.nextFollowUpAt as string) } });
-    } catch {}
+    } catch (e) {
+      console.error("[followup] sync failed for customer", id, e instanceof Error ? e.message : e);
+    }
   }
 
   // Manager review notification
@@ -136,7 +147,9 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
   // Re-run matching if key fields changed
   const matchingFields = ["preferredType", "preferredDealType", "preferredArea", "preferredAreas", "budgetMax", "budgetMin", "preferredSizeMin", "preferredSizeMax"];
   if (matchingFields.some((f) => f in d)) {
-    try { await runMatchingForCustomer(id, customer.assignedAgentId); } catch {}
+    try { await runMatchingForCustomer(id, customer.assignedAgentId); } catch (e) {
+      console.error("[matching] runMatchingForCustomer failed for", id, e instanceof Error ? e.message : e);
+    }
   }
 
   return NextResponse.json(serializeBigInt(customer));

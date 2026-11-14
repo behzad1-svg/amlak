@@ -1,4 +1,5 @@
 "use client";
+import { useId } from "react";
 import { NumberInput } from "./Input";
 import { formatTomanWithWords } from "@/lib/money";
 
@@ -8,18 +9,24 @@ export function MoneyInput({
   onChange,
   placeholder,
   hint,
+  id,
 }: {
   label: string;
   value: string;
   onChange: (v: string) => void;
   placeholder?: string;
   hint?: string;
+  id?: string;
 }) {
+  // نقد ۱۰ — برچسب با htmlFor به ورودی وصل است
+  const autoId = useId();
+  const fieldId = id ?? autoId;
   const { formatted, words } = formatTomanWithWords(value);
   return (
     <div>
-      <label className="text-[12.5px] font-medium text-[var(--ink-2)]">{label}</label>
+      <label htmlFor={fieldId} className="text-[12.5px] font-medium text-[var(--ink-2)]">{label}</label>
       <NumberInput
+        id={fieldId}
         value={value}
         onChange={(e) => onChange(e.target.value)}
         placeholder={placeholder}

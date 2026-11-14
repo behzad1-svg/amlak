@@ -1,8 +1,11 @@
 "use client";
-import { useState, useEffect } from "react";
+import { useState, useEffect, createContext } from "react";
 import { Menu } from "lucide-react";
 import { Sidebar } from "./Sidebar";
 import { SidebarMini } from "./SidebarMini";
+
+/** نقش کاربر — layout سرور آن را می‌دهد تا صفحات نیازی به فراخوانی /api/auth/me نداشته باشند (نقد ۸) */
+export const RoleContext = createContext<string | null>(null);
 
 export function DashboardShell({
   role,
@@ -37,8 +40,20 @@ export function DashboardShell({
 
   const showMini = isDesktop && mode === "mini";
   const showFull = mode === "full"; // eslint-disable-line @typescript-eslint/no-unused-vars -- kept for layout clarity
+  const drawerOpen = mode === "full" && !isDesktop;
+
+  // Escape منوی موبایل را می‌بندد (نقد ۱۰)
+  useEffect(() => {
+    if (!drawerOpen) return;
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === "Escape") setMode("hidden");
+    };
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [drawerOpen]);
 
   return (
+    <RoleContext.Provider value={role ?? null}>
     <div className="flex min-h-screen bg-[var(--paper)]">
       {/* Desktop: inline sidebar — full or mini */}
       <div className="hidden lg:flex lg:shrink-0 lg:flex-col overflow-hidden border-l border-[var(--line)] bg-white transition-all duration-200" style={{ width: isDesktop ? (mode === "mini" ? 64 : mode === "full" ? 272 : 0) : 0 }}>
@@ -48,12 +63,14 @@ export function DashboardShell({
       </div>
 
       {/* Mobile: overlay + drawer */}
-      {mode === "full" && !isDesktop && (
+      {drawerOpen && (
         <div className="fixed inset-0 z-30 bg-[rgba(22,26,36,0.32)] backdrop-blur-[2px] lg:hidden" onClick={() => setMode("hidden")} />
       )}
       <div
+        inert={!drawerOpen}
+        aria-hidden={!drawerOpen}
         className={`fixed inset-y-0 right-0 z-40 flex w-[272px] flex-col bg-white border-l border-[var(--line)] shadow-xl transition-transform duration-200 lg:hidden ${
-          mode === "full" && !isDesktop ? "translate-x-0" : "translate-x-full"
+          drawerOpen ? "translate-x-0" : "translate-x-full"
         }`}
       >
         <Sidebar role={role} unreadCount={unreadCount} onClose={() => setMode("hidden")} />
@@ -76,5 +93,6 @@ export function DashboardShell({
         <div className="flex-1 bg-[var(--paper)]">{children}</div>
       </div>
     </div>
+    </RoleContext.Provider>
   );
 }

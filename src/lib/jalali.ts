@@ -14,7 +14,7 @@ export function toJalali(date: Date | string | null | undefined): { jy: number; 
   return { jy, jm, jd };
 }
 
-export function formatJalali(date: Date | string | null | undefined, withDigits?: boolean): string {
+export function formatJalali(date: Date | string | null | undefined, withDigits = true): string {
   const j = toJalali(date);
   if (!j) return "—";
   const str = `${j.jd} ${MONTH_NAMES[j.jm - 1]} ${j.jy}`;
@@ -25,7 +25,7 @@ export function formatJalaliShort(date: Date | string | null | undefined): strin
   const j = toJalali(date);
   if (!j) return "—";
   const pad = (n: number) => String(n).padStart(2, "0");
-  return `${j.jy}/${pad(j.jm)}/${pad(j.jd)}`;
+  return toPersianDigits(`${j.jy}/${pad(j.jm)}/${pad(j.jd)}`);
 }
 
 export function formatJalaliDateTime(date: Date | string | null | undefined): string {
@@ -34,7 +34,7 @@ export function formatJalaliDateTime(date: Date | string | null | undefined): st
   const j = toJalali(d);
   if (!j) return "—";
   const pad = (n: number) => String(n).padStart(2, "0");
-  return `${j.jy}/${pad(j.jm)}/${pad(j.jd)} ${pad(d.getHours())}:${pad(d.getMinutes())}`;
+  return toPersianDigits(`${j.jy}/${pad(j.jm)}/${pad(j.jd)} ${pad(d.getHours())}:${pad(d.getMinutes())}`);
 }
 
 export function jalaliToGregorian(jy: number, jm: number, jd: number): Date {

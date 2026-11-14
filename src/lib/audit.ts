@@ -5,11 +5,20 @@ const SENSITIVE_FIELDS = ["password", "passwordHash", "tokenHash", "owner", "pho
 
 function sanitizeValue(value: Record<string, unknown> | null): string | null {
   if (!value) return null;
-  const cleaned = { ...value };
-  for (const field of SENSITIVE_FIELDS) {
-    if (field in cleaned) delete cleaned[field];
-  }
-  return JSON.stringify(cleaned, (_key, val) =>
+  // پاک‌سازی عمیق: فیلدهای حساس در هر عمقی از آبجکت حذف می‌شوند، نه فقط سطح اول
+  const deep = (v: unknown): unknown => {
+    if (Array.isArray(v)) return v.map(deep);
+    if (v && typeof v === "object") {
+      const out: Record<string, unknown> = {};
+      for (const [k, val] of Object.entries(v as Record<string, unknown>)) {
+        if (SENSITIVE_FIELDS.includes(k)) continue;
+        out[k] = deep(val);
+      }
+      return out;
+    }
+    return v;
+  };
+  return JSON.stringify(deep(value), (_key, val) =>
     typeof val === "bigint" ? val.toString() : val
   );
 }
@@ -35,7 +44,8 @@ export async function createAuditLog(params: {
         ipAddress: params.ipAddress,
       },
     });
-  } catch {
-    // Audit log failure should not break the main operation
+  } catch (e) {
+    // Audit log failure should not break the main operation — but it must be visible
+    console.error("[audit] createAuditLog failed:", e instanceof Error ? e.message : e);
   }
 }

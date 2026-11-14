@@ -5,6 +5,7 @@ import { dealCreateSchema } from "@/lib/validation";
 import { serializeBigInt } from "@/lib/utils";
 import { canAccessCustomer, hasRestrictedAccess } from "@/lib/access";
 import { createAuditLog } from "@/lib/audit";
+import { hasPermission } from "@/lib/permissions";
 
 async function canAccessPropertyForAction(
   user: { id: string; role: string },
@@ -46,6 +47,9 @@ export async function GET(req: NextRequest) {
 export async function POST(req: NextRequest) {
   const session = await getSessionFromCookies();
   if (!session) return NextResponse.json({ error: "وارد نشده‌اید" }, { status: 401 });
+  if (!hasPermission(session.user, "canCreateDeal")) {
+    return NextResponse.json({ error: "اجازه ثبت معامله ندارید" }, { status: 403 });
+  }
 
   const body = await req.json();
   const parsed = dealCreateSchema.safeParse(body);
@@ -53,6 +57,14 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: parsed.error.issues[0].message }, { status: 400 });
   }
   const d = parsed.data;
+
+  // کمیسیون را فقط مدیر تعیین می‌کند — مشاور نمی‌تواند کمیسیون خودش را بنویسد
+  const wantsCommission =
+    Boolean(d.commissionToman) || (d.commissionPercent !== undefined && d.commissionPercent !== null);
+  if (session.user.role !== "OWNER" && wantsCommission) {
+    return NextResponse.json({ error: "کمیسیون را فقط مدیر تعیین می‌کند" }, { status: 403 });
+  }
+
   const status = d.status ?? "PENDING";
 
   const customer = await prisma.customer.findUnique({ where: { id: d.customerId } });
@@ -100,8 +112,8 @@ export async function POST(req: NextRequest) {
         status: status as never,
         contractAt: d.contractAt ? new Date(d.contractAt) : status === "COMPLETED" ? new Date() : null,
         notes: d.notes,
-        commissionToman: d.commissionToman ? BigInt(d.commissionToman) : null,
-        commissionPercent: d.commissionPercent ?? null,
+        commissionToman: session.user.role === "OWNER" && d.commissionToman ? BigInt(d.commissionToman) : null,
+        commissionPercent: session.user.role === "OWNER" ? (d.commissionPercent ?? null) : null,
         dealSalePriceToman: d.dealSalePriceToman ? BigInt(d.dealSalePriceToman) : (property.salePriceToman ?? null),
         dealDepositToman: d.dealDepositToman ? BigInt(d.dealDepositToman) : (property.depositToman ?? null),
         dealMonthlyRentToman: d.dealMonthlyRentToman
@@ -114,10 +126,11 @@ export async function POST(req: NextRequest) {
       const newStatus = property.dealType === "SALE" ? "SOLD" : "RENTED";
       await tx.property.update({ where: { id: property.id }, data: { status: newStatus as never } });
 
-      if (customer.stage !== "CONTRACT" && customer.stage !== "WON" && customer.stage !== "LOST") {
+      // تکمیل معامله یعنی مشتری «موفق» شد — فقط مسیر معامله مرحله را WON می‌کند
+      if (customer.stage !== "WON" && customer.stage !== "LOST") {
         await tx.customer.update({
           where: { id: customer.id },
-          data: { stage: "CONTRACT" as never, nextFollowUpAt: null },
+          data: { stage: "WON" as never, nextFollowUpAt: null },
         });
       }
     }

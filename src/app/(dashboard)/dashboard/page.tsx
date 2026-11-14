@@ -1,51 +1,47 @@
-"use client";
-import { useEffect, useState } from "react";
+// نقد ۹ — داشبورد حالا Server Component است: داده مستقیم از سرور خوانده می‌شود،
+// بدون fetch سمت کلاینت و بدون «در حال بارگذاری...» که شبیه خالی بودن بود.
+// خطا را error.tsx می‌گیرد و بارگذاری را loading.tsx با اسکلت نشان می‌دهد.
 import Link from "next/link";
+import { redirect } from "next/navigation";
+import { getSessionFromCookies } from "@/lib/auth";
+import { getDashboardData } from "@/lib/dashboard";
 import { Header } from "@/components/layout/Header";
 import { Card, CardHeader, CardTitle } from "@/components/ui/Card";
 import { Badge } from "@/components/ui/Badge";
-import { formatDate } from "@/lib/utils";
+import { formatDate, formatDateTime } from "@/lib/utils";
 import { CUSTOMER_STAGE_LABELS } from "@/lib/constants";
-import { AlertTriangle, Clock, Users, ArrowUpLeft, Eye } from "lucide-react";
+import { AlertTriangle, Clock, Users, ArrowUpLeft, Eye, CalendarCheck, ListChecks } from "lucide-react";
 
-type DashboardData = {
-  overdueCustomers: { id: string; name: string; phone: string; stage: string; nextFollowUpAt: string }[];
-  todayFollowUps: { id: string; name: string; nextFollowUpAt: string }[];
-  needsReview: { id: string; name: string; managerReviewReason: string | null }[];
-  tasks: { id: string; title: string; dueAt: string | null }[];
-  viewings: { id: string; startAt: string; customer: { name: string }; property: { title: string } }[];
-  teamStats: { id: string; name: string; role: string; overdue: number; weeklyActivity: number; monthlyActivity: number; deals: number }[] | null;
-};
+export default async function DashboardPage() {
+  const session = await getSessionFromCookies();
+  if (!session) redirect("/login");
+  const data = await getDashboardData(session.user.id, session.user.role === "OWNER");
 
-export default function DashboardPage() {
-  const [data, setData] = useState<DashboardData | null>(null);
-  useEffect(() => { fetch("/api/dashboard").then((r) => r.json()).then(setData); }, []);
-  if (!data) return <div className="p-8 text-center text-[13px] text-[var(--ink-3)]">در حال بارگذاری...</div>;
-
-  const overdue = data.overdueCustomers ?? [];
-  const today = data.todayFollowUps ?? [];
-  const needsReview = data.needsReview ?? [];
+  const overdue = data.overdueCustomers;
+  const today = data.todayFollowUps;
+  const needsReview = data.needsReview;
   const teamStats = data.teamStats;
+  const viewings = data.viewings;
+  const tasks = data.tasks;
 
   return (
     <div>
       <Header title="داشبورد" subtitle="نگاه امروز — چه چیزی عقب افتاده، چه چیزی در نوبت است" />
 
-      <div className="p-6 space-y-6 max-w-[1120px]">
-        {/* Stats strip — the memorable one element */}
+      <div className="p-4 sm:p-6 space-y-6 max-w-[1120px]">
+        {/* Stats strip — شمارنده‌ها تعداد واقعی‌اند، نه طول لیست بریده‌شده */}
         <div className="grid grid-cols-2 lg:grid-cols-3 gap-3">
           <div className="rounded-[16px] border border-[var(--pomegranate-line)] bg-[var(--pomegranate-soft)] p-4">
             <div className="text-[11px] tracking-widest text-[var(--pomegranate)]">عقب‌افتاده</div>
             <div className="mt-1 flex items-baseline gap-2">
-              <span className="text-[28px] font-extrabold leading-none tracking-tight text-[var(--pomegranate)]">{overdue.length}</span>
+              <span className="text-[28px] font-extrabold leading-none tracking-tight text-[var(--pomegranate)]">{data.overdueTotal}</span>
               <span className="text-[12px] text-[var(--pomegranate)]/70">مورد</span>
             </div>
-            <div className="mt-2 h-1 rounded-full bg-[var(--pomegranate)]/15"><div className="h-1 rounded-full bg-[var(--pomegranate)]" style={{ width: `${Math.min(100, overdue.length * 18)}%` }} /></div>
           </div>
           <div className="rounded-[16px] border border-[var(--line)] bg-white p-4">
             <div className="text-[11px] tracking-widest text-[var(--ink-3)]">پیگیری امروز</div>
             <div className="mt-1 flex items-baseline gap-2">
-              <span className="text-[28px] font-extrabold leading-none tracking-tight">{today.length}</span>
+              <span className="text-[28px] font-extrabold leading-none tracking-tight">{data.todayTotal}</span>
               <span className="text-[12px] text-[var(--ink-3)]">مورد</span>
             </div>
             <div className="mt-2 text-[12px] leading-5 text-[var(--ink-3)]">تا پایان امروز</div>
@@ -53,7 +49,7 @@ export default function DashboardPage() {
           <div className="rounded-[16px] border border-[var(--line)] bg-white p-4">
             <div className="text-[11px] tracking-widest text-[var(--ink-3)]">نیاز به بررسی</div>
             <div className="mt-1 flex items-baseline gap-2">
-              <span className="text-[28px] font-extrabold leading-none tracking-tight">{needsReview.length}</span>
+              <span className="text-[28px] font-extrabold leading-none tracking-tight">{data.needsReviewTotal}</span>
               <span className="text-[12px] text-[var(--ink-3)]">مورد</span>
             </div>
             <div className="mt-2 text-[12px] leading-5 text-[var(--ink-3)]">برای مدیر</div>
@@ -67,7 +63,7 @@ export default function DashboardPage() {
               <div className="flex items-center gap-2">
                 <span className="flex h-7 w-7 items-center justify-center rounded-[10px] bg-[var(--pomegranate)] text-white"><AlertTriangle className="h-4 w-4" /></span>
                 <span className="text-[13px] font-extrabold tracking-tight text-[var(--pomegranate)]">پیگیری عقب‌افتاده</span>
-                <span className="rounded-full bg-white px-2 py-0.5 text-[11px] font-bold text-[var(--pomegranate)] border border-[var(--pomegranate-line)]">{overdue.length}</span>
+                <span className="rounded-full bg-white px-2 py-0.5 text-[11px] font-bold text-[var(--pomegranate)] border border-[var(--pomegranate-line)]">{data.overdueTotal}</span>
               </div>
               <Link href="/customers" className="inline-flex items-center gap-1 text-[12px] font-medium text-[var(--pomegranate)] hover:underline">دیدن همه <ArrowUpLeft className="h-3.5 w-3.5" /></Link>
             </div>
@@ -76,9 +72,9 @@ export default function DashboardPage() {
                 <Link key={c.id} href={`/customers/${c.id}`} className="flex items-center justify-between gap-3 px-4 py-3 hover:bg-[var(--paper-2)] transition-colors">
                   <div className="min-w-0">
                     <div className="flex items-center gap-2">
-                      <span className="h-2 w-2 rounded-full bg-[var(--pomegranate)]" />
-                      <span className="text-[13.5px] font-bold truncate">{c.name}</span>
-                      <span className="text-[12px] text-[var(--ink-3)]" dir="ltr">{c.phone}</span>
+                      <span className="h-2 w-2 shrink-0 rounded-full bg-[var(--pomegranate)]" />
+                      <span className="min-w-0 text-[13.5px] font-bold truncate">{c.name}</span>
+                      <span className="shrink-0 whitespace-nowrap text-[12px] text-[var(--ink-3)]" dir="ltr">{c.phone}</span>
                     </div>
                     <div className="mt-1 flex items-center gap-2 text-[12px] text-[var(--ink-3)]">
                       <Badge className="bg-[var(--pomegranate-soft)] text-[var(--pomegranate)] border-[var(--pomegranate-line)]">{CUSTOMER_STAGE_LABELS[c.stage] ?? c.stage}</Badge>
@@ -89,6 +85,11 @@ export default function DashboardPage() {
                 </Link>
               ))}
             </div>
+            {data.overdueTotal > overdue.length && (
+              <div className="border-t border-[var(--line)] bg-[var(--paper-2)] px-4 py-2.5 text-center text-[12px] text-[var(--ink-3)]">
+                نمایش {overdue.length} از {data.overdueTotal} مورد — برای دیدن بقیه به صفحهٔ مشتریان بروید.
+              </div>
+            )}
           </Card>
         ) : (
           <div className="rounded-[16px] border border-[var(--line)] bg-white px-4 py-4 flex items-center gap-3">
@@ -101,35 +102,77 @@ export default function DashboardPage() {
         )}
 
         <div className="grid gap-4 lg:grid-cols-2">
-          <Card className="p-0 overflow-hidden lg:col-span-2">
+          <Card className="p-0 overflow-hidden">
             <CardHeader className="px-4 pt-4">
               <CardTitle className="flex items-center gap-2"><span className="flex h-7 w-7 items-center justify-center rounded-[10px] bg-[var(--ink)] text-white"><Clock className="h-4 w-4" /></span> پیگیری امروز</CardTitle>
-              <span className="rounded-full border border-[var(--line)] bg-[var(--paper-2)] px-2 py-0.5 text-[11px] font-bold">{today.length}</span>
+              <span className="rounded-full border border-[var(--line)] bg-[var(--paper-2)] px-2 py-0.5 text-[11px] font-bold">{data.todayTotal}</span>
             </CardHeader>
             <div className="px-2 pb-2">
               {today.length === 0 ? <p className="px-3 py-6 text-center text-[13px] text-[var(--ink-3)]">موردی برای امروز نیست.</p> : today.map((c) => (
                 <Link key={c.id} href={`/customers/${c.id}`} className="flex items-center justify-between rounded-[12px] px-3 py-2.5 hover:bg-[var(--paper-2)]">
-                  <span className="text-[13.5px] font-medium">{c.name}</span><span className="text-[12px] text-[var(--ink-3)]">{formatDate(c.nextFollowUpAt)}</span>
+                  <span className="min-w-0 truncate text-[13.5px] font-medium">{c.name}</span><span className="text-[12px] text-[var(--ink-3)]">{formatDate(c.nextFollowUpAt)}</span>
                 </Link>
+              ))}
+              {data.todayTotal > today.length && (
+                <p className="px-3 pb-2 text-center text-[12px] text-[var(--ink-3)]">نمایش {today.length} از {data.todayTotal} مورد</p>
+              )}
+            </div>
+          </Card>
+
+          <Card className="p-0 overflow-hidden">
+            <CardHeader className="px-4 pt-4">
+              <CardTitle className="flex items-center gap-2"><span className="flex h-7 w-7 items-center justify-center rounded-[10px] bg-[var(--sea)] text-white"><CalendarCheck className="h-4 w-4" /></span> بازدیدهای امروز</CardTitle>
+              <span className="rounded-full border border-[var(--line)] bg-[var(--paper-2)] px-2 py-0.5 text-[11px] font-bold">{viewings.length}</span>
+            </CardHeader>
+            <div className="px-2 pb-2">
+              {viewings.length === 0 ? <p className="px-3 py-6 text-center text-[13px] text-[var(--ink-3)]">بازدیدی برای امروز ثبت نشده است.</p> : viewings.map((v) => (
+                <div key={v.id} className="flex items-center justify-between gap-3 rounded-[12px] px-3 py-2.5 hover:bg-[var(--paper-2)]">
+                  <div className="min-w-0">
+                    <div className="truncate text-[13.5px] font-medium">{v.customer.name} — {v.property.title}</div>
+                    <div className="text-[12px] text-[var(--ink-3)]">{formatDateTime(v.startAt)}</div>
+                  </div>
+                </div>
               ))}
             </div>
           </Card>
         </div>
 
+        {tasks.length > 0 && (
+          <Card className="p-0 overflow-hidden">
+            <CardHeader className="px-4 pt-4">
+              <CardTitle className="flex items-center gap-2"><span className="flex h-7 w-7 items-center justify-center rounded-[10px] bg-[var(--ink)] text-white"><ListChecks className="h-4 w-4" /></span> کارهای باز من</CardTitle>
+              <span className="rounded-full border border-[var(--line)] bg-[var(--paper-2)] px-2 py-0.5 text-[11px] font-bold">{tasks.length}</span>
+            </CardHeader>
+            <div className="px-2 pb-2">
+              {tasks.map((t) => (
+                <div key={t.id} className="flex items-center justify-between gap-3 rounded-[12px] px-3 py-2.5 hover:bg-[var(--paper-2)]">
+                  <span className="min-w-0 truncate text-[13.5px] font-medium">{t.title}</span>
+                  <span className="shrink-0 text-[12px] text-[var(--ink-3)]">{t.dueAt ? formatDate(t.dueAt) : "بدون مهلت"}</span>
+                </div>
+              ))}
+            </div>
+          </Card>
+        )}
+
         {needsReview.length > 0 && (
           <Card className="border-[#F1D9A8] bg-[var(--amber-soft)] p-0 overflow-hidden">
             <div className="px-4 py-3 border-b border-[#F1D9A8] flex items-center justify-between">
               <span className="text-[13px] font-extrabold text-[var(--amber)]">نیاز به بررسی مدیر</span>
-              <span className="rounded-full bg-white border border-[#F1D9A8] px-2 py-0.5 text-[11px] font-bold text-[var(--amber)]">{needsReview.length}</span>
+              <span className="rounded-full bg-white border border-[#F1D9A8] px-2 py-0.5 text-[11px] font-bold text-[var(--amber)]">{data.needsReviewTotal}</span>
             </div>
             <div className="divide-y divide-[#F1D9A8]/60">
               {needsReview.map((c) => (
-                <Link key={c.id} href={`/customers/${c.id}`} className="flex items-center justify-between px-4 py-3 hover:bg-white/60">
-                  <span className="text-[13.5px] font-medium">{c.name}</span>
-                  <span className="text-[12px] text-[var(--ink-2)] max-w-[260px] truncate">{c.managerReviewReason ?? "—"}</span>
+                <Link key={c.id} href={`/customers/${c.id}`} className="flex items-center justify-between gap-3 px-4 py-3 hover:bg-white/60">
+                  <span className="min-w-0 truncate text-[13.5px] font-medium">{c.name}</span>
+                  <span className="shrink-0 text-[12px] text-[var(--ink-2)] max-w-[160px] truncate sm:max-w-[260px]">{c.managerReviewReason ?? "—"}</span>
                 </Link>
               ))}
             </div>
+            {data.needsReviewTotal > needsReview.length && (
+              <div className="border-t border-[#F1D9A8] bg-white/60 px-4 py-2.5 text-center text-[12px] text-[var(--ink-3)]">
+                نمایش {needsReview.length} از {data.needsReviewTotal} مورد
+              </div>
+            )}
           </Card>
         )}
 

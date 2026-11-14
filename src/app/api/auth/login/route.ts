@@ -3,10 +3,12 @@ import { prisma } from "@/lib/prisma";
 import { verifyPassword, signToken } from "@/lib/auth";
 import { COOKIE_NAME, authCookieOptions } from "@/lib/jwt";
 import { loginSchema } from "@/lib/validation";
-import { checkRateLimit, recordRateLimitHit } from "@/lib/rateLimit";
+import { checkRateLimitDb, recordRateLimitDb } from "@/lib/rateLimitDb";
 import { serializeBigInt } from "@/lib/utils";
 
-// توجه: در دیپلوی تک‌نمونه، rateLimit حافظه‌ای کافی است؛ برای چند نمونه باید به Redis/DB مشترک سوییچ شود.
+// توجه: محدودیت نرخ ورود با جدول RateLimitHit در دیتابیس ذخیره می‌شود (نقد ۱۳)
+// تا بین نمونه‌های سرورلس هم مشترک باشد؛ اگر جدول نباشد، به محدودیت
+// درون‌حافظه‌ای برمی‌گردد.
 //
 // فقط تلاش‌های ناموفق شمرده می‌شوند: اول سطل‌ها چک می‌شوند (بدون ثبت)،
 // و فقط در صورت شکست احراز هویت یک ضربه ثبت می‌شود — پس لاگین‌های موفق هرگز
@@ -17,8 +19,6 @@ import { serializeBigInt } from "@/lib/utils";
 // در حالت پیش‌فرض، XFF نادیده گرفته می‌شود چون قابل جعل است و در route handler
 // نکست هیچ IP مستقیمی از اتصال در دسترس نیست؛ در این حالت فقط سطل هر شماره
 // تماس اعمال می‌شود.
-const LOGIN_LIMIT = 5;
-const LOGIN_WINDOW_MS = 15 * 60 * 1000;
 
 function clientIp(req: NextRequest): string | null {
   if (process.env.TRUSTED_PROXY !== "true") return null;
@@ -35,15 +35,18 @@ export async function POST(req: NextRequest) {
   const { phone, password } = parsed.data;
 
   const ip = clientIp(req);
-  const ipCheck = ip ? checkRateLimit(`login:ip:${ip}`, LOGIN_LIMIT) : { allowed: true };
-  const phoneCheck = checkRateLimit(`login:phone:${phone}`, LOGIN_LIMIT);
-  if (!ipCheck.allowed || !phoneCheck.allowed) {
+  const [ipAllowed, phoneAllowed] = await Promise.all([
+    ip ? checkRateLimitDb(`login:ip:${ip}`) : Promise.resolve(true),
+    checkRateLimitDb(`login:phone:${phone}`),
+  ]);
+  if (!ipAllowed || !phoneAllowed) {
     return NextResponse.json({ error: "تعداد تلاش بیش از حد مجاز، لطفا بعدا تلاش کنید" }, { status: 429 });
   }
 
   const recordFailure = () => {
-    if (ip) recordRateLimitHit(`login:ip:${ip}`, LOGIN_LIMIT, LOGIN_WINDOW_MS);
-    recordRateLimitHit(`login:phone:${phone}`, LOGIN_LIMIT, LOGIN_WINDOW_MS);
+    // fire-and-forget؛ شکستِ ثبتِ محدودیت نباید جلوی پاسخ 401 را بگیرد
+    if (ip) void recordRateLimitDb(`login:ip:${ip}`);
+    void recordRateLimitDb(`login:phone:${phone}`);
   };
 
   const user = await prisma.user.findUnique({ where: { phone } });

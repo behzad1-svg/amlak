@@ -6,9 +6,22 @@ import { Button } from "@/components/ui/Button";
 import { Input, Textarea, Select, Label, PhoneInput } from "@/components/ui/Input";
 import { Card } from "@/components/ui/Card";
 import { Badge } from "@/components/ui/Badge";
-import { formatDate, formatToman } from "@/lib/utils";
-import { JalaliDatePicker } from "@/components/ui/JalaliDatePicker";
+import dynamic from "next/dynamic";
+import { formatDate } from "@/lib/utils";
+import { MoneyText } from "@/components/ui/MoneyText";
 import { MoneyInput } from "@/components/ui/MoneyInput";
+import { PageError, PageSkeleton } from "@/components/ui/LoadState";
+import { apiFetch, apiJson, errorMessage } from "@/lib/api";
+
+// نقد ۹ — مودال و انتخابگر تاریخ با next/dynamic تنبل بارگذاری می‌شوند
+const JalaliDatePicker = dynamic(
+  () => import("@/components/ui/JalaliDatePicker").then((m) => m.JalaliDatePicker),
+  { ssr: false, loading: () => <div className="h-10 rounded-[12px] border border-[var(--line)] bg-[var(--paper-2)] animate-pulse" /> }
+);
+const StageOutcomeModal = dynamic(
+  () => import("@/components/customers/StageOutcomeModal").then((m) => m.StageOutcomeModal),
+  { ssr: false }
+);
 import {
   CUSTOMER_STAGE_LABELS,
   CUSTOMER_STAGE_COLORS,
@@ -22,13 +35,26 @@ import {
   TEMPERATURE_COLORS,
 } from "@/lib/constants";
 import { Phone, MapPin, Home, Wallet, Ruler, BedDouble, Calendar, User, StickyNote, AlertTriangle, Pencil, Trash2, Plus } from "lucide-react";
-import { StageOutcomeModal, type OutcomeKind } from "@/components/customers/StageOutcomeModal";
+import type { OutcomeKind } from "@/components/customers/StageOutcomeModal";
 import { useRole } from "@/hooks/useRole";
+
+/** تاریخ ISO برای N روز بعد — همان فرمتی که JalaliDatePicker برمی‌گرداند */
+function isoInDays(n: number): string {
+  return new Date(Date.now() + n * 86_400_000).toISOString();
+}
+
+/** ثبت سریع نتیجه تماس: برچسب فعالیت، روزهای تا پیگیری بعدی، مرحله جدید (در صورت نیاز) */
+const QUICK_CALLS = [
+  { key: "answered", label: "جواب داد", days: 1, desc: "تماس: جواب داد", stage: null as string | null },
+  { key: "noanswer", label: "جواب نداد", days: 2, desc: "تماس: جواب نداد", stage: null as string | null },
+  { key: "viewing", label: "قرار بازدید گذاشت", days: 1, desc: "تماس: قرار بازدید گذاشته شد", stage: "VIEWING" as string | null },
+  { key: "callback", label: "گفت خودش زنگ می‌زند", days: 3, desc: "تماس: گفت خودش زنگ می‌زند", stage: null as string | null },
+];
 
 type Customer = Record<string, unknown> & {
   id: string; name: string; phone: string; type: string; stage: string; temperature: string;
   source: string | null; notes: string | null;
-  preferredType: string | null; preferredDealType: string | null; preferredArea: string | null; preferredAreas: string[]; description: string | null;
+  preferredType: string | null; preferredDealType: string | null; preferredArea: string | null; preferredAreas: string[]; description: string | null; tags: string[];
   preferredBeds: number | null; preferredSizeMin: number | null; preferredSizeMax: number | null;
   budgetMin: string | null; budgetMax: string | null;
   nextFollowUpAt: string | null; needsManagerReview: boolean; managerReviewReason: string | null;
@@ -54,6 +80,7 @@ type CustomerForm = {
   preferredDealType: string;
   preferredArea: string;
   preferredAreas: string[];
+  tags: string[];
   preferredBeds: string;
   preferredSizeMin: string;
   preferredSizeMax: string;
@@ -77,11 +104,13 @@ export default function CustomerDetailPage() {
     name: "", phone: "", notes: "", description: "", nextFollowUpAt: "",
     stage: "", temperature: "", type: "", source: "",
     preferredType: "", preferredDealType: "", preferredArea: "",
-    preferredAreas: [], preferredBeds: "", preferredSizeMin: "", preferredSizeMax: "",
+    preferredAreas: [], tags: [], preferredBeds: "", preferredSizeMin: "", preferredSizeMax: "",
     budgetMin: "", budgetMax: "", budgetMaxMonthly: "", lostReasonCategory: "", lostReasonDetail: "",
     needsManagerReview: "false", managerReviewReason: "",
   });
   const [error, setError] = useState("");
+  const [loading, setLoading] = useState(true);
+  const [loadError, setLoadError] = useState<string | null>(null);
   const [activityText, setActivityText] = useState("");
   const [activityType, setActivityType] = useState("NOTE");
   const [savingActivity, setSavingActivity] = useState(false);
@@ -91,52 +120,99 @@ export default function CustomerDetailPage() {
   const [newFollowUpNote, setNewFollowUpNote] = useState("");
   const [regions, setRegions] = useState<string[]>([]);
   const [propertyTypes, setPropertyTypes] = useState<{ value: string; label: string }[]>([]);
+  const [customerTags, setCustomerTags] = useState<string[]>([]);
+  const [dup, setDup] = useState<{ id: string; name: string } | null>(null);
   const [outcome, setOutcome] = useState<OutcomeKind | null>(null);
   const [outcomeMsg, setOutcomeMsg] = useState("");
+  const [nextPrompt, setNextPrompt] = useState<{ type: string; date: string | null; note: string } | null>(null);
+  const [nextSaving, setNextSaving] = useState(false);
+  const [quickSaving, setQuickSaving] = useState<string | null>(null);
 
-  function load() {
-    fetch(`/api/customers/${id}`)
-      .then((r) => r.json())
-      .then((d) => {
-        if (d.id) {
-          setC(d);
-          setForm({
-            name: d.name ?? "", phone: d.phone ?? "", notes: d.notes ?? "", description: d.description ?? "",
-            nextFollowUpAt: d.nextFollowUpAt ?? "",
-            stage: d.stage ?? "", temperature: d.temperature ?? "",
-            type: d.type ?? "", source: d.source ?? "",
-            preferredType: d.preferredType ?? "", preferredDealType: d.preferredDealType ?? "",
-            preferredArea: d.preferredArea ?? "", preferredAreas: d.preferredAreas ?? [],
-            preferredBeds: d.preferredBeds != null ? String(d.preferredBeds) : "",
-            preferredSizeMin: d.preferredSizeMin != null ? String(d.preferredSizeMin) : "",
-            preferredSizeMax: d.preferredSizeMax != null ? String(d.preferredSizeMax) : "",
-            budgetMin: d.budgetMin ?? "", budgetMax: d.budgetMax ?? "",
-            budgetMaxMonthly: d.budgetMaxMonthly ?? "",
-            lostReasonCategory: d.lostReasonCategory ?? "", lostReasonDetail: d.lostReasonDetail ?? "",
-            needsManagerReview: d.needsManagerReview ? "true" : "false",
-            managerReviewReason: d.managerReviewReason ?? "",
-          });
-        }
-      });
-    fetch(`/api/customers/${id}/follow-ups`).then((r) => r.json()).then((d) => setFollowUps(Array.isArray(d) ? d : []));
-    fetch(`/api/activities?customerId=${id}`)
-      .then((r) => r.json())
-      .then((d) => {
-        const list = Array.isArray(d) ? d : (Array.isArray(d.activities) ? d.activities : []);
-        setActivities(list);
-      });
+  // نقد ۱ — بارگذاری با کمک‌کنندهٔ مرکزی؛ خطا پیام + تلاش دوباره دارد
+  // و صفحه دیگر روی «بارگذاری...» گیر نمی‌کند.
+  async function load() {
+    setLoading(true);
+    setLoadError(null);
+    try {
+      const [d, fus, acts] = await Promise.all([
+        apiJson<Customer>(`/api/customers/${id}`),
+        apiJson<FollowUp[]>(`/api/customers/${id}/follow-ups`),
+        apiJson<{ activities?: Activity[] } | Activity[]>(`/api/activities?customerId=${id}`),
+      ]);
+      if (d.id) {
+        setC(d);
+        setForm({
+          name: d.name ?? "", phone: d.phone ?? "", notes: d.notes ?? "", description: d.description ?? "",
+          nextFollowUpAt: d.nextFollowUpAt ?? "",
+          stage: d.stage ?? "", temperature: d.temperature ?? "",
+          type: d.type ?? "", source: d.source ?? "",
+          preferredType: d.preferredType ?? "", preferredDealType: d.preferredDealType ?? "",
+          preferredArea: d.preferredArea ?? "", preferredAreas: d.preferredAreas ?? [], tags: d.tags ?? [],
+          preferredBeds: d.preferredBeds != null ? String(d.preferredBeds) : "",
+          preferredSizeMin: d.preferredSizeMin != null ? String(d.preferredSizeMin) : "",
+          preferredSizeMax: d.preferredSizeMax != null ? String(d.preferredSizeMax) : "",
+          budgetMin: d.budgetMin ?? "", budgetMax: d.budgetMax ?? "",
+          budgetMaxMonthly: (d.budgetMaxMonthly as string | null | undefined) ?? "",
+          lostReasonCategory: d.lostReasonCategory ?? "", lostReasonDetail: d.lostReasonDetail ?? "",
+          needsManagerReview: d.needsManagerReview ? "true" : "false",
+          managerReviewReason: d.managerReviewReason ?? "",
+        });
+      }
+      setFollowUps(Array.isArray(fus) ? fus : []);
+      const list = Array.isArray(acts) ? acts : (Array.isArray(acts.activities) ? acts.activities : []);
+      setActivities(list);
+    } catch (e) {
+      setLoadError(errorMessage(e));
+    } finally {
+      setLoading(false);
+    }
   }
-  useEffect(() => { load(); fetch("/api/settings").then((r)=>r.json()).then((d)=>{ if(d.regions) setRegions(d.regions); if(d.propertyTypes) setPropertyTypes(d.propertyTypes); }); }, [id]);
+
+  async function refreshFollowUps() {
+    const r = await apiJson<FollowUp[]>(`/api/customers/${id}/follow-ups`);
+    setFollowUps(Array.isArray(r) ? r : []);
+  }
+
+  useEffect(() => {
+    // بارگذاری اولیهٔ داده — الگوی استاندارد صفحه‌های کلاینتی
+    // eslint-disable-next-line react-hooks/set-state-in-effect
+    load();
+    apiJson<{ regions?: string[]; propertyTypes?: { value: string; label: string }[]; customerTags?: string[] }>("/api/settings")
+      .then((d) => { if (d.regions) setRegions(d.regions); if (d.propertyTypes) setPropertyTypes(d.propertyTypes); if (d.customerTags) setCustomerTags(d.customerTags); })
+      .catch(() => {});
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [id]);
+
+  // هشدار شماره تکراری در ویرایش — فقط وقتی شماره عوض شده و کامل است
+  useEffect(() => {
+    if (!editing || !c) return;
+    const phone = form.phone.trim();
+    if (!/^[0-9]{10,15}$/.test(phone) || phone === c.phone) return;
+    let cancelled = false;
+    const t = setTimeout(() => {
+      apiJson<{ customers?: { id: string; name: string; phone: string }[] }>(`/api/customers?search=${encodeURIComponent(phone)}&limit=100`)
+        .then((d) => {
+          if (cancelled) return;
+          const list = Array.isArray(d) ? d : (d.customers ?? []);
+          const hit = list.find((x) => x.phone === phone && x.id !== id);
+          setDup(hit ? { id: hit.id, name: hit.name } : null);
+        })
+        .catch(() => {});
+    }, 300);
+    return () => { cancelled = true; clearTimeout(t); }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [form.phone, editing]);
 
   async function save() {
     setError("");
+    if (dup && !confirm(`این شماره قبلاً برای «${dup.name}» ثبت شده است. باز هم ذخیره کنم؟`)) return;
     const body: Record<string, unknown> = {
       name: form.name, phone: form.phone, notes: form.notes || null, description: form.description || null,
       stage: form.stage, temperature: form.temperature, type: form.type,
       source: form.source || null,
       preferredType: form.preferredType || null,
       preferredDealType: form.preferredDealType || null,
-      preferredArea: form.preferredArea || null, preferredAreas: form.preferredAreas ?? [],
+      preferredArea: form.preferredArea || null, preferredAreas: form.preferredAreas ?? [], tags: form.tags ?? [],
       preferredBeds: form.preferredBeds ? parseInt(form.preferredBeds, 10) : null,
       preferredSizeMin: form.preferredSizeMin ? parseFloat(form.preferredSizeMin) : null,
       preferredSizeMax: form.preferredSizeMax ? parseFloat(form.preferredSizeMax) : null,
@@ -149,19 +225,18 @@ export default function CustomerDetailPage() {
     };
     if (form.stage === "LOST" && !form.lostReasonCategory) { setError("دلیل از دست رفتن الزامی است"); return; }
     if (form.lostReasonCategory) { body.lostReasonCategory = form.lostReasonCategory; body.lostReasonDetail = form.lostReasonDetail || null; }
-    const res = await fetch(`/api/customers/${id}`, { method: "PATCH", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) });
-    const data = await res.json();
-    if (!res.ok) { setError(data.error ?? "خطا"); return; }
+    try {
+      await apiFetch(`/api/customers/${id}`, { method: "PATCH", headers: { "Content-Type": "application/json" }, body: JSON.stringify(body) });
+    } catch (e) { setError(errorMessage(e)); return; }
     setEditing(false); load();
   }
 
   async function handleDelete() {
-    if (!confirm("حذف مشتری؟ فقط مدیر می‌تواند حذف کند.")) return;
-    const res = await fetch(`/api/customers/${id}`, { method: "DELETE" });
-    if (!res.ok) {
-      const j = await res.json().catch(() => ({}));
-      setOutcomeMsg(j.error || "حذف مجاز نیست");
-      setTimeout(() => setOutcomeMsg(""), 3000);
+    if (!confirm("حذف مشتری؟ این کار برگشت‌پذیر نیست.")) return;
+    try {
+      await apiFetch(`/api/customers/${id}`, { method: "DELETE" });
+    } catch (e) {
+      setError(errorMessage(e));
       return;
     }
     router.push("/customers");
@@ -170,12 +245,43 @@ export default function CustomerDetailPage() {
   async function addActivity() {
     if (!activityText.trim()) return;
     setSavingActivity(true);
-    const res = await fetch("/api/activities", {
-      method: "POST", headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ type: activityType, customerId: id, description: activityText }),
-    });
-    if (res.ok) { setActivityText(""); load(); }
-    setSavingActivity(false);
+    try {
+      await apiFetch("/api/activities", {
+        method: "POST", headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ type: activityType, customerId: id, description: activityText }),
+      });
+      setActivityText("");
+      load();
+      // قدم بعدی را همان‌جا بپرس — مشتری بدون «فعالیت بعدی» نماند
+      setNextPrompt({ type: "CALL", date: isoInDays(1), note: "" });
+    } catch (e) {
+      setError(errorMessage(e));
+    } finally {
+      setSavingActivity(false);
+    }
+  }
+
+  async function quickCall(q: (typeof QUICK_CALLS)[number]) {
+    if (quickSaving) return;
+    setQuickSaving(q.key);
+    setError("");
+    try {
+      await apiFetch("/api/activities", {
+        method: "POST", headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ type: "CALL", customerId: id, description: q.desc }),
+      });
+      const body: Record<string, unknown> = { nextFollowUpAt: isoInDays(q.days) };
+      if (q.stage) body.stage = q.stage;
+      await apiFetch(`/api/customers/${id}`, {
+        method: "PATCH", headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(body),
+      });
+      load();
+    } catch (e) {
+      setError(errorMessage(e));
+    } finally {
+      setQuickSaving(null);
+    }
   }
 
   async function submitOutcome(payload: {
@@ -185,61 +291,65 @@ export default function CustomerDetailPage() {
     lostReasonDetail?: string | null;
     propertyId?: string | null;
   }) {
-    // ۱) اگر موفق و فایل انتخاب شده: معامله قطعی → فایل SOLD/RENTED (بایگانی)
+    // ۱) اگر موفق و فایل انتخاب شده: معامله قطعی → فایل SOLD/RENTED و مشتری WON (فقط از مسیر معامله)
     if (payload.stage === "WON" && payload.propertyId) {
-      const dealRes = await fetch("/api/deals", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          customerId: id,
-          propertyId: payload.propertyId,
-          status: "COMPLETED",
-          notes: payload.notes || "موفق — از پروفایل مشتری ثبت شد",
-        }),
-      });
-      if (!dealRes.ok) {
-        const j = await dealRes.json().catch(() => ({}));
-        // اگر برای این فایل قبلا معامله باز هست، فقط مرحله مشتری را بزن
-        if (dealRes.status !== 409) {
-          throw new Error(j.error || "خطا در ثبت معامله/بایگانی فایل");
-        }
+      try {
+        await apiFetch("/api/deals", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            customerId: id,
+            propertyId: payload.propertyId,
+            status: "COMPLETED",
+            notes: payload.notes || "موفق — از پروفایل مشتری ثبت شد",
+          }),
+        });
+      } catch (e) {
+        throw new Error(errorMessage(e));
       }
     }
 
-    // ۲) مرحله مشتری + یادداشت/دلیل
-    const body: Record<string, unknown> = { stage: payload.stage };
+    // ۲) یادداشت/دلیل مشتری — مرحله مستقیم عوض نمی‌شود؛ WON از مسیر معامله می‌آید
+    const body: Record<string, unknown> = {};
     if (payload.stage === "WON") {
       body.notes = payload.notes || null;
       body.nextFollowUpAt = null;
     } else {
+      body.stage = payload.stage;
       body.lostReasonCategory = payload.lostReasonCategory || "OTHER";
       body.lostReasonDetail = payload.lostReasonDetail || null;
       body.nextFollowUpAt = null;
     }
 
-    const res = await fetch(`/api/customers/${id}`, {
-      method: "PATCH",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify(body),
-    });
-    const data = await res.json().catch(() => ({}));
-    if (!res.ok) throw new Error(data.error || "خطا در تغییر مرحله مشتری");
+    try {
+      await apiFetch(`/api/customers/${id}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(body),
+      });
+    } catch (e) {
+      throw new Error(errorMessage(e));
+    }
 
     // ۳) یادداشت در تایم‌لاین فعالیت
     const actDesc =
       payload.stage === "WON"
         ? `موفق${payload.notes ? `: ${payload.notes}` : ""}${payload.propertyId ? " — فایل تگ و بایگانی شد" : ""}`
         : `ناموفق (${payload.lostReasonCategory})${payload.lostReasonDetail ? `: ${payload.lostReasonDetail}` : ""}`;
-    await fetch("/api/activities", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        type: "STAGE_CHANGE",
-        customerId: id,
-        description: actDesc,
-        newValue: payload.stage,
-      }),
-    }).catch(() => {});
+    try {
+      await apiFetch("/api/activities", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          type: "STAGE_CHANGE",
+          customerId: id,
+          description: actDesc,
+          newValue: payload.stage,
+        }),
+      });
+    } catch (e) {
+      console.error("[activity] stage-change activity failed:", errorMessage(e));
+    }
 
     setOutcome(null);
     setOutcomeMsg(payload.stage === "WON" ? "موفق ثبت شد — فایل بایگانی شد" : "ناموفق ثبت شد");
@@ -247,7 +357,9 @@ export default function CustomerDetailPage() {
     load();
   }
 
-  if (!c) return <div className="p-8 text-center text-zinc-400">بارگذاری...</div>;
+  if (loading && !c) return <PageSkeleton rows={4} />;
+  if (loadError && !c) return <PageError message={loadError} onRetry={load} />;
+  if (!c) return <PageSkeleton rows={4} />;
 
   const overdue = c.nextFollowUpAt && new Date(c.nextFollowUpAt) < new Date() && c.stage !== "LOST" && c.stage !== "WON" && c.stage !== "FAILED";
   const stageColor = CUSTOMER_STAGE_COLORS[c.stage] ?? "bg-zinc-100 text-zinc-700 border-zinc-200";
@@ -275,7 +387,7 @@ export default function CustomerDetailPage() {
                 ✕ ناموفق
               </Button>
             </>}
-            <Button variant="outline" onClick={() => setEditing(!editing)} className="gap-1.5">
+            <Button variant="outline" onClick={() => { setEditing(!editing); setDup(null); }} className="gap-1.5">
               <Pencil className="h-4 w-4" /> {editing ? "انصراف" : "ویرایش"}
             </Button>
             {isOwner && (
@@ -287,8 +399,8 @@ export default function CustomerDetailPage() {
         }
       />
 
-      {error && <div className="mx-6 mt-4 rounded-lg bg-red-50 px-3 py-2 text-sm text-red-700">{error}</div>}
-      {outcomeMsg && <div className="mx-6 mt-4 rounded-lg bg-emerald-50 px-3 py-2 text-sm text-emerald-700">{outcomeMsg}</div>}
+      {error && <div className="mx-4 sm:mx-6 mt-4 rounded-lg bg-red-50 px-3 py-2 text-sm text-red-700">{error}</div>}
+      {outcomeMsg && <div className="mx-4 sm:mx-6 mt-4 rounded-lg bg-emerald-50 px-3 py-2 text-sm text-emerald-700">{outcomeMsg}</div>}
 
       {outcome && (
         <StageOutcomeModal
@@ -301,19 +413,40 @@ export default function CustomerDetailPage() {
       )}
 
       {editing && (
-        <div className="mx-6 mt-4">
+        <div className="mx-4 sm:mx-6 mt-4">
           <Card>
             <h3 className="font-semibold mb-4">ویرایش اطلاعات</h3>
             <div className="grid gap-4 md:grid-cols-2">
-              <div><Label>نام و نام خانوادگی</Label><Input value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })} className="mt-1" /></div>
-              <div><Label>شماره تماس</Label><PhoneInput value={form.phone} onChange={(e) => setForm({ ...form, phone: e.target.value })} className="mt-1" /></div>
-              <div><Label>نوع</Label><Select value={form.type} onChange={(e) => setForm({ ...form, type: e.target.value })} className="mt-1"><option value="BUYER">خریدار</option><option value="SELLER">فروشنده</option><option value="TENANT">مستاجر</option><option value="OWNER">مالک</option></Select></div>
-              <div><Label>مرحله</Label><Select value={form.stage === "NEW" ? "INITIAL_CONTACT" : form.stage} onChange={(e) => setForm({ ...form, stage: e.target.value })} className="mt-1"><option value="INITIAL_CONTACT">تماس اولیه</option><option value="VIEWING">بازدید</option><option value="QUALIFIED">مذاکره</option><option value="CONTRACT">قرارداد</option><option value="WON">موفق</option><option value="FAILED">ناموفق</option><option value="LOST">بایگانی</option></Select></div>
-              <div><Label>دما</Label><Select value={form.temperature} onChange={(e) => setForm({ ...form, temperature: e.target.value })} className="mt-1"><option value="HOT">داغ</option><option value="WARM">گرم</option><option value="COLD">سرد</option></Select></div>
-              <div><Label>منبع</Label><Select value={form.source} onChange={(e) => setForm({ ...form, source: e.target.value })} className="mt-1"><option value="">—</option><option value="INSTAGRAM">اینستاگرام</option><option value="DIVAR">دیوار</option><option value="DIRECT_CALL">تماس مستقیم</option><option value="REFERRAL">معرفی</option><option value="SIGN_BOARD">تابلو</option><option value="WEBSITE">وب‌سایت</option><option value="OTHER">سایر</option></Select></div>
+              <div><Label htmlFor="f-name">نام و نام خانوادگی</Label><Input id="f-name" value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })} className="mt-1" /></div>
+              <div><Label htmlFor="f-phone">شماره تماس</Label><PhoneInput id="f-phone" value={form.phone} onChange={(e) => { setForm({ ...form, phone: e.target.value }); setDup(null); }} className="mt-1" />
+                {dup && (
+                  <div className="mt-2 rounded-[10px] border border-amber-300 bg-amber-50 px-2.5 py-2 text-[12px] text-amber-800">
+                    ⚠️ این شماره قبلاً برای «{dup.name}» ثبت شده است.
+                  </div>
+                )}
+              </div>
+              <div><Label htmlFor="f-type">نوع</Label><Select id="f-type" value={form.type} onChange={(e) => setForm({ ...form, type: e.target.value })} className="mt-1"><option value="BUYER">خریدار</option><option value="SELLER">فروشنده</option><option value="TENANT">مستاجر</option><option value="OWNER">مالک</option></Select></div>
+              <div><Label htmlFor="f-stage">مرحله</Label><Select id="f-stage" value={form.stage === "NEW" ? "INITIAL_CONTACT" : form.stage} onChange={(e) => setForm({ ...form, stage: e.target.value })} className="mt-1"><option value="INITIAL_CONTACT">تماس اولیه</option><option value="VIEWING">بازدید</option><option value="QUALIFIED">مذاکره</option><option value="CONTRACT">قرارداد</option>{form.stage === "WON" && <option value="WON">موفق</option>}<option value="FAILED">ناموفق</option><option value="LOST">بایگانی</option></Select></div>
+              <div><Label htmlFor="f-temperature">دما</Label><Select id="f-temperature" value={form.temperature} onChange={(e) => setForm({ ...form, temperature: e.target.value })} className="mt-1"><option value="HOT">داغ</option><option value="WARM">گرم</option><option value="COLD">سرد</option></Select></div>
+              <div><Label htmlFor="f-source">منبع</Label><Select id="f-source" value={form.source} onChange={(e) => setForm({ ...form, source: e.target.value })} className="mt-1"><option value="">—</option><option value="INSTAGRAM">اینستاگرام</option><option value="DIVAR">دیوار</option><option value="DIRECT_CALL">تماس مستقیم</option><option value="REFERRAL">معرفی</option><option value="SIGN_BOARD">تابلو</option><option value="WEBSITE">وب‌سایت</option><option value="IN_PERSON">حضوری</option><option value="ADVERTISEMENT">آگهی</option><option value="OTHER">سایر</option></Select></div>
+              <div className="md:col-span-2">
+                <Label>برچسب‌ها</Label>
+                <div className="mt-1 flex flex-wrap gap-1.5">
+                  {form.tags.map((t: string) => (
+                    <span key={t} className="inline-flex items-center gap-1 rounded-full border border-[var(--line)] bg-[var(--paper-2)] px-2.5 py-1 text-[12px]">
+                      {t}
+                      <button type="button" onClick={() => setForm({ ...form, tags: form.tags.filter((x: string) => x !== t) })} className="text-[var(--ink-3)] hover:text-red-600">×</button>
+                    </span>
+                  ))}
+                  <select value="" onChange={(e) => { const v = e.target.value; if (!v) return; if (!form.tags.includes(v)) setForm({ ...form, tags: [...form.tags, v] }); e.target.value = ""; }} className="rounded-full border border-dashed border-[var(--line-2)] bg-white px-3 py-1 text-[12px]" aria-label="افزودن برچسب">
+                    <option value="">+ افزودن برچسب</option>
+                    {customerTags.filter((t) => !form.tags.includes(t)).map((t) => <option key={t} value={t}>{t}</option>)}
+                  </select>
+                </div>
+              </div>
               <div>
-                <Label>نوع معامله موردنظر</Label>
-                <Select
+                <Label htmlFor="f-preferredDealType">نوع معامله موردنظر</Label>
+                <Select id="f-preferredDealType"
                   value={form.preferredDealType}
                   onChange={(e) => {
                     const v = e.target.value;
@@ -330,11 +463,11 @@ export default function CustomerDetailPage() {
                   <option value="RENT">رهن و اجاره</option>
                 </Select>
               </div>
-              <div><Label>نوع ملک موردنظر</Label><Select value={form.preferredType} onChange={(e) => setForm({ ...form, preferredType: e.target.value })} className="mt-1"><option value="">—</option>{propertyTypes.map((pt) => <option key={pt.value} value={pt.value}>{pt.label}</option>)}</Select></div>
-              <div className="md:col-span-2"><Label>مناطق موردنظر (چندتایی)</Label><div className="mt-1 flex flex-wrap gap-1.5 mb-2">{form.preferredAreas.map((a: string) => <span key={a} className="inline-flex items-center gap-1 rounded-full border border-[var(--line)] bg-[var(--paper-2)] px-2.5 py-1 text-[12px]">{a}<button type="button" onClick={() => { const arr = form.preferredAreas.filter((x: string) => x !== a); setForm({ ...form, preferredAreas: arr }); }} className="text-[var(--ink-3)] hover:text-red-600">×</button></span>)}<select value="" onChange={(e) => { const v = e.target.value; if (!v) return; const arr = form.preferredAreas; if (!arr.includes(v)) setForm({ ...form, preferredAreas: [...arr, v] }); e.target.value = ""; }} className="rounded-full border border-dashed border-[var(--line-2)] bg-white px-3 py-1 text-[12px]"><option value="">+ افزودن منطقه</option>{regions.filter((r) => !form.preferredAreas.includes(r)).map((r) => <option key={r} value={r}>{r}</option>)}</select></div></div>
-              <div><Label>تعداد خواب</Label><Input inputMode="numeric" dir="ltr" value={form.preferredBeds} onChange={(e) => setForm({ ...form, preferredBeds: e.target.value.replace(/[^0-9]/g, "") })} placeholder="مثلا ۲" className="mt-1" /></div>
-              <div><Label>متراژ از</Label><Input inputMode="numeric" dir="ltr" value={form.preferredSizeMin} onChange={(e) => setForm({ ...form, preferredSizeMin: e.target.value.replace(/[^0-9]/g, "") })} placeholder="80" className="mt-1" /></div>
-              <div><Label>متراژ تا</Label><Input inputMode="numeric" dir="ltr" value={form.preferredSizeMax} onChange={(e) => setForm({ ...form, preferredSizeMax: e.target.value.replace(/[^0-9]/g, "") })} placeholder="120" className="mt-1" /></div>
+              <div><Label htmlFor="f-preferredType">نوع ملک موردنظر</Label><Select id="f-preferredType" value={form.preferredType} onChange={(e) => setForm({ ...form, preferredType: e.target.value })} className="mt-1"><option value="">—</option>{propertyTypes.map((pt) => <option key={pt.value} value={pt.value}>{pt.label}</option>)}</Select></div>
+              <div className="md:col-span-2"><Label htmlFor="f-addRegion">مناطق موردنظر (چندتایی)</Label><div className="mt-1 flex flex-wrap gap-1.5 mb-2">{form.preferredAreas.map((a: string) => <span key={a} className="inline-flex items-center gap-1 rounded-full border border-[var(--line)] bg-[var(--paper-2)] px-2.5 py-1 text-[12px]">{a}<button type="button" onClick={() => { const arr = form.preferredAreas.filter((x: string) => x !== a); setForm({ ...form, preferredAreas: arr }); }} className="text-[var(--ink-3)] hover:text-red-600">×</button></span>)}<select id="f-addRegion" value="" onChange={(e) => { const v = e.target.value; if (!v) return; const arr = form.preferredAreas; if (!arr.includes(v)) setForm({ ...form, preferredAreas: [...arr, v] }); e.target.value = ""; }} className="rounded-full border border-dashed border-[var(--line-2)] bg-white px-3 py-1 text-[12px]"><option value="">+ افزودن منطقه</option>{regions.filter((r) => !form.preferredAreas.includes(r)).map((r) => <option key={r} value={r}>{r}</option>)}</select></div></div>
+              <div><Label htmlFor="f-preferredBeds">تعداد خواب</Label><Input id="f-preferredBeds" inputMode="numeric" dir="ltr" value={form.preferredBeds} onChange={(e) => setForm({ ...form, preferredBeds: e.target.value.replace(/[^0-9]/g, "") })} placeholder="مثلا ۲" className="mt-1" /></div>
+              <div><Label htmlFor="f-preferredSizeMin">متراژ از</Label><Input id="f-preferredSizeMin" inputMode="numeric" dir="ltr" value={form.preferredSizeMin} onChange={(e) => setForm({ ...form, preferredSizeMin: e.target.value.replace(/[^0-9]/g, "") })} placeholder="80" className="mt-1" /></div>
+              <div><Label htmlFor="f-preferredSizeMax">متراژ تا</Label><Input id="f-preferredSizeMax" inputMode="numeric" dir="ltr" value={form.preferredSizeMax} onChange={(e) => setForm({ ...form, preferredSizeMax: e.target.value.replace(/[^0-9]/g, "") })} placeholder="120" className="mt-1" /></div>
 
               {form.preferredDealType === "SALE" && (
                 <div className="md:col-span-2 rounded-[12px] border border-[var(--line)] bg-[var(--paper-2)] p-3">
@@ -360,22 +493,22 @@ export default function CustomerDetailPage() {
                 </div>
               )}
 
-              <div><Label>پیگیری بعدی (شمسی)</Label><div className="mt-1"><JalaliDatePicker value={form.nextFollowUpAt || null} onChange={(v) => setForm({ ...form, nextFollowUpAt: v ?? "" })} /></div></div>
-              <div className="flex items-center gap-2 pt-6"><input type="checkbox" checked={form.needsManagerReview === "true"} onChange={(e) => setForm({ ...form, needsManagerReview: e.target.checked ? "true" : "false" })} /><Label>نیاز به بررسی مدیر</Label></div>
-              {form.needsManagerReview === "true" && <div className="md:col-span-2"><Label>دلیل بررسی</Label><Textarea value={form.managerReviewReason} onChange={(e) => setForm({ ...form, managerReviewReason: e.target.value })} className="mt-1" /></div>}
+              <div><Label htmlFor="f-nextFollowUpAt">پیگیری بعدی (شمسی)</Label><div className="mt-1"><JalaliDatePicker id="f-nextFollowUpAt" value={form.nextFollowUpAt || null} onChange={(v) => setForm({ ...form, nextFollowUpAt: v ?? "" })} /></div></div>
+              <div className="flex items-center gap-2 pt-6"><input id="f-needsManagerReview" type="checkbox" checked={form.needsManagerReview === "true"} onChange={(e) => setForm({ ...form, needsManagerReview: e.target.checked ? "true" : "false" })} /><Label htmlFor="f-needsManagerReview">نیاز به بررسی مدیر</Label></div>
+              {form.needsManagerReview === "true" && <div className="md:col-span-2"><Label htmlFor="f-managerReviewReason">دلیل بررسی</Label><Textarea id="f-managerReviewReason" value={form.managerReviewReason} onChange={(e) => setForm({ ...form, managerReviewReason: e.target.value })} className="mt-1" /></div>}
               {form.stage === "LOST" && <>
-                <div><Label>دلیل از دست رفتن</Label><Select value={form.lostReasonCategory} onChange={(e) => setForm({ ...form, lostReasonCategory: e.target.value })} className="mt-1"><option value="">انتخاب کنید</option><option value="CUSTOMER_WITHDREW">منصرف شد</option><option value="PRICE_REJECTED">قیمت نپذیرفت</option><option value="NO_RESPONSE">پاسخ نمی‌دهد</option><option value="NO_SUITABLE_PROPERTY">فایل مناسب نبود</option><option value="OTHER">سایر</option></Select></div>
-                <div><Label>توضیح</Label><Input value={form.lostReasonDetail} onChange={(e) => setForm({ ...form, lostReasonDetail: e.target.value })} className="mt-1" /></div>
+                <div><Label htmlFor="f-lostReasonCategory">دلیل از دست رفتن</Label><Select id="f-lostReasonCategory" value={form.lostReasonCategory} onChange={(e) => setForm({ ...form, lostReasonCategory: e.target.value })} className="mt-1"><option value="">انتخاب کنید</option><option value="CUSTOMER_WITHDREW">منصرف شد</option><option value="PRICE_REJECTED">قیمت نپذیرفت</option><option value="NO_RESPONSE">پاسخ نمی‌دهد</option><option value="NO_SUITABLE_PROPERTY">فایل مناسب نبود</option><option value="OTHER">سایر</option></Select></div>
+                <div><Label htmlFor="f-lostReasonDetail">توضیح</Label><Input id="f-lostReasonDetail" value={form.lostReasonDetail} onChange={(e) => setForm({ ...form, lostReasonDetail: e.target.value })} className="mt-1" /></div>
               </>}
-              <div className="md:col-span-2"><Label>توضیحات</Label><Textarea value={form.description ?? ""} onChange={(e) => setForm({ ...form, description: e.target.value })} placeholder="توضیحات کلی درباره مشتری..." rows={3} className="mt-1" /></div>
-              <div className="md:col-span-2"><Label>یادداشت</Label><Textarea value={form.notes} onChange={(e) => setForm({ ...form, notes: e.target.value })} className="mt-1" rows={3} /></div>
+              <div className="md:col-span-2"><Label htmlFor="f-notes">توضیحات</Label><Textarea id="f-notes" value={form.description ?? ""} onChange={(e) => setForm({ ...form, description: e.target.value })} placeholder="توضیحات کلی درباره مشتری..." rows={3} className="mt-1" /></div>
+              <div className="md:col-span-2"><Label htmlFor="f-notes-2">یادداشت</Label><Textarea id="f-notes-2" value={form.notes} onChange={(e) => setForm({ ...form, notes: e.target.value })} className="mt-1" rows={3} /></div>
             </div>
             <div className="mt-4"><Button onClick={save}>ذخیره</Button></div>
           </Card>
         </div>
       )}
 
-      <div className="p-6 grid gap-6 lg:grid-cols-[380px_1fr] items-start">
+      <div className="p-4 sm:p-6 grid gap-6 lg:grid-cols-[380px_1fr] items-start">
         <div className="space-y-4 lg:sticky lg:top-6">
           <Card>
             <div className="flex items-start gap-4">
@@ -396,6 +529,13 @@ export default function CustomerDetailPage() {
                   <Badge className="border-zinc-200 bg-white">{CUSTOMER_TYPE_LABELS[c.type] ?? c.type}</Badge>
                   {c.source && <Badge className="border-zinc-200 bg-white">{CUSTOMER_SOURCE_LABELS[c.source] ?? c.source}</Badge>}
                 </div>
+                {(c.tags as string[] ?? []).length > 0 && (
+                  <div className="mt-2 flex flex-wrap gap-1">
+                    {(c.tags as string[]).map((t: string) => (
+                      <span key={t} className="rounded-full border border-[var(--line)] bg-[var(--paper-2)] px-2 py-0.5 text-[11px] text-[var(--ink-2)]">{t}</span>
+                    ))}
+                  </div>
+                )}
               </div>
             </div>
             {c.stage === "WON" && <div className="mt-3 rounded-lg border border-emerald-200 bg-emerald-50 px-3 py-2.5 text-sm font-medium text-emerald-800">✓ موفق — معامله به سرانجام رسید</div>}
@@ -458,14 +598,15 @@ export default function CustomerDetailPage() {
                           type="checkbox"
                           checked={f.done}
                           onChange={async (e) => {
-                            await fetch(`/api/follow-ups/${f.id}`, {
-                              method: "PATCH",
-                              headers: { "Content-Type": "application/json" },
-                              body: JSON.stringify({ done: e.target.checked }),
-                            });
-                            const r = await fetch(`/api/customers/${id}/follow-ups`).then((x) => x.json());
-                            setFollowUps(Array.isArray(r) ? r : []);
-                            load();
+                            try {
+                              await apiFetch(`/api/follow-ups/${f.id}`, {
+                                method: "PATCH",
+                                headers: { "Content-Type": "application/json" },
+                                body: JSON.stringify({ done: e.target.checked }),
+                              });
+                              await refreshFollowUps();
+                              load();
+                            } catch (err2) { setError(errorMessage(err2)); }
                           }}
                         />
                         <span className={`flex-1 ${f.done ? "line-through text-[var(--ink-3)]" : isOverdue ? "text-[var(--pomegranate)] font-medium" : ""}`}>
@@ -481,11 +622,11 @@ export default function CustomerDetailPage() {
                         {isOwner && (
                           <button
                             onClick={async () => {
-                              const del = await fetch(`/api/follow-ups/${f.id}`, { method: "DELETE" });
-                              if (!del.ok) return;
-                              const r = await fetch(`/api/customers/${id}/follow-ups`).then((x) => x.json());
-                              setFollowUps(Array.isArray(r) ? r : []);
-                              load();
+                              try {
+                                await apiFetch(`/api/follow-ups/${f.id}`, { method: "DELETE" });
+                                await refreshFollowUps();
+                                load();
+                              } catch (err2) { setError(errorMessage(err2)); }
                             }}
                             className="text-[11px] text-[var(--ink-3)] hover:text-red-600"
                           >
@@ -510,15 +651,16 @@ export default function CustomerDetailPage() {
                                 disabled={!followUpSaving}
                                 onClick={async () => {
                                   if (!followUpSaving) return;
-                                  await fetch(`/api/follow-ups/${f.id}`, {
-                                    method: "PATCH",
-                                    headers: { "Content-Type": "application/json" },
-                                    body: JSON.stringify({ dueAt: followUpSaving }),
-                                  });
-                                  setFollowUpSaving(null);
-                                  const r = await fetch(`/api/customers/${id}/follow-ups`).then((x) => x.json());
-                                  setFollowUps(Array.isArray(r) ? r : []);
-                                  load();
+                                  try {
+                                    await apiFetch(`/api/follow-ups/${f.id}`, {
+                                      method: "PATCH",
+                                      headers: { "Content-Type": "application/json" },
+                                      body: JSON.stringify({ dueAt: followUpSaving }),
+                                    });
+                                    setFollowUpSaving(null);
+                                    await refreshFollowUps();
+                                    load();
+                                  } catch (err2) { setError(errorMessage(err2)); }
                                 }}
                               >
                                 ذخیره
@@ -539,14 +681,15 @@ export default function CustomerDetailPage() {
                             size="sm"
                             variant="outline"
                             onClick={async () => {
-                              await fetch(`/api/follow-ups/${f.id}`, {
-                                method: "PATCH",
-                                headers: { "Content-Type": "application/json" },
-                                body: JSON.stringify({ done: true }),
-                              });
-                              const r = await fetch(`/api/customers/${id}/follow-ups`).then((x) => x.json());
-                              setFollowUps(Array.isArray(r) ? r : []);
-                              load();
+                              try {
+                                await apiFetch(`/api/follow-ups/${f.id}`, {
+                                  method: "PATCH",
+                                  headers: { "Content-Type": "application/json" },
+                                  body: JSON.stringify({ done: true }),
+                                });
+                                await refreshFollowUps();
+                                load();
+                              } catch (err2) { setError(errorMessage(err2)); }
                             }}
                           >
                             انجام شد
@@ -559,7 +702,7 @@ export default function CustomerDetailPage() {
               </div>
             )}
 
-            <div className="flex gap-2 items-end">
+            <div className="flex flex-col gap-2 sm:flex-row sm:items-end">
               <div className="flex-1">
                 <JalaliDatePicker value={newFollowUpDate} onChange={setNewFollowUpDate} placeholder="تاریخ پیگیری جدید" />
               </div>
@@ -571,18 +714,20 @@ export default function CustomerDetailPage() {
               />
               <Button
                 size="sm"
+                className="w-full sm:w-auto"
                 onClick={async () => {
                   if (!newFollowUpDate) return;
-                  await fetch(`/api/customers/${id}/follow-ups`, {
-                    method: "POST",
-                    headers: { "Content-Type": "application/json" },
-                    body: JSON.stringify({ dueAt: newFollowUpDate, note: newFollowUpNote || undefined }),
-                  });
-                  setNewFollowUpDate(null);
-                  setNewFollowUpNote("");
-                  const r = await fetch(`/api/customers/${id}/follow-ups`).then((x) => x.json());
-                  setFollowUps(Array.isArray(r) ? r : []);
-                  load();
+                  try {
+                    await apiFetch(`/api/customers/${id}/follow-ups`, {
+                      method: "POST",
+                      headers: { "Content-Type": "application/json" },
+                      body: JSON.stringify({ dueAt: newFollowUpDate, note: newFollowUpNote || undefined }),
+                    });
+                    setNewFollowUpDate(null);
+                    setNewFollowUpNote("");
+                    await refreshFollowUps();
+                    load();
+                  } catch (err2) { setError(errorMessage(err2)); }
                 }}
                 disabled={!newFollowUpDate}
               >
@@ -600,42 +745,44 @@ export default function CustomerDetailPage() {
             </h3>
             <dl className="space-y-2.5 text-sm">
               <div className="flex justify-between gap-2">
-                <dt className="flex items-center gap-1.5 text-zinc-500"><Wallet className="h-3.5 w-3.5" /> نوع معامله</dt>
-                <dd className="font-medium">{c.preferredDealType ? (DEAL_TYPE_LABELS[c.preferredDealType] ?? c.preferredDealType) : "—"}</dd>
+                <dt className="flex shrink-0 items-center gap-1.5 text-zinc-500"><Wallet className="h-3.5 w-3.5" /> نوع معامله</dt>
+                <dd className="font-medium min-w-0 break-words">{c.preferredDealType ? (DEAL_TYPE_LABELS[c.preferredDealType] ?? c.preferredDealType) : "—"}</dd>
               </div>
               <div className="flex justify-between gap-2">
-                <dt className="flex items-center gap-1.5 text-zinc-500"><Home className="h-3.5 w-3.5" /> نوع ملک</dt>
-                <dd className="font-medium">{c.preferredType ? (PROPERTY_TYPE_LABELS[c.preferredType] ?? c.preferredType) : "—"}</dd>
+                <dt className="flex shrink-0 items-center gap-1.5 text-zinc-500"><Home className="h-3.5 w-3.5" /> نوع ملک</dt>
+                <dd className="font-medium min-w-0 break-words">{c.preferredType ? (PROPERTY_TYPE_LABELS[c.preferredType] ?? c.preferredType) : "—"}</dd>
               </div>
               <div className="flex justify-between gap-2">
-                <dt className="flex items-center gap-1.5 text-zinc-500"><MapPin className="h-3.5 w-3.5" /> مناطق</dt>
-                <dd className="font-medium flex flex-wrap gap-1 justify-end">{(c.preferredAreas as string[] ?? []).length > 0 ? (c.preferredAreas as string[]).map((a: string) => <span key={a} className="rounded-full border border-[var(--line)] bg-[var(--paper-2)] px-2 py-0.5 text-[11px]">{a}</span>) : (c.preferredArea ? <span>{c.preferredArea}</span> : "—")}</dd>
+                <dt className="flex shrink-0 items-center gap-1.5 text-zinc-500"><MapPin className="h-3.5 w-3.5" /> مناطق</dt>
+                <dd className="font-medium flex min-w-0 flex-wrap gap-1 justify-end">{(c.preferredAreas as string[] ?? []).length > 0 ? (c.preferredAreas as string[]).map((a: string) => <span key={a} className="rounded-full border border-[var(--line)] bg-[var(--paper-2)] px-2 py-0.5 text-[11px]">{a}</span>) : (c.preferredArea ? <span>{c.preferredArea}</span> : "—")}</dd>
               </div>
               <div className="flex justify-between gap-2">
-                <dt className="flex items-center gap-1.5 text-zinc-500"><BedDouble className="h-3.5 w-3.5" /> خواب</dt>
-                <dd className="font-medium">{c.preferredBeds != null ? `${c.preferredBeds} خواب` : "—"}</dd>
+                <dt className="flex shrink-0 items-center gap-1.5 text-zinc-500"><BedDouble className="h-3.5 w-3.5" /> خواب</dt>
+                <dd className="font-medium min-w-0 break-words">{c.preferredBeds != null ? `${c.preferredBeds} خواب` : "—"}</dd>
               </div>
               <div className="flex justify-between gap-2">
-                <dt className="flex items-center gap-1.5 text-zinc-500"><Ruler className="h-3.5 w-3.5" /> متراژ</dt>
-                <dd className="font-medium" dir="ltr">
+                <dt className="flex shrink-0 items-center gap-1.5 text-zinc-500"><Ruler className="h-3.5 w-3.5" /> متراژ</dt>
+                <dd className="font-medium min-w-0 break-words" dir="ltr">
                   {c.preferredSizeMin != null || c.preferredSizeMax != null
                     ? `${c.preferredSizeMin ?? "—"} – ${c.preferredSizeMax ?? "—"} متر`
                     : "—"}
                 </dd>
               </div>
               <div className="flex justify-between gap-2">
-                <dt className="flex items-center gap-1.5 text-zinc-500"><Wallet className="h-3.5 w-3.5" /> بودجه</dt>
-                <dd className="font-medium text-left" dir="ltr">
+                <dt className="flex shrink-0 items-center gap-1.5 text-zinc-500"><Wallet className="h-3.5 w-3.5" /> بودجه</dt>
+                <dd className="font-medium text-left min-w-0 break-words" dir="ltr">
                   {c.preferredDealType === "RENT" ? (
                     c.budgetMax || (c as { budgetMaxMonthly?: string | null }).budgetMaxMonthly ? (
                       <span className="text-right" dir="rtl">
-                        ودیعه {c.budgetMax ? formatToman(c.budgetMax) : "—"}
+                        ودیعه {c.budgetMax ? <MoneyText value={c.budgetMax} /> : "—"}
                         {" · "}
-                        اجاره {(c as { budgetMaxMonthly?: string | null }).budgetMaxMonthly ? formatToman((c as { budgetMaxMonthly?: string | null }).budgetMaxMonthly) : "—"}
+                        اجاره {(c as { budgetMaxMonthly?: string | null }).budgetMaxMonthly ? <MoneyText value={(c as { budgetMaxMonthly?: string | null }).budgetMaxMonthly} /> : "—"}
                       </span>
                     ) : "—"
                   ) : c.budgetMin || c.budgetMax ? (
-                    `${c.budgetMin ? formatToman(c.budgetMin) : "—"} تا ${c.budgetMax ? formatToman(c.budgetMax) : "—"}`
+                    <>
+                      {c.budgetMin ? <MoneyText value={c.budgetMin} bare /> : "—"} تا {c.budgetMax ? <MoneyText value={c.budgetMax} /> : "—"}
+                    </>
                   ) : "—"}
                 </dd>
               </div>
@@ -662,8 +809,8 @@ export default function CustomerDetailPage() {
 
           <Card>
             <dl className="space-y-2 text-sm">
-              <div className="flex justify-between"><dt className="text-zinc-500 flex items-center gap-1.5"><User className="h-3.5 w-3.5" /> مشاور</dt><dd className="font-medium">{c.assignedAgent?.name ?? "—"}</dd></div>
-              <div className="flex justify-between"><dt className="text-zinc-500">تاریخ ثبت</dt><dd>{formatDate(c.createdAt)}</dd></div>
+              <div className="flex justify-between gap-2"><dt className="text-zinc-500 flex shrink-0 items-center gap-1.5"><User className="h-3.5 w-3.5" /> مشاور</dt><dd className="font-medium min-w-0 break-words">{c.assignedAgent?.name ?? "—"}</dd></div>
+              <div className="flex justify-between gap-2"><dt className="text-zinc-500 shrink-0">تاریخ ثبت</dt><dd className="min-w-0 break-words">{formatDate(c.createdAt)}</dd></div>
             </dl>
           </Card>
         </div>
@@ -671,8 +818,8 @@ export default function CustomerDetailPage() {
         <div className="space-y-4 min-w-0">
           <Card>
             <h3 className="font-semibold mb-3 flex items-center gap-2"><Plus className="h-4 w-4" /> ثبت فعالیت / یادداشت</h3>
-            <div className="flex gap-2">
-              <Select value={activityType} onChange={(e) => setActivityType(e.target.value)} className="w-36 shrink-0">
+            <div className="flex flex-col gap-2 sm:flex-row">
+              <Select value={activityType} onChange={(e) => setActivityType(e.target.value)} className="w-full sm:w-36 sm:shrink-0">
                 <option value="NOTE">یادداشت</option>
                 <option value="CALL">تماس</option>
                 <option value="MESSAGE">پیام</option>
@@ -688,9 +835,79 @@ export default function CustomerDetailPage() {
                 onKeyDown={(e) => e.key === "Enter" && !e.shiftKey && (e.preventDefault(), addActivity())}
                 className="flex-1"
               />
-              <Button onClick={addActivity} disabled={savingActivity || !activityText.trim()}>ثبت</Button>
+              <Button onClick={addActivity} disabled={savingActivity || !activityText.trim()} className="w-full sm:w-auto">ثبت</Button>
             </div>
+            {c.stage !== "WON" && c.stage !== "FAILED" && c.stage !== "LOST" && (
+              <div className="mt-3 border-t border-[var(--line)] pt-3">
+                <div className="mb-2 text-[12px] font-bold text-[var(--ink-2)]">نتیجه تماس — ثبت سریع</div>
+                <div className="grid grid-cols-2 gap-2 sm:grid-cols-4">
+                  {QUICK_CALLS.map((q) => (
+                    <button
+                      key={q.key}
+                      type="button"
+                      disabled={quickSaving !== null}
+                      onClick={() => quickCall(q)}
+                      className="rounded-[12px] border border-[var(--line)] bg-white px-2 py-2 text-right hover:bg-[var(--paper-2)] disabled:opacity-50"
+                    >
+                      <span className="block text-[12.5px] font-bold">{q.label}{quickSaving === q.key ? " ..." : ""}</span>
+                      <span className="block text-[11px] text-[var(--ink-3)]">پیگیری {formatDate(isoInDays(q.days))}</span>
+                    </button>
+                  ))}
+                </div>
+              </div>
+            )}
           </Card>
+
+          {nextPrompt && (
+            <Card>
+              <h3 className="font-semibold mb-1">فعالیت بعدی چیست؟</h3>
+              <p className="text-[12px] text-[var(--ink-3)] mb-3">قدم بعدی این مشتری را همین‌جا مشخص کن تا در پیگیری‌ها ثبت شود.</p>
+              <div className="flex flex-col gap-2 sm:flex-row sm:items-end">
+                <Select value={nextPrompt.type} onChange={(e) => setNextPrompt({ ...nextPrompt, type: e.target.value })} className="w-full sm:w-32 sm:shrink-0" aria-label="نوع فعالیت بعدی">
+                  <option value="CALL">تماس</option>
+                  <option value="MESSAGE">پیام</option>
+                  <option value="MEETING">جلسه</option>
+                  <option value="VIEWING_DONE">بازدید</option>
+                </Select>
+                <div className="flex-1">
+                  <JalaliDatePicker value={nextPrompt.date} onChange={(v) => setNextPrompt({ ...nextPrompt, date: v })} placeholder="تاریخ فعالیت بعدی" />
+                </div>
+                <Input
+                  value={nextPrompt.note}
+                  onChange={(e) => setNextPrompt({ ...nextPrompt, note: e.target.value })}
+                  placeholder="یادداشت (اختیاری)"
+                  className="flex-1"
+                />
+              </div>
+              <div className="mt-3 flex gap-2">
+                <Button
+                  size="sm"
+                  disabled={!nextPrompt.date || nextSaving}
+                  onClick={async () => {
+                    if (!nextPrompt.date) return;
+                    setNextSaving(true);
+                    try {
+                      const note = [ACTIVITY_TYPE_LABELS[nextPrompt.type] ?? nextPrompt.type, nextPrompt.note.trim()].filter(Boolean).join(" — ");
+                      await apiFetch(`/api/customers/${id}/follow-ups`, {
+                        method: "POST", headers: { "Content-Type": "application/json" },
+                        body: JSON.stringify({ dueAt: nextPrompt.date, note: note || undefined }),
+                      });
+                      setNextPrompt(null);
+                      await refreshFollowUps();
+                      load();
+                    } catch (e) {
+                      setError(errorMessage(e));
+                    } finally {
+                      setNextSaving(false);
+                    }
+                  }}
+                >
+                  {nextSaving ? "در حال ثبت..." : "ثبت فعالیت بعدی"}
+                </Button>
+                <Button size="sm" variant="ghost" onClick={() => setNextPrompt(null)}>رد کردن</Button>
+              </div>
+            </Card>
+          )}
 
           <Card>
             <div className="flex items-center justify-between mb-4">

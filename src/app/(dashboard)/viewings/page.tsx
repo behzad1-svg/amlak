@@ -6,7 +6,7 @@ export default function ViewingsPage() {
   return (
     <div>
       <Header title="بازدیدها" subtitle="این بخش از منو حذف شده" />
-      <div className="p-6 max-w-md">
+      <div className="p-4 sm:p-6 max-w-md">
         <div className="rounded-[16px] border border-dashed border-[var(--line-2)] bg-white px-6 py-10 text-center">
           <div className="text-[14px] font-bold">بازدید جداگانه لازم نیست</div>
           <div className="mt-2 text-[13px] leading-6 text-[var(--ink-3)]">

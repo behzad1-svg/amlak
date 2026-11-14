@@ -4,8 +4,10 @@ import { prisma } from "@/lib/prisma";
 import { validateSession } from "@/lib/auth";
 import { customerCreateSchema, findInvalidQueryParam } from "@/lib/validation";
 import { serializeBigInt } from "@/lib/utils";
+import { getStaleInfo } from "@/lib/constants";
 import { runMatchingForCustomer } from "@/lib/matching";
 import { createAuditLog } from "@/lib/audit";
+import { hasPermission } from "@/lib/permissions";
 
 async function getSession() {
   const cookieStore = await cookies();
@@ -46,6 +48,16 @@ export async function GET(req: NextRequest) {
   const preferredType = searchParams.get("preferredType");
   const followUp = searchParams.get("followUp"); // overdue | today | none
   const sort = searchParams.get("sort") ?? "followup";
+  const source = searchParams.get("source");
+  const tag = searchParams.get("tag");
+  const staleOnly = searchParams.get("staleOnly") === "true";
+
+  if (source && !["INSTAGRAM", "DIVAR", "DIRECT_CALL", "REFERRAL", "SIGN_BOARD", "WEBSITE", "IN_PERSON", "ADVERTISEMENT", "OTHER"].includes(source)) {
+    return NextResponse.json({ error: "مقدار «source» معتبر نیست" }, { status: 400 });
+  }
+  if (tag && tag.length > 30) {
+    return NextResponse.json({ error: "مقدار «tag» معتبر نیست" }, { status: 400 });
+  }
 
   if (temperature && !["HOT", "WARM", "COLD"].includes(temperature)) {
     return NextResponse.json({ error: "مقدار «temperature» معتبر نیست" }, { status: 400 });
@@ -80,6 +92,8 @@ export async function GET(req: NextRequest) {
   if (sizeMin) and.push({ preferredSizeMax: { gte: parseFloat(sizeMin) } });
   if (sizeMax) and.push({ preferredSizeMin: { lte: parseFloat(sizeMax) } });
   if (temperature === "HOT" || temperature === "WARM" || temperature === "COLD") and.push({ temperature });
+  if (source) and.push({ source });
+  if (tag) and.push({ tags: { has: tag } });
   if (preferredType) and.push({ preferredType });
   if (preferredArea) {
     and.push({
@@ -100,9 +114,34 @@ export async function GET(req: NextRequest) {
     and.push({ nextFollowUpAt: null });
   }
 
+  // «فقط راکدها»: اول شناسهٔ مشتری‌هایی را پیدا کن که از آخرین فعالیتشان
+  // بیش از سقف مرحله‌شان گذشته، بعد همان where را به آن شناسه‌ها محدود کن.
+  if (staleOnly) {
+    const candidates = await prisma.customer.findMany({
+      where: { AND: and } as Record<string, unknown>,
+      select: { id: true, stage: true, createdAt: true },
+      take: 5000,
+    });
+    const ids = candidates.map((c) => c.id);
+    const lastActs = ids.length
+      ? await prisma.activity.groupBy({
+          by: ["customerId"],
+          where: { customerId: { in: ids } },
+          _max: { createdAt: true },
+        })
+      : [];
+    const lastById = new Map(lastActs.map((a) => [a.customerId as string, a._max.createdAt as Date | null]));
+    const staleIds = candidates
+      .filter((c) => getStaleInfo(c.stage, lastById.get(c.id) ?? c.createdAt))
+      .map((c) => c.id);
+    and.push({ id: { in: staleIds } });
+  }
+
   const where = { AND: and } as Record<string, unknown>;
 
-  const [customers, total] = await Promise.all([
+  // نقد ۳ — شمارش صادقانهٔ هر مرحله با همان فیلترها، تا ستون‌های کانبان
+  // تعداد واقعی را نشان دهند نه فقط تعداد کارت‌های بارگذاری‌شده را.
+  const [customers, total, stageGroups, sourceGroups] = await Promise.all([
     prisma.customer.findMany({
       where,
       include: { assignedAgent: { select: { id: true, name: true } } },
@@ -116,17 +155,48 @@ export async function GET(req: NextRequest) {
       take: limit,
     }),
     prisma.customer.count({ where }),
+    prisma.customer.groupBy({ by: ["stage"], where, _count: true }),
+    prisma.customer.groupBy({ by: ["source", "stage"], where, _count: true }),
   ]);
+  const stageCounts: Record<string, number> = {};
+  for (const g of stageGroups) stageCounts[g.stage] = g._count;
+  // آمار منبع: تعداد مشتری و تعداد رسیده به قرارداد (مرحله CONTRACT یا WON) برای هر منبع
+  const sourceStatsMap = new Map<string | null, { source: string | null; total: number; contracts: number }>();
+  for (const g of sourceGroups) {
+    const key = g.source as string | null;
+    const row = sourceStatsMap.get(key) ?? { source: key, total: 0, contracts: 0 };
+    row.total += g._count;
+    if (g.stage === "CONTRACT" || g.stage === "WON") row.contracts += g._count;
+    sourceStatsMap.set(key, row);
+  }
+  const sourceStats = [...sourceStatsMap.values()].sort((a, b) => b.total - a.total);
+  // آخرین فعالیت هر مشتری (برای بج «راکد») — اگر فعالیتی نیست، تاریخ ثبت مشتری
+  const pageIds = customers.map((c) => c.id);
+  const pageLastActs = pageIds.length
+    ? await prisma.activity.groupBy({
+        by: ["customerId"],
+        where: { customerId: { in: pageIds } },
+        _max: { createdAt: true },
+      })
+    : [];
+  const pageLastById = new Map(pageLastActs.map((a) => [a.customerId as string, a._max.createdAt as Date | null]));
+  const customersWithActivity = customers.map((c) => ({
+    ...c,
+    lastActivityAt: pageLastById.get(c.id) ?? c.createdAt,
+  }));
 
   // Kanban صفحه همیشه کل لیست را می‌خواهد — اگر page/limit پیش‌فرض بود، همان آرایه ساده برگردان
   const isDefaultPage = !searchParams.has("page") && !searchParams.has("limit");
-  if (isDefaultPage) return NextResponse.json(serializeBigInt(customers));
-  return NextResponse.json({ ...serializeBigInt({ customers }), total, page, limit });
+  if (isDefaultPage) return NextResponse.json(serializeBigInt(customersWithActivity));
+  return NextResponse.json({ ...serializeBigInt({ customers: customersWithActivity }), total, page, limit, stageCounts, sourceStats });
 }
 
 export async function POST(req: NextRequest) {
   const session = await getSession();
   if (!session) return NextResponse.json({ error: "وارد نشده‌اید" }, { status: 401 });
+  if (!hasPermission(session.user, "canCreateCustomer")) {
+    return NextResponse.json({ error: "اجازه ثبت مشتری ندارید" }, { status: 403 });
+  }
 
   const body = await req.json();
   const parsed = customerCreateSchema.safeParse(body);
@@ -141,6 +211,14 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: "دلیل از دست رفتن الزامی است" }, { status: 400 });
   }
 
+  // مرحله «موفق» فقط از مسیر معامله می‌آید — ساخت مشتری مستقیم در مرحله WON مجاز نیست
+  if (d.stage === "WON") {
+    return NextResponse.json(
+      { error: "مرحله «موفق» فقط با ثبت معامله قطعی ثبت می‌شود؛ ابتدا معامله را قطعی کنید" },
+      { status: 409 }
+    );
+  }
+
   let assignedAgentId = session.user.id;
   if (session.user.role === "OWNER" && d.assignedAgentId) {
     const agent = await prisma.user.findUnique({ where: { id: d.assignedAgentId } });
@@ -153,7 +231,7 @@ export async function POST(req: NextRequest) {
   const phoneClash = await prisma.customer.findUnique({ where: { phone: d.phone } });
   if (phoneClash) {
     return NextResponse.json(
-      { error: "مشتری با این شماره قبلا ثبت شده است", existingId: phoneClash.id },
+      { error: "مشتری با این شماره قبلا ثبت شده است" },
       { status: 409 }
     );
   }
@@ -166,6 +244,7 @@ export async function POST(req: NextRequest) {
       stage: (d.stage as never) ?? "INITIAL_CONTACT",
       temperature: (d.temperature as never) ?? "WARM",
       source: d.source as never,
+      tags: d.tags ?? [],
       notes: d.notes,
       description: d.description,
       preferredType: d.preferredType as never,
@@ -214,8 +293,10 @@ export async function POST(req: NextRequest) {
 
     await createAuditLog({ actorId: session.user.id, action: "CUSTOMER_CREATED", entityType: "Customer", entityId: customer.id, newValue: { name: d.name } as never });
 
-  // Matching
-  try { await runMatchingForCustomer(customer.id, session.user.id); } catch {}
+  // Matching — شکست تطبیق نباید بی‌صدا رد شود
+  try { await runMatchingForCustomer(customer.id, session.user.id); } catch (e) {
+    console.error("[matching] runMatchingForCustomer failed for", customer.id, e instanceof Error ? e.message : e);
+  }
 
   // Activity
   await prisma.activity.create({ data: { type: "STAGE_CHANGE", agentId: session.user.id, customerId: customer.id, description: `مشتری جدید: ${d.name}`, newValue: d.stage ?? "INITIAL_CONTACT" } });

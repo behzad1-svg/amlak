@@ -32,8 +32,11 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
   if (!customer || customer.deletedAt) return NextResponse.json({ error: "یافت نشد" }, { status: 404 });
   if (!canAccessCustomer(session.user, customer)) return NextResponse.json({ error: "دسترسی ندارید" }, { status: 403 });
   const body = await req.json();
-  // Accept single or array
+  // Accept single or array — capped so one request cannot mass-create rows
   const items = Array.isArray(body) ? body : [body];
+  if (items.length > 20) {
+    return NextResponse.json({ error: "حداکثر ۲۰ پیگیری در هر درخواست" }, { status: 400 });
+  }
   const created = [];
   for (const item of items) {
     const parsed = followUpCreateSchema.safeParse(item);

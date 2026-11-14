@@ -1,10 +1,11 @@
 "use client";
-import { useState, useEffect } from "react";
+import { useState, useEffect, useId } from "react";
 import { useRouter } from "next/navigation";
 import { Header } from "@/components/layout/Header";
 import { Input, NumberInput, Select, Label, Textarea } from "@/components/ui/Input";
 import { Button } from "@/components/ui/Button";
 import { SearchSelect } from "@/components/ui/SearchSelect";
+import { apiFetch, apiJson } from "@/lib/api";
 import { formatTomanWithWords } from "@/lib/money";
 
 type Flags = {
@@ -65,10 +66,12 @@ function Num({
   onChange: (v: string) => void;
   placeholder?: string;
 }) {
+  // نقد ۱۰ — برچسب با htmlFor به ورودی وصل است
+  const fieldId = useId();
   return (
     <div>
-      <Label>{label}</Label>
-      <NumberInput value={value} onChange={(e) => onChange(e.target.value)} placeholder={placeholder} className="mt-1" />
+      <Label htmlFor={fieldId}>{label}</Label>
+      <NumberInput id={fieldId} value={value} onChange={(e) => onChange(e.target.value)} placeholder={placeholder} className="mt-1" />
     </div>
   );
 }
@@ -87,20 +90,40 @@ export default function NewPropertyPage() {
     isAppraised: "false",
   });
   const [flags, setFlags] = useState<Flags>(emptyFlags);
+  const [agents, setAgents] = useState<{ id: string; name: string }[]>([]);
+  const [accessUserIds, setAccessUserIds] = useState<string[]>([]);
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(false);
   const upd = (k: string, v: string) => setForm((f) => ({ ...f, [k]: v }));
   const setFlag = (k: keyof Flags, v: boolean) => setFlags((f) => ({ ...f, [k]: v }));
+  const toggleAccess = (id: string) =>
+    setAccessUserIds((s) => (s.includes(id) ? s.filter((x) => x !== id) : [...s, id]));
 
   useEffect(() => {
-    fetch("/api/customers?showLost=true&limit=200").then((r) => r.json()).then((d) => {
-      const list = Array.isArray(d) ? d : d?.customers ?? [];
-      setOwners(list);
-    });
-    fetch("/api/settings").then((r) => r.json()).then((d) => {
-      if (d.regions) setRegions(d.regions);
-      if (d.propertyTypes) setPropertyTypes(d.propertyTypes);
-    });
+    apiJson<{ customers?: { id: string; name: string; phone?: string }[] } | { id: string; name: string; phone?: string }[]>("/api/customers?showLost=true&limit=200")
+      .then((d) => {
+        const list = Array.isArray(d) ? d : d?.customers ?? [];
+        setOwners(list);
+      })
+      .catch(() => {});
+    apiJson<{ regions?: string[]; propertyTypes?: { value: string; label: string }[] }>("/api/settings")
+      .then((d) => {
+        if (d.regions) setRegions(d.regions);
+        if (d.propertyTypes) setPropertyTypes(d.propertyTypes);
+      })
+      .catch(() => {});
+    // مشاورهای دیگر برای لیست دسترسی کامل (خود ثبت‌کننده همیشه کامل می‌بیند)
+    apiJson<{ user?: { id: string } }>("/api/auth/me")
+      .then((me) => {
+        const meId = me?.user?.id;
+        return apiJson<{ id: string; name: string; role: string; active?: boolean }[]>("/api/users").then((us) => {
+          const list = (Array.isArray(us) ? us : []).filter(
+            (u) => u.role === "AGENT" && u.id !== meId && u.active !== false
+          );
+          setAgents(list.map((u) => ({ id: u.id, name: u.name })));
+        });
+      })
+      .catch(() => {});
   }, []);
 
   async function submit(e: React.FormEvent) {
@@ -137,6 +160,7 @@ export default function NewPropertyPage() {
         hasRenovated: flags.hasRenovated,
         isNewBuild: flags.isNewBuild,
         isAppraised: form.isAppraised === "true",
+        accessUserIds,
       };
 
       if (form.dealType === "SALE") body.salePriceToman = form.salePriceToman || null;
@@ -164,16 +188,11 @@ export default function NewPropertyPage() {
         if (form.passageWidth) body.passageWidth = parseFloat(form.passageWidth);
       }
 
-      const res = await fetch("/api/properties", {
+      await apiFetch("/api/properties", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(body),
       });
-      const data = await res.json().catch(() => ({}));
-      if (!res.ok) {
-        setError(data.error ?? `خطا (${res.status})`);
-        return;
-      }
       router.push("/properties");
     } catch (err) {
       setError(err instanceof Error ? err.message : "خطا در ارتباط با سرور");
@@ -207,25 +226,25 @@ export default function NewPropertyPage() {
           <h3 className="text-[13px] font-bold mb-3">مشخصات اصلی</h3>
           <div className="grid gap-4 md:grid-cols-2">
             <div>
-              <Label>عنوان *</Label>
-              <Input value={form.title} onChange={(e) => upd("title", e.target.value)} required placeholder="مثلا آپارتمان 2خوابه بهمنی" className="mt-1" />
+              <Label htmlFor="f-title">عنوان *</Label>
+              <Input id="f-title" value={form.title} onChange={(e) => upd("title", e.target.value)} required placeholder="مثلا آپارتمان 2خوابه بهمنی" className="mt-1" />
             </div>
             <div>
-              <Label>نوع ملک</Label>
-              <Select value={form.type} onChange={(e) => upd("type", e.target.value)} className="mt-1">
+              <Label htmlFor="f-type">نوع ملک</Label>
+              <Select id="f-type" value={form.type} onChange={(e) => upd("type", e.target.value)} className="mt-1">
                 {propertyTypes.map((pt) => <option key={pt.value} value={pt.value}>{pt.label}</option>)}
               </Select>
             </div>
             <div>
-              <Label>نوع معامله</Label>
-              <Select value={form.dealType} onChange={(e) => upd("dealType", e.target.value)} className="mt-1">
+              <Label htmlFor="f-dealType">نوع معامله</Label>
+              <Select id="f-dealType" value={form.dealType} onChange={(e) => upd("dealType", e.target.value)} className="mt-1">
                 <option value="SALE">فروش</option>
                 <option value="RENT">رهن و اجاره</option>
               </Select>
             </div>
             <div>
-              <Label>منطقه *</Label>
-              <Select value={form.region} onChange={(e) => upd("region", e.target.value)} className="mt-1" required>
+              <Label htmlFor="f-region">منطقه *</Label>
+              <Select id="f-region" value={form.region} onChange={(e) => upd("region", e.target.value)} className="mt-1" required>
                 <option value="">انتخاب کنید</option>
                 {regions.map((r) => <option key={r} value={r}>{r}</option>)}
               </Select>
@@ -242,29 +261,29 @@ export default function NewPropertyPage() {
               />
             </div>
             <div>
-              <Label>آدرس دقیق</Label>
-              <Input value={form.address} onChange={(e) => upd("address", e.target.value)} placeholder="خیابان، کوچه، پلاک..." className="mt-1" />
+              <Label htmlFor="f-address">آدرس دقیق</Label>
+              <Input id="f-address" value={form.address} onChange={(e) => upd("address", e.target.value)} placeholder="خیابان، کوچه، پلاک..." className="mt-1" />
             </div>
             <div className="md:col-span-2">
-              <Label>توضیحات فایل</Label>
-              <Textarea value={form.description} onChange={(e) => upd("description", e.target.value)} placeholder="نکات فایل: مالک عجله دارد، قیمت قابل مذاکره است..." rows={3} className="mt-1" />
+              <Label htmlFor="f-description">توضیحات فایل</Label>
+              <Textarea id="f-description" value={form.description} onChange={(e) => upd("description", e.target.value)} placeholder="نکات فایل: مالک عجله دارد، قیمت قابل مذاکره است..." rows={3} className="mt-1" />
             </div>
             {form.dealType === "SALE" ? (
               <div>
-                <Label>قیمت فروش (تومان)</Label>
-                <NumberInput value={form.salePriceToman} onChange={(e) => upd("salePriceToman", e.target.value)} placeholder="3500000000" className="mt-1" />
+                <Label htmlFor="f-salePriceToman">قیمت فروش (تومان)</Label>
+                <NumberInput id="f-salePriceToman" value={form.salePriceToman} onChange={(e) => upd("salePriceToman", e.target.value)} placeholder="3500000000" className="mt-1" />
                 {saleWords && <p className="mt-1 text-xs text-[var(--ink-3)]">{saleWords}</p>}
               </div>
             ) : (
               <>
                 <div>
-                  <Label>رهن / ودیعه (تومان)</Label>
-                  <NumberInput value={form.depositToman} onChange={(e) => upd("depositToman", e.target.value)} className="mt-1" />
+                  <Label htmlFor="f-depositToman">رهن / ودیعه (تومان)</Label>
+                  <NumberInput id="f-depositToman" value={form.depositToman} onChange={(e) => upd("depositToman", e.target.value)} className="mt-1" />
                   {depositWords && <p className="mt-1 text-xs text-[var(--ink-3)]">{depositWords}</p>}
                 </div>
                 <div>
-                  <Label>اجاره ماهانه (تومان)</Label>
-                  <NumberInput value={form.monthlyRentToman} onChange={(e) => upd("monthlyRentToman", e.target.value)} className="mt-1" />
+                  <Label htmlFor="f-monthlyRentToman">اجاره ماهانه (تومان)</Label>
+                  <NumberInput id="f-monthlyRentToman" value={form.monthlyRentToman} onChange={(e) => upd("monthlyRentToman", e.target.value)} className="mt-1" />
                   {rentWords && <p className="mt-1 text-xs text-[var(--ink-3)]">{rentWords}</p>}
                 </div>
               </>
@@ -342,6 +361,25 @@ export default function NewPropertyPage() {
               </label>
             </div>
           </div>
+        </div>
+
+        <div className="rounded-[14px] border border-[var(--line)] bg-white p-4">
+          <h3 className="text-[13px] font-bold mb-1">دسترسی کامل مشاورهای دیگر</h3>
+          <p className="text-[12px] text-[var(--ink-3)] mb-3">
+            مشاورهای تیک‌خورده آدرس دقیق، نام و شماره مالک را می‌بینند. بقیه فقط اطلاعات جزئی فایل را می‌بینند.
+          </p>
+          {agents.length === 0 ? (
+            <p className="text-[13px] text-[var(--ink-3)]">مشاور دیگری در سیستم نیست.</p>
+          ) : (
+            <div className="flex flex-wrap gap-x-5 gap-y-2">
+              {agents.map((a) => (
+                <label key={a.id} className="flex items-center gap-2 text-[13px] cursor-pointer">
+                  <input type="checkbox" checked={accessUserIds.includes(a.id)} onChange={() => toggleAccess(a.id)} />
+                  {a.name}
+                </label>
+              ))}
+            </div>
+          )}
         </div>
 
         <Button type="submit" disabled={loading}>{loading ? "در حال ثبت..." : "ثبت فایل"}</Button>

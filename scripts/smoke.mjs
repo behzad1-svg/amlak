@@ -1,6 +1,10 @@
 /**
  * Smoke checks against a running app (npm run dev / start).
  * Usage: BASE_URL=http://localhost:3000 SMOKE_PHONE=... SMOKE_PASSWORD=... npm run smoke
+ * Covers (critique rec 12): health + dbMs, seed lock (POST only, GET removed),
+ * login/me/401s, customer create + duplicate 409, search, property + deal,
+ * matching notification, deal COMPLETED -> property SOLD, dashboard timing,
+ * CSV export, error-logs, logout invalidation.
  */
 const BASE = process.env.BASE_URL || "http://localhost:3000";
 const PHONE = process.env.SMOKE_PHONE || "09170000001";
@@ -49,18 +53,19 @@ function extractToken(setCookie) {
 async function main() {
   console.log(`Smoke → ${BASE}\n`);
 
-  // 1) Health is public
+  // 1) Health is public + reports DB latency (critique rec 6)
   {
     const r = await req("/api/health");
-    if (r.status === 200 && r.json?.status === "ok") ok("health public + db ok");
+    if (r.status === 200 && r.json?.status === "ok" && typeof r.json?.dbMs === "number")
+      ok(`health public + db ok (dbMs=${r.json.dbMs})`);
     else bad("health", `${r.status} ${JSON.stringify(r.json)}`);
   }
 
-  // 2) Seed not public — middleware 401 without cookie; route 403 without SEED_ENABLED
+  // 2) Seed not public — proxy 401 without cookie; no GET handler exists at all
   {
     const r = await req("/api/seed");
-    if (r.status === 401 || r.status === 403) ok(`seed not public (got ${r.status})`);
-    else bad("seed not public", `expected 401/403 got ${r.status}`);
+    if (r.status === 401 || r.status === 404) ok(`seed GET not public (got ${r.status})`);
+    else bad("seed GET not public", `expected 401/404 got ${r.status}`);
   }
 
   // 3) Security headers on login page
@@ -148,6 +153,7 @@ async function main() {
 
   // 9) Create property + deal
   let propertyId = null;
+  let dealId = null;
   if (customerId) {
     const owner = await req("/api/customers", {
       method: "POST",
@@ -191,6 +197,7 @@ async function main() {
           notes: "smoke",
         },
       });
+      dealId = deal.json?.id ?? null;
       if (deal.status === 201) ok("create deal PENDING");
       else bad("create deal", `${deal.status} ${JSON.stringify(deal.json)}`);
 
@@ -201,14 +208,104 @@ async function main() {
       });
       if (deal2.status === 409) ok("second open deal on property → 409");
       else bad("second open deal", `expected 409 got ${deal2.status}`);
+
+  // 9b) WON guard: direct stage change to WON is rejected (only the deal flow sets WON)
+  if (customerId) {
+    const w = await req(`/api/customers/${customerId}`, {
+      method: "PATCH",
+      cookie,
+      body: { stage: "WON" },
+    });
+    if (w.status === 409) ok("direct PATCH stage=WON → 409");
+    else bad("WON guard", `expected 409 got ${w.status}`);
+
+    const wc = await req("/api/customers", {
+      method: "POST",
+      cookie,
+      body: { name: `Won ${stamp}`, phone: `07${stamp}`, type: "BUYER", stage: "WON" },
+    });
+    if (wc.status === 409) ok("create customer with stage=WON → 409");
+    else bad("WON guard on create", `expected 409 got ${wc.status}`);
+  }
     }
   }
 
-  // 10) Seed still locked with cookie but without SEED_ENABLED
+  // 10) Seed still locked with cookie but without SEED_ENABLED (POST only; GET removed)
   {
-    const r = await req("/api/seed", { cookie });
-    if (r.status === 403) ok("seed locked even when authenticated (no flag)");
-    else bad("seed authenticated", `expected 403 got ${r.status}`);
+    const r = await req("/api/seed", { method: "POST", cookie });
+    if (r.status === 403) ok("seed POST locked even when authenticated (no flag)");
+    else bad("seed POST authenticated", `expected 403 got ${r.status}`);
+    const rg = await req("/api/seed", { cookie });
+    if (rg.status === 404 || rg.status === 405) ok(`seed GET handler removed (${rg.status} even authenticated)`);
+    else bad("seed GET removed", `expected 404/405 got ${rg.status}`);
+  }
+
+  // 12) Matching created a notification for the smoke pair (critique rec 7)
+  // property creation runs runMatchingForProperty; the smoke buyer (SALE, max 5B)
+  // matches the smoke property (SALE, 1B, no area/type constraint) at ~76% >= 70.
+  // The notification must name BOTH sides and link to the matched customer.
+  if (customerId && propertyId) {
+    const r = await req("/api/notifications?limit=50", { cookie });
+    const list = r.json?.notifications ?? [];
+    const note = list.find((n) => n.type === "MATCH_SUGGESTION" && n.relatedId === customerId);
+    if (
+      r.status === 200 &&
+      note &&
+      note.relatedType === "Customer" &&
+      typeof note.message === "string" &&
+      note.message.includes(`Smoke ${stamp}`) &&
+      note.message.includes(`Smoke unit ${stamp}`)
+    )
+      ok("matching notification names both sides + links to customer");
+    else bad("matching notification", `${r.status} found=${list.length} note=${JSON.stringify(note)?.slice(0, 240)}`);
+  }
+
+  // 13) Deal COMPLETED -> property SOLD (critique rec 12)
+  if (dealId && propertyId) {
+    const done = await req(`/api/deals/${dealId}`, {
+      method: "PATCH",
+      cookie,
+      body: { status: "COMPLETED" },
+    });
+    if (done.status === 200) ok("deal COMPLETED");
+    else bad("deal COMPLETED", `${done.status} ${JSON.stringify(done.json)}`);
+    const prop = await req(`/api/properties/${propertyId}`, { cookie });
+    if (prop.status === 200 && prop.json?.status === "SOLD") ok("completed deal -> property SOLD");
+    else bad("property SOLD after completion", `${prop.status} status=${prop.json?.status}`);
+    const cust = await req(`/api/customers/${customerId}`, { cookie });
+    if (cust.status === 200 && cust.json?.stage === "WON") ok("completed deal -> customer WON");
+    else bad("customer WON after completion", `${cust.status} stage=${cust.json?.stage}`);
+  }
+
+  // 14) Dashboard is fast + honest totals (critique rec 2)
+  {
+    const t0 = Date.now();
+    const r = await req("/api/dashboard", { cookie });
+    const ms = Date.now() - t0;
+    if (r.status === 200 && typeof r.json?.overdueTotal === "number") {
+      if (ms <= 5000) ok(`dashboard ${ms}ms (overdueTotal=${r.json.overdueTotal})`);
+      else bad("dashboard slow", `${ms}ms > 5000ms`);
+    } else bad("dashboard", `${r.status} ${JSON.stringify(r.json)?.slice(0, 200)}`);
+  }
+
+  // 15) CSV export as OWNER (critique rec 5)
+  {
+    const c = await req("/api/admin/export?kind=customers", { cookie });
+    const ct = c.headers.get("content-type") || "";
+    if (c.status === 200 && ct.includes("text/csv")) ok("CSV export customers");
+    else bad("CSV export customers", `${c.status} ${ct}`);
+    const p = await req("/api/admin/export?kind=properties", { cookie });
+    if (p.status === 200) ok("CSV export properties");
+    else bad("CSV export properties", `${p.status}`);
+  }
+
+  // 16) Error log readable by OWNER (critique rec 6; table may not exist yet -> unavailable)
+  {
+    const r = await req("/api/admin/error-logs?limit=5", { cookie });
+    if (r.status === 200 && Array.isArray(r.json?.logs)) ok("error-logs readable");
+    else if (r.status === 200 && r.json?.unavailable === true)
+      ok("error-logs table not yet in DB (fallback ok)");
+    else bad("error-logs", `${r.status} ${JSON.stringify(r.json)?.slice(0, 200)}`);
   }
 
   // 11) Logout invalidates token

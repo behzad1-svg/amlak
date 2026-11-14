@@ -44,12 +44,12 @@ export default function LoginPage() {
 
             <form onSubmit={handleSubmit} className="mt-6 space-y-4">
               <div>
-                <Label>شماره تماس</Label>
-                <Input value={phone} onChange={(e) => setPhone(e.target.value)} placeholder="0917..." dir="ltr" className="mt-1.5 text-left" />
+                <Label htmlFor="f-phone">شماره تماس</Label>
+                <Input id="f-phone" value={phone} onChange={(e) => setPhone(e.target.value)} placeholder="0917..." dir="ltr" className="mt-1.5 text-left" autoComplete="username" inputMode="tel" required />
               </div>
               <div>
-                <Label>رمز عبور</Label>
-                <Input type="password" value={password} onChange={(e) => setPassword(e.target.value)} placeholder="••••••••" dir="ltr" className="mt-1.5 text-left" />
+                <Label htmlFor="f-password">رمز عبور</Label>
+                <Input id="f-password" type="password" value={password} onChange={(e) => setPassword(e.target.value)} placeholder="••••••••" dir="ltr" className="mt-1.5 text-left" autoComplete="current-password" required />
               </div>
               <Button type="submit" disabled={loading} className="w-full mt-2">{loading ? "در حال ورود..." : "ورود"}</Button>
             </form>
@@ -57,7 +57,7 @@ export default function LoginPage() {
             <p className="mt-6 text-center text-[11px] tracking-widest text-[var(--ink-3)]">بوشهر — سامانه CRM املاک ساج</p>
           </div>
 
-          <p className="mt-6 text-center text-[12px] leading-5 text-[var(--ink-3)]">پیگیری اجباری · تطبیق هوشمند · دسترسی کنترل‌شده</p>
+          <p className="mt-6 text-center text-[12px] leading-5 text-[var(--ink-3)]">پیگیری منظم · تطبیق هوشمند · دسترسی کنترل‌شده</p>
         </div>
       </div>
 

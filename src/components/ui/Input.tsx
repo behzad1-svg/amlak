@@ -1,7 +1,7 @@
 import { cn } from "@/lib/utils";
 
 const fieldBase =
-  "w-full rounded-[12px] border border-[var(--line)] bg-white px-3 py-2.5 text-[13.5px] text-[var(--ink)] placeholder:text-[var(--ink-3)]/60 outline-none transition-colors focus:border-[var(--pomegranate)] focus:ring-2 focus:ring-[var(--pomegranate-soft)]";
+  "min-w-0 w-full rounded-[12px] border border-[var(--line)] bg-white px-3 py-2.5 text-[13.5px] text-[var(--ink)] placeholder:text-[var(--ink-3)]/60 outline-none transition-colors focus:border-[var(--pomegranate)] focus:ring-2 focus:ring-[var(--pomegranate-soft)]";
 
 export function Input({ className, ...props }: React.InputHTMLAttributes<HTMLInputElement>) {
   return <input className={cn(fieldBase, className)} {...props} />;

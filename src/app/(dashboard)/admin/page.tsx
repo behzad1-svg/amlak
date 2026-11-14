@@ -1,3 +1,6 @@
+// نقد ۱، ۵ و ۶ — مدیریت با کمک‌کنندهٔ مرکزی (خطای بارگذاری + تلاش دوباره)،
+// دکمه‌های خروجی CSV برای پشتیبان‌گیری، و بخش لاگ خطاهای سرور برای مدیر.
+// پیام خطا تا اقدام بعدی می‌ماند؛ فقط پیام موفقیت خودبه‌خود پاک می‌شود.
 "use client";
 import { useCallback, useEffect, useState } from "react";
 import Link from "next/link";
@@ -5,6 +8,9 @@ import { Header } from "@/components/layout/Header";
 import { Card, CardHeader, CardTitle } from "@/components/ui/Card";
 import { Button } from "@/components/ui/Button";
 import { Input, Label, PhoneInput, Select } from "@/components/ui/Input";
+import { PageError, PageSkeleton } from "@/components/ui/LoadState";
+import { apiFetch, apiJson, errorMessage } from "@/lib/api";
+import { formatDateTime } from "@/lib/utils";
 import { ACTIVITY_TYPE_LABELS } from "@/lib/constants";
 
 type Breakdown = {
@@ -50,11 +56,24 @@ type ActivityRow = {
   customer?: { id: string; name: string } | null;
 };
 
+type ErrorLogRow = {
+  id: string;
+  route: string;
+  method: string;
+  status: number;
+  message: string;
+  createdAt: string;
+};
+
 type DashboardData = { teamStats: TeamStat[] | null };
 
 export default function AdminPage() {
   const [data, setData] = useState<DashboardData | null>(null);
   const [users, setUsers] = useState<AdminUser[]>([]);
+  const [errorLogs, setErrorLogs] = useState<ErrorLogRow[]>([]);
+  const [errorLogsUnavailable, setErrorLogsUnavailable] = useState(false);
+  const [loading, setLoading] = useState(true);
+  const [loadError, setLoadError] = useState<string | null>(null);
   const [msg, setMsg] = useState("");
   const [err, setErr] = useState("");
   const [saving, setSaving] = useState(false);
@@ -69,19 +88,31 @@ export default function AdminPage() {
   const flash = useCallback((ok: string, bad?: string) => {
     setMsg(ok);
     setErr(bad ?? "");
-    setTimeout(() => { setMsg(""); setErr(""); }, 2800);
+    if (ok) setTimeout(() => setMsg(""), 2800);
   }, []);
 
   const load = useCallback(async () => {
-    const [dash, usersRes] = await Promise.all([
-      fetch("/api/dashboard").then((r) => r.json()),
-      fetch("/api/users").then((r) => r.json()),
-    ]);
-    setData(dash);
-    setUsers(Array.isArray(usersRes) ? usersRes : []);
+    setLoading(true);
+    setLoadError(null);
+    try {
+      const [dash, usersRes, logsRes] = await Promise.all([
+        apiJson<DashboardData>("/api/dashboard"),
+        apiJson<AdminUser[]>("/api/users"),
+        apiJson<{ logs?: ErrorLogRow[]; unavailable?: boolean }>("/api/admin/error-logs?limit=50").catch(() => ({ logs: [], unavailable: true })),
+      ]);
+      setData(dash);
+      setUsers(Array.isArray(usersRes) ? usersRes : []);
+      setErrorLogs(logsRes.logs ?? []);
+      setErrorLogsUnavailable(Boolean(logsRes.unavailable));
+    } catch (e) {
+      setLoadError(errorMessage(e));
+    } finally {
+      setLoading(false);
+    }
   }, []);
 
   useEffect(() => {
+    // بارگذاری اولیهٔ داده — الگوی استاندارد صفحه‌های کلاینتی
     // eslint-disable-next-line react-hooks/set-state-in-effect
     load();
   }, [load]);
@@ -90,32 +121,41 @@ export default function AdminPage() {
     setSelectedAgent(a);
     setLoadingActs(true);
     setAgentActivities([]);
-    const res = await fetch(`/api/activities?agentId=${a.id}&limit=50`);
-    const d = await res.json().catch(() => []);
-    setAgentActivities(Array.isArray(d) ? d : d?.activities ?? []);
-    setLoadingActs(false);
+    try {
+      const d = await apiJson<{ activities?: ActivityRow[] } | ActivityRow[]>(`/api/activities?agentId=${a.id}&limit=50`);
+      setAgentActivities(Array.isArray(d) ? d : d?.activities ?? []);
+    } catch (e) {
+      flash("", errorMessage(e));
+    } finally {
+      setLoadingActs(false);
+    }
   }
 
   async function createUser(e: React.FormEvent) {
     e.preventDefault();
     setSaving(true);
-    const res = await fetch("/api/users", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify(form),
-    });
-    const j = await res.json().catch(() => ({}));
-    setSaving(false);
-    if (!res.ok) return flash("", j.error || "خطا در ساخت کاربر");
-    setForm({ name: "", phone: "", password: "", role: "AGENT" });
-    flash("کاربر ساخته شد");
-    load();
+    setErr("");
+    try {
+      await apiFetch("/api/users", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(form),
+      });
+      setForm({ name: "", phone: "", password: "", role: "AGENT" });
+      flash("کاربر ساخته شد");
+      load();
+    } catch (err2) {
+      flash("", errorMessage(err2));
+    } finally {
+      setSaving(false);
+    }
   }
 
   async function saveUser(e: React.FormEvent) {
     e.preventDefault();
     if (!editId) return;
     setSaving(true);
+    setErr("");
     const body: Record<string, unknown> = {
       name: edit.name,
       phone: edit.phone,
@@ -123,40 +163,47 @@ export default function AdminPage() {
       active: edit.active,
     };
     if (edit.password) body.password = edit.password;
-    const res = await fetch(`/api/users/${editId}`, {
-      method: "PATCH",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify(body),
-    });
-    const j = await res.json().catch(() => ({}));
-    setSaving(false);
-    if (!res.ok) return flash("", j.error || "خطا در ذخیره");
-    setEditId(null);
-    setEdit({ name: "", phone: "", role: "AGENT", active: true, password: "" });
-    flash("کاربر به‌روزرسانی شد");
-    load();
+    try {
+      await apiFetch(`/api/users/${editId}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(body),
+      });
+      setEditId(null);
+      setEdit({ name: "", phone: "", role: "AGENT", active: true, password: "" });
+      flash("کاربر به‌روزرسانی شد");
+      load();
+    } catch (err2) {
+      flash("", errorMessage(err2));
+    } finally {
+      setSaving(false);
+    }
   }
 
   async function toggleActive(u: AdminUser) {
-    const res = await fetch(`/api/users/${u.id}`, {
-      method: "PATCH",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ active: !u.active }),
-    });
-    const j = await res.json().catch(() => ({}));
-    if (!res.ok) return flash("", j.error || "خطا");
-    flash(u.active ? "کاربر غیرفعال شد" : "کاربر فعال شد");
-    load();
+    setErr("");
+    try {
+      await apiFetch(`/api/users/${u.id}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ active: !u.active }),
+      });
+      flash(u.active ? "کاربر غیرفعال شد" : "کاربر فعال شد");
+      load();
+    } catch (err2) {
+      flash("", errorMessage(err2));
+    }
   }
 
-  if (!data) return <div className="p-8 text-center text-zinc-400">بارگذاری...</div>;
+  if (loading) return <PageSkeleton rows={4} />;
+  if (loadError || !data) return <PageError message={loadError ?? "داده بارگذاری نشد."} onRetry={load} />;
 
   return (
     <div>
       <Header title="مدیریت" subtitle="آمار فعالیت تیم و کاربران" />
-      <div className="p-6 space-y-6 max-w-[1200px]">
+      <div className="p-4 sm:p-6 space-y-6 max-w-[1200px]">
         {msg && <div className="rounded-lg bg-emerald-50 px-3 py-2 text-sm text-emerald-700">{msg}</div>}
-        {err && <div className="rounded-lg bg-red-50 px-3 py-2 text-sm text-red-700">{err}</div>}
+        {err && <div className="rounded-lg bg-red-50 px-3 py-2 text-sm text-red-700" role="alert">{err}</div>}
 
         <Card>
           <CardHeader>
@@ -262,20 +309,20 @@ export default function AdminPage() {
 
           <form onSubmit={createUser} className="mb-5 grid gap-3 sm:grid-cols-5 items-end">
             <div>
-              <Label>نام</Label>
-              <Input className="mt-1" value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })} required />
+              <Label htmlFor="f-name">نام</Label>
+              <Input id="f-name" className="mt-1" value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })} required />
             </div>
             <div>
-              <Label>شماره</Label>
-              <PhoneInput className="mt-1" value={form.phone} onChange={(e) => setForm({ ...form, phone: e.target.value })} required />
+              <Label htmlFor="f-phone">شماره</Label>
+              <PhoneInput id="f-phone" className="mt-1" value={form.phone} onChange={(e) => setForm({ ...form, phone: e.target.value })} required />
             </div>
             <div>
-              <Label>رمز عبور</Label>
-              <Input type="password" className="mt-1" value={form.password} onChange={(e) => setForm({ ...form, password: e.target.value })} required minLength={8} />
+              <Label htmlFor="f-password">رمز عبور (حداقل ۱۲ کاراکتر)</Label>
+              <Input id="f-password" type="password" className="mt-1" value={form.password} onChange={(e) => setForm({ ...form, password: e.target.value })} required minLength={12} />
             </div>
             <div>
-              <Label>نقش</Label>
-              <Select className="mt-1" value={form.role} onChange={(e) => setForm({ ...form, role: e.target.value })}>
+              <Label htmlFor="f-role">نقش</Label>
+              <Select id="f-role" className="mt-1" value={form.role} onChange={(e) => setForm({ ...form, role: e.target.value })}>
                 <option value="AGENT">مشاور</option>
                 <option value="OWNER">مدیر</option>
               </Select>
@@ -332,20 +379,20 @@ export default function AdminPage() {
           {editId && (
             <form onSubmit={saveUser} className="mt-5 rounded-[12px] border border-[var(--line)] bg-[var(--paper-2)] p-4 grid gap-3 sm:grid-cols-5 items-end">
               <div>
-                <Label>نام</Label>
-                <Input className="mt-1" value={edit.name} onChange={(e) => setEdit({ ...edit, name: e.target.value })} required />
+                <Label htmlFor="f-name-2">نام</Label>
+                <Input id="f-name-2" className="mt-1" value={edit.name} onChange={(e) => setEdit({ ...edit, name: e.target.value })} required />
               </div>
               <div>
-                <Label>شماره</Label>
-                <PhoneInput className="mt-1" value={edit.phone} onChange={(e) => setEdit({ ...edit, phone: e.target.value })} required />
+                <Label htmlFor="f-phone-2">شماره</Label>
+                <PhoneInput id="f-phone-2" className="mt-1" value={edit.phone} onChange={(e) => setEdit({ ...edit, phone: e.target.value })} required />
               </div>
               <div>
-                <Label>رمز جدید (اختیاری)</Label>
-                <Input type="password" className="mt-1" placeholder="خالی = بدون تغییر" value={edit.password} onChange={(e) => setEdit({ ...edit, password: e.target.value })} minLength={8} />
+                <Label htmlFor="f-password-2">رمز جدید (اختیاری)</Label>
+                <Input id="f-password-2" type="password" className="mt-1" placeholder="خالی = بدون تغییر" value={edit.password} onChange={(e) => setEdit({ ...edit, password: e.target.value })} minLength={12} />
               </div>
               <div>
-                <Label>نقش</Label>
-                <Select className="mt-1" value={edit.role} onChange={(e) => setEdit({ ...edit, role: e.target.value })}>
+                <Label htmlFor="f-role-2">نقش</Label>
+                <Select id="f-role-2" className="mt-1" value={edit.role} onChange={(e) => setEdit({ ...edit, role: e.target.value })}>
                   <option value="AGENT">مشاور</option>
                   <option value="OWNER">مدیر</option>
                 </Select>
@@ -355,6 +402,43 @@ export default function AdminPage() {
                 <Button type="button" variant="ghost" onClick={() => setEditId(null)}>انصراف</Button>
               </div>
             </form>
+          )}
+        </Card>
+
+        <Card>
+          <CardHeader><CardTitle>خروجی داده (پشتیبان)</CardTitle></CardHeader>
+          <p className="text-[13px] leading-6 text-[var(--ink-3)]">
+            دانلود همهٔ مشتریان و فایل‌ها به‌صورت CSV — برای پشتیبان‌گیری یا انتقال به سیستم دیگر. فقط مدیر به این خروجی دسترسی دارد.
+          </p>
+          <div className="mt-3 flex flex-wrap gap-2">
+            <a href="/api/admin/export?kind=customers" className="inline-flex min-h-10 items-center justify-center gap-1.5 rounded-[12px] border border-[var(--line)] bg-white px-4 py-2 text-[13.5px] font-medium text-[var(--ink-2)] hover:bg-[var(--paper-2)]">
+              دانلود CSV مشتریان
+            </a>
+            <a href="/api/admin/export?kind=properties" className="inline-flex min-h-10 items-center justify-center gap-1.5 rounded-[12px] border border-[var(--line)] bg-white px-4 py-2 text-[13.5px] font-medium text-[var(--ink-2)] hover:bg-[var(--paper-2)]">
+              دانلود CSV فایل‌ها
+            </a>
+          </div>
+        </Card>
+
+        <Card>
+          <CardHeader><CardTitle>لاگ خطاهای سرور</CardTitle></CardHeader>
+          {errorLogsUnavailable ? (
+            <p className="text-[13px] text-[var(--ink-3)]">جدول لاگ هنوز در دیتابیس ساخته نشده است؛ خطاها فعلاً فقط در کنسول سرور ثبت می‌شوند.</p>
+          ) : errorLogs.length === 0 ? (
+            <p className="text-[13px] text-[var(--ink-3)]">خطایی ثبت نشده است.</p>
+          ) : (
+            <div className="max-h-80 space-y-2 overflow-y-auto">
+              {errorLogs.map((l) => (
+                <div key={l.id} className="rounded-[10px] border border-[var(--line)] px-3 py-2 text-[12.5px]">
+                  <div className="flex flex-wrap items-center gap-2">
+                    <span className="rounded bg-red-50 border border-red-200 px-1.5 py-0.5 text-[11px] font-bold text-red-700">{l.status}</span>
+                    <span className="font-medium" dir="ltr">{l.method} {l.route}</span>
+                    <span className="text-[var(--ink-3)]">{formatDateTime(l.createdAt)}</span>
+                  </div>
+                  <div className="mt-1 break-words text-[var(--ink-2)]">{l.message}</div>
+                </div>
+              ))}
+            </div>
           )}
         </Card>
       </div>

@@ -1,10 +1,11 @@
 "use client";
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { Button } from "@/components/ui/Button";
 import { Label, Textarea } from "@/components/ui/Input";
 import { SearchSelect } from "@/components/ui/SearchSelect";
 import { LOST_REASON_LABELS, PROPERTY_TYPE_LABELS, DEAL_TYPE_LABELS } from "@/lib/constants";
-import { formatToman } from "@/lib/utils";
+import { formatTomanCompact, toFaDigits } from "@/lib/utils";
+import { apiJson } from "@/lib/api";
 
 type PropertyOption = {
   id: string;
@@ -41,7 +42,39 @@ export function StageOutcomeModal({
 }) {
   const isWon = kind === "WON";
   const [properties, setProperties] = useState<PropertyOption[]>([]);
+  const [propertiesTotal, setPropertiesTotal] = useState<number | null>(null);
+  const [propertiesError, setPropertiesError] = useState("");
   const [propertyId, setPropertyId] = useState("");
+  const panelRef = useRef<HTMLDivElement>(null);
+
+  // نقد ۱۰ — مودال دیالوگ واقعی است: Escape می‌بندد و Tab داخل مودال می‌ماند
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === "Escape") {
+        e.stopPropagation();
+        onClose();
+        return;
+      }
+      if (e.key !== "Tab" || !panelRef.current) return;
+      const els = panelRef.current.querySelectorAll<HTMLElement>(
+        'button, [href], input, select, textarea, [tabindex]:not([tabindex="-1"])'
+      );
+      const list = Array.from(els).filter((el) => !el.hasAttribute("disabled") && el.offsetParent !== null);
+      if (list.length === 0) return;
+      const first = list[0];
+      const last = list[list.length - 1];
+      if (e.shiftKey && document.activeElement === first) {
+        e.preventDefault();
+        last.focus();
+      } else if (!e.shiftKey && document.activeElement === last) {
+        e.preventDefault();
+        first.focus();
+      }
+    };
+    document.addEventListener("keydown", onKey, true);
+    panelRef.current?.querySelector<HTMLElement>("button, input, select, textarea")?.focus();
+    return () => document.removeEventListener("keydown", onKey, true);
+  }, [onClose]);
   const [notes, setNotes] = useState("");
   const [reasonCat, setReasonCat] = useState("OTHER");
   const [reasonDetail, setReasonDetail] = useState("");
@@ -53,13 +86,17 @@ export function StageOutcomeModal({
     const params = new URLSearchParams({ status: "ACTIVE", limit: "100" });
     if (preferredDealType) params.set("dealType", preferredDealType);
     if (preferredType) params.set("type", preferredType);
-    fetch(`/api/properties?${params.toString()}`)
-      .then((r) => r.json())
+    apiJson<{ properties?: PropertyOption[]; total?: number } | PropertyOption[]>(`/api/properties?${params.toString()}`)
       .then((d) => {
         const list = Array.isArray(d) ? d : d?.properties ?? [];
         setProperties(list as PropertyOption[]);
+        setPropertiesTotal(Array.isArray(d) ? list.length : d.total ?? list.length);
       })
-      .catch(() => setProperties([]));
+      .catch(() => {
+        setProperties([]);
+        setPropertiesTotal(null);
+        setPropertiesError("لیست فایل‌ها بارگذاری نشد — مودال را ببندید و دوباره باز کنید.");
+      });
   }, [isWon, preferredDealType, preferredType]);
 
   async function submit(e: React.FormEvent) {
@@ -93,7 +130,13 @@ export function StageOutcomeModal({
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
       <button type="button" className="absolute inset-0 bg-black/40" onClick={onClose} aria-label="بستن" />
-      <div className="relative w-full max-w-lg rounded-[16px] border border-[var(--line)] bg-white p-5 shadow-xl">
+      <div
+        ref={panelRef}
+        role="dialog"
+        aria-modal="true"
+        aria-label={isWon ? "ثبت موفقیت مشتری" : "ثبت ناموفقی مشتری"}
+        className="relative w-full max-w-lg rounded-[16px] border border-[var(--line)] bg-white p-5 shadow-xl"
+      >
         <h3 className={`text-[15px] font-extrabold ${isWon ? "text-emerald-700" : "text-red-700"}`}>
           {isWon ? "ثبت موفقیت مشتری" : "ثبت ناموفقی مشتری"}
         </h3>
@@ -120,9 +163,9 @@ export function StageOutcomeModal({
                       DEAL_TYPE_LABELS[p.dealType] ?? p.dealType,
                       p.region,
                       p.dealType === "SALE" && p.salePriceToman
-                        ? formatToman(p.salePriceToman)
+                        ? formatTomanCompact(p.salePriceToman)
                         : p.dealType === "RENT" && p.depositToman
-                          ? `ودیعه ${formatToman(p.depositToman)}`
+                          ? `ودیعه ${formatTomanCompact(p.depositToman)}`
                           : "",
                     ]
                       .filter(Boolean)
@@ -131,16 +174,24 @@ export function StageOutcomeModal({
                   placeholder="جستجوی فایل (کد یا عنوان)..."
                   emptyText="فایل فعالی یافت نشد"
                 />
-                {properties.length === 0 && (
+                {propertiesError && (
+                  <p className="mt-1 text-[11px] text-red-600" role="alert">{propertiesError}</p>
+                )}
+                {properties.length === 0 && !propertiesError && (
                   <p className="mt-1 text-[11px] text-[var(--ink-3)]">فایل فعالی یافت نشد — اول فایل بسازید یا فیلتر نوع معامله را بردارید.</p>
+                )}
+                {propertiesTotal !== null && propertiesTotal > properties.length && (
+                  <p className="mt-1 text-[11px] text-[var(--ink-3)]">
+                    نمایش {toFaDigits(String(properties.length))} از {toFaDigits(String(propertiesTotal))} فایل فعال — برای دیدن بقیه، فیلتر نوع معامله/نوع ملک را تغییر دهید یا در صفحهٔ فایل‌ها جستجو کنید.
+                  </p>
                 )}
                 <p className="mt-1 text-[11px] text-[var(--ink-3)]">
                   پس از ثبت: وضعیت فایل «فروخته‌شده / اجاره‌رفته» می‌شود و در تطبیق برای دیگران نمی‌آید.
                 </p>
               </div>
               <div>
-                <Label>یادداشت موفقیت (اختیاری)</Label>
-                <Textarea
+                <Label htmlFor="f-notes">یادداشت موفقیت (اختیاری)</Label>
+                <Textarea id="f-notes"
                   className="mt-1"
                   rows={3}
                   value={notes}
@@ -171,8 +222,8 @@ export function StageOutcomeModal({
                 </div>
               </div>
               <div>
-                <Label>توضیح *</Label>
-                <Textarea
+                <Label htmlFor="f-reasonDetail">توضیح *</Label>
+                <Textarea id="f-reasonDetail"
                   className="mt-1"
                   rows={3}
                   value={reasonDetail}

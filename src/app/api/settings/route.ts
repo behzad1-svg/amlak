@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { cookies } from "next/headers";
 import { prisma } from "@/lib/prisma";
 import { validateSession } from "@/lib/auth";
-import { DEFAULT_BUSHEHR_REGIONS, DEFAULT_PROPERTY_TYPES } from "@/lib/constants";
+import { DEFAULT_BUSHEHR_REGIONS, DEFAULT_PROPERTY_TYPES, DEFAULT_CUSTOMER_TAGS } from "@/lib/constants";
 import { serializeBigInt } from "@/lib/utils";
 
 async function getSession() {
@@ -16,9 +16,11 @@ export async function GET() {
   if (!session) return NextResponse.json({ error: "وارد نشده‌اید" }, { status: 401 });
   const regionsRow = await prisma.appSetting.findUnique({ where: { key: "regions" } });
   const typesRow = await prisma.appSetting.findUnique({ where: { key: "propertyTypes" } });
+  const tagsRow = await prisma.appSetting.findUnique({ where: { key: "customerTags" } });
   const regions = regionsRow ? JSON.parse(regionsRow.value) : DEFAULT_BUSHEHR_REGIONS;
   const propertyTypes = typesRow ? JSON.parse(typesRow.value) : DEFAULT_PROPERTY_TYPES;
-  return NextResponse.json(serializeBigInt({ regions, propertyTypes }));
+  const customerTags = tagsRow ? JSON.parse(tagsRow.value) : DEFAULT_CUSTOMER_TAGS;
+  return NextResponse.json(serializeBigInt({ regions, propertyTypes, customerTags }));
 }
 
 export async function PATCH(req: NextRequest) {
@@ -33,6 +35,13 @@ export async function PATCH(req: NextRequest) {
   if (body.propertyTypes) {
     if (!Array.isArray(body.propertyTypes)) return NextResponse.json({ error: "propertyTypes باید آرایه باشد" }, { status: 400 });
     await prisma.appSetting.upsert({ where: { key: "propertyTypes" }, update: { value: JSON.stringify(body.propertyTypes) }, create: { key: "propertyTypes", value: JSON.stringify(body.propertyTypes) } });
+  }
+  if (body.customerTags !== undefined) {
+    if (!Array.isArray(body.customerTags) || body.customerTags.length > 20 || body.customerTags.some((t: unknown) => typeof t !== "string" || !t.trim() || t.length > 30)) {
+      return NextResponse.json({ error: "customerTags باید آرایه‌ای از رشته‌های حداکثر ۳۰ کاراکتری باشد" }, { status: 400 });
+    }
+    const tags = [...new Set(body.customerTags.map((t: string) => t.trim()))];
+    await prisma.appSetting.upsert({ where: { key: "customerTags" }, update: { value: JSON.stringify(tags) }, create: { key: "customerTags", value: JSON.stringify(tags) } });
   }
   return NextResponse.json({ ok: true });
 }

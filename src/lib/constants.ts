@@ -101,6 +101,7 @@ export const PROPERTY_STATUS_LABELS: Record<string, string> = {
   RESERVED: "رزرو",
   SOLD: "فروخته‌شده",
   RENTED: "اجاره‌رفته",
+  ARCHIVED: "بایگانی‌شده",
 };
 
 export const LOST_REASON_LABELS: Record<string, string> = {
@@ -118,8 +119,30 @@ export const CUSTOMER_SOURCE_LABELS: Record<string, string> = {
   REFERRAL: "معرفی",
   SIGN_BOARD: "تابلو",
   WEBSITE: "وب‌سایت",
+  IN_PERSON: "حضوری",
+  ADVERTISEMENT: "آگهی",
   OTHER: "سایر",
 };
+
+// گزینه‌های «شیوه آشنایی» در فرم ثبت مشتری — فقط همین ۶ مقدار
+// (مقادیر قدیمی SIGN_BOARD و WEBSITE در دیتابیس می‌مانند و در پروفایل نمایش داده می‌شوند)
+export const CUSTOMER_SOURCE_OPTIONS = [
+  "DIVAR",
+  "INSTAGRAM",
+  "REFERRAL",
+  "DIRECT_CALL",
+  "IN_PERSON",
+  "ADVERTISEMENT",
+] as const;
+
+// برچسب‌های پیش‌فرض مشتری — قابل ویرایش از صفحه تنظیمات (DB: AppSetting با کلید customerTags)
+export const DEFAULT_CUSTOMER_TAGS = [
+  "نقدی",
+  "وام‌دار",
+  "فوری",
+  "سازنده",
+  "خارج از شهر",
+] as const;
 
 export const CUSTOMER_TYPE_LABELS: Record<string, string> = {
   BUYER: "خریدار",
@@ -139,6 +162,30 @@ export const ACTIVITY_TYPE_LABELS: Record<string, string> = {
   STAGE_CHANGE: "تغییر مرحله",
   OTHER: "سایر",
 };
+
+// سقف روزهای بدون فعالیت برای هر مرحله — اگر مشتری بیشتر از این بدون هیچ فعالیتی بماند، «راکد» است.
+// مرحله‌های پایانی (WON / FAILED / LOST) سقف ندارند و هرگز راکد حساب نمی‌شوند.
+export const STALE_DAY_LIMITS: Record<string, number> = {
+  NEW: 3,
+  INITIAL_CONTACT: 3,
+  QUALIFIED: 7,
+  VIEWING: 7,
+  CONTRACT: 7,
+};
+
+/** اگر مشتری از آخرین فعالیتش بیش از سقف مرحله‌اش گذشته باشد، {days, limit} را برمی‌گرداند؛ وگرنه null */
+export function getStaleInfo(
+  stage: string,
+  lastActivityAt: Date | string | null | undefined,
+  now: Date = new Date(),
+): { days: number; limit: number } | null {
+  const limit = STALE_DAY_LIMITS[stage];
+  if (!limit || !lastActivityAt) return null;
+  const last = new Date(lastActivityAt).getTime();
+  if (Number.isNaN(last)) return null;
+  const days = Math.floor((now.getTime() - last) / 86_400_000);
+  return days > limit ? { days, limit } : null;
+}
 
 export const MATCHING_CONFIG = {
   budgetWeight: 0.5,

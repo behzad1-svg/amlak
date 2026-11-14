@@ -1,5 +1,5 @@
 "use client";
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useId, useMemo, useRef, useState } from "react";
 
 export type SearchOption = { id: string; label: string; sub?: string };
 
@@ -12,6 +12,7 @@ export function SearchSelect({
   required,
   emptyText = "موردی یافت نشد",
   disabled,
+  id,
 }: {
   value: string;
   onChange: (id: string) => void;
@@ -21,11 +22,17 @@ export function SearchSelect({
   required?: boolean;
   emptyText?: string;
   disabled?: boolean;
+  id?: string;
 }) {
   const [open, setOpen] = useState(false);
   const [q, setQ] = useState("");
+  // نقد ۱۰ — ناوبری با صفحه‌کلید: ArrowUp/ArrowDown روی گزینه‌ها، Enter انتخاب
+  const [highlight, setHighlight] = useState(0);
   const rootRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLInputElement>(null);
+  const autoId = useId();
+  const fieldId = id ?? autoId;
+  const listId = `${fieldId}-list`;
 
   const selected = options.find((o) => o.id === value);
 
@@ -49,16 +56,50 @@ export function SearchSelect({
     return () => document.removeEventListener("mousedown", onDoc);
   }, []);
 
+  function choose(o: SearchOption) {
+    onChange(o.id);
+    setQ("");
+    setOpen(false);
+  }
+
+  function onInputKeyDown(e: React.KeyboardEvent) {
+    if (e.key === "Escape") {
+      setOpen(false);
+      return;
+    }
+    if (e.key === "ArrowDown") {
+      e.preventDefault();
+      setHighlight((h) => Math.min(filtered.length - 1, h + 1));
+      return;
+    }
+    if (e.key === "ArrowUp") {
+      e.preventDefault();
+      setHighlight((h) => Math.max(0, h - 1));
+      return;
+    }
+    if (e.key === "Enter") {
+      e.preventDefault();
+      const target = filtered[highlight] ?? filtered[0];
+      if (target) choose(target);
+    }
+  }
+
   return (
     <div ref={rootRef} className="relative">
       {label && (
-        <label className="text-[12.5px] font-medium text-[var(--ink-2)]">
+        <label htmlFor={fieldId} className="text-[12.5px] font-medium text-[var(--ink-2)]">
           {label}
           {required ? " *" : ""}
         </label>
       )}
       <button
         type="button"
+        id={fieldId}
+        role="combobox"
+        aria-expanded={open}
+        aria-controls={listId}
+        aria-haspopup="listbox"
+        aria-label={label ?? placeholder}
         disabled={disabled}
         onClick={() => {
           setOpen((v) => !v);
@@ -84,38 +125,34 @@ export function SearchSelect({
             <input
               ref={inputRef}
               value={q}
-              onChange={(e) => setQ(e.target.value)}
-              placeholder="نام یا شماره را بنویسید..."
-              className="w-full rounded-[10px] border border-[var(--line)] px-3 py-2 text-[13px] outline-none focus:border-[var(--pomegranate)]"
-              onKeyDown={(e) => {
-                if (e.key === "Escape") setOpen(false);
-                if (e.key === "Enter" && filtered[0]) {
-                  e.preventDefault();
-                  onChange(filtered[0].id);
-                  setQ("");
-                  setOpen(false);
-                }
+              onChange={(e) => {
+                setQ(e.target.value);
+                setHighlight(0);
               }}
+              placeholder="نام یا شماره را بنویسید..."
+              aria-label="جستجو در گزینه‌ها"
+              className="w-full rounded-[10px] border border-[var(--line)] px-3 py-2 text-[13px] outline-none focus:border-[var(--pomegranate)]"
+              onKeyDown={onInputKeyDown}
             />
           </div>
-          <ul className="max-h-56 overflow-y-auto p-1">
+          <ul id={listId} role="listbox" aria-label={label ?? "گزینه‌ها"} className="max-h-56 overflow-y-auto p-1">
             {filtered.length === 0 && (
               <li className="px-3 py-3 text-center text-[12px] text-[var(--ink-3)]">{emptyText}</li>
             )}
-            {filtered.map((o) => {
+            {filtered.map((o, i) => {
               const active = o.id === value;
               return (
                 <li key={o.id}>
                   <button
                     type="button"
-                    onClick={() => {
-                      onChange(o.id);
-                      setQ("");
-                      setOpen(false);
-                    }}
+                    role="option"
+                    id={`${listId}-opt-${o.id}`}
+                    aria-selected={active}
+                    onClick={() => choose(o)}
+                    onMouseEnter={() => setHighlight(i)}
                     className={`w-full rounded-[8px] px-3 py-2 text-right text-[13px] hover:bg-[var(--paper-2)] ${
                       active ? "bg-[var(--paper-2)] font-bold" : ""
-                    }`}
+                    } ${i === highlight ? "ring-1 ring-[var(--pomegranate)]" : ""}`}
                   >
                     <span className="block truncate">{o.label}</span>
                     {o.sub && (

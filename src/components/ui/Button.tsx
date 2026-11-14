@@ -17,9 +17,9 @@ export function Button({
     sea: "bg-[var(--sea)] text-white hover:bg-[#0F4A4A]",
   };
   const sizes: Record<Size, string> = {
-    sm: "px-3 py-1.5 text-[13px] rounded-[10px]",
-    md: "px-4 py-2 text-[13.5px] rounded-[12px]",
-    lg: "px-6 py-3 text-[15px] rounded-[14px]",
+    sm: "min-h-9 px-3 py-1.5 text-[13px] rounded-[10px]",
+    md: "min-h-10 px-4 py-2 text-[13.5px] rounded-[12px]",
+    lg: "min-h-11 px-6 py-3 text-[15px] rounded-[14px]",
   };
   return (
     <button

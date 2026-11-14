@@ -1,0 +1,24 @@
+# CI — typecheck + lint + build on every push/PR.
+# Smoke tests are NOT run here: they need a live app + PostgreSQL.
+# Run them locally against a running server:
+#   BASE_URL=http://localhost:3000 SMOKE_PASSWORD=... npm run smoke
+name: CI
+
+on:
+  push:
+    branches: [main, master]
+  pull_request:
+
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci
+      - run: npm run typecheck
+      - run: npm run lint
+      - run: npm run build

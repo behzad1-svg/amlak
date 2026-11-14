@@ -1,6 +1,7 @@
 {
   "dependencies": {
     "@prisma/client": "^5.22.0",
+    "@sentry/nextjs": "^11.11.0",
     "bcryptjs": "^3.0.3",
     "clsx": "^2.1.1",
     "jalaali-js": "^2.0.1",
@@ -25,6 +26,9 @@
     "typescript": "^5"
   },
   "name": "saj-crm",
+  "engines": {
+    "node": "22.x"
+  },
   "private": true,
   "scripts": {
     "build": "next build",

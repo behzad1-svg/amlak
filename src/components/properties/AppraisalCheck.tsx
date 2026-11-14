@@ -1,6 +1,7 @@
 "use client";
 import { useState } from "react";
 import { formatDate } from "@/lib/utils";
+import { apiFetch, errorMessage } from "@/lib/api";
 
 /** فقط تیک «کارشناسی» — بدون توضیح اضافه */
 export function AppraisalCheck({
@@ -32,23 +33,16 @@ export function AppraisalCheck({
     const next = !on;
     if (!next && !isOwner) {
       setError("فقط مدیر می‌تواند تیک را بردارد");
-      setTimeout(() => setError(""), 2500);
       return;
     }
     setBusy(true);
     setError("");
     try {
-      const res = await fetch(`/api/properties/${propertyId}/appraise`, {
+      const j = await apiFetch(`/api/properties/${propertyId}/appraise`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ appraised: next }),
-      });
-      const j = await res.json().catch(() => ({}));
-      if (!res.ok) {
-        setError(j.error || "خطا");
-        setTimeout(() => setError(""), 2500);
-        return;
-      }
+      }).then((r) => r.json());
       setOn(next);
       setWho(
         next
@@ -56,9 +50,8 @@ export function AppraisalCheck({
           : null
       );
       onChanged?.();
-    } catch {
-      setError("خطا در ارتباط");
-      setTimeout(() => setError(""), 2500);
+    } catch (e) {
+      setError(errorMessage(e));
     } finally {
       setBusy(false);
     }

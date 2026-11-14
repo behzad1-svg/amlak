@@ -4,6 +4,7 @@ import { getSessionFromCookies, hashPassword, invalidateUserTokens } from "@/lib
 import { userUpdateSchema } from "@/lib/validation";
 import { serializeBigInt } from "@/lib/utils";
 import { createAuditLog } from "@/lib/audit";
+import { sanitizePermissions } from "@/lib/permissions";
 
 export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
   const session = await getSessionFromCookies();
@@ -43,12 +44,13 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
   if (d.phone !== undefined) data.phone = d.phone;
   if (d.role !== undefined) data.role = d.role;
   if (d.active !== undefined) data.active = d.active;
+  if (d.permissions !== undefined) data.permissions = sanitizePermissions(d.permissions);
   if (d.password) data.passwordHash = await hashPassword(d.password);
 
   const user = await prisma.user.update({
     where: { id },
     data,
-    select: { id: true, name: true, phone: true, role: true, active: true, createdAt: true },
+    select: { id: true, name: true, phone: true, role: true, active: true, createdAt: true, permissions: true },
   });
 
   // Invalidate sessions when password/role/active changes
@@ -72,6 +74,7 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
       role: user.role,
       active: user.active,
       passwordReset: Boolean(d.password),
+      permissionsChanged: d.permissions !== undefined,
     } as never,
   });
 

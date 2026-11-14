@@ -7,10 +7,19 @@ import { Card } from "@/components/ui/Card";
 import { Badge } from "@/components/ui/Badge";
 import { Button } from "@/components/ui/Button";
 import { Input, Select, Label, Textarea } from "@/components/ui/Input";
+import dynamic from "next/dynamic";
 import { SearchSelect } from "@/components/ui/SearchSelect";
-import { JalaliDatePicker } from "@/components/ui/JalaliDatePicker";
 import { AppraisalCheck } from "@/components/properties/AppraisalCheck";
-import { formatToman, formatDate } from "@/lib/utils";
+import { PageError, PageSkeleton } from "@/components/ui/LoadState";
+import { apiFetch, apiJson, errorMessage } from "@/lib/api";
+
+// نقد ۹ — انتخابگر تاریخ با next/dynamic تنبل بارگذاری می‌شود
+const JalaliDatePicker = dynamic(
+  () => import("@/components/ui/JalaliDatePicker").then((m) => m.JalaliDatePicker),
+  { ssr: false, loading: () => <div className="h-10 rounded-[12px] border border-[var(--line)] bg-[var(--paper-2)] animate-pulse" /> }
+);
+import { formatDate } from "@/lib/utils";
+import { MoneyText } from "@/components/ui/MoneyText";
 import {
   PROPERTY_TYPE_LABELS,
   DEAL_TYPE_LABELS,
@@ -18,6 +27,7 @@ import {
   ACTIVITY_TYPE_LABELS,
 } from "@/lib/constants";
 import { useRole } from "@/hooks/useRole";
+import { hasPermission } from "@/lib/permissions";
 
 type Prop = Record<string, unknown> & {
   id: string;
@@ -54,6 +64,7 @@ type Prop = Record<string, unknown> & {
   listedBy?: { id: string; name: string } | null;
   owner?: { id: string; name: string; phone?: string } | null;
   appraisedBy?: { id: string; name: string } | null;
+  accessList?: { userId: string; user: { id: string; name: string } }[];
 };
 
 type Activity = {
@@ -79,8 +90,8 @@ function Row({ label, value }: { label: string; value: React.ReactNode }) {
   if (value === null || value === undefined || value === "" || value === false) return null;
   return (
     <div className="flex justify-between gap-3 py-1.5 border-b border-[var(--line)] last:border-0">
-      <dt className="text-[12.5px] text-[var(--ink-3)]">{label}</dt>
-      <dd className="text-[13px] font-medium text-left">{value}</dd>
+      <dt className="shrink-0 text-[12.5px] text-[var(--ink-3)]">{label}</dt>
+      <dd className="min-w-0 break-words text-[13px] font-medium text-left">{value}</dd>
     </div>
   );
 }
@@ -97,11 +108,16 @@ export default function PropertyDetailPage() {
   const [activities, setActivities] = useState<Activity[]>([]);
   const [viewings, setViewings] = useState<Viewing[]>([]);
   const [customers, setCustomers] = useState<{ id: string; name: string; phone?: string }[]>([]);
-  const [agents, setAgents] = useState<{ id: string; name: string }[]>([]);
+  const [agents, setAgents] = useState<{ id: string; name: string; role?: string; active?: boolean }[]>([]);
+  const [accessUserIds, setAccessUserIds] = useState<string[]>([]);
+  const [meId, setMeId] = useState("");
+  const [mePermissions, setMePermissions] = useState<Record<string, boolean>>({});
   const [editing, setEditing] = useState(false);
   const [form, setForm] = useState<Record<string, string>>({});
   const [error, setError] = useState("");
   const [msg, setMsg] = useState("");
+  const [loading, setLoading] = useState(true);
+  const [loadError, setLoadError] = useState<string | null>(null);
 
   const [note, setNote] = useState("");
   const [noteCustomer, setNoteCustomer] = useState("");
@@ -114,39 +130,53 @@ export default function PropertyDetailPage() {
   const [visStatus, setVisStatus] = useState("SCHEDULED");
   const [savingVis, setSavingVis] = useState(false);
 
+  // پیام موفقیت خودبه‌خود پاک می‌شود؛ پیام خطا تا اقدام بعدی می‌ماند
   const flash = (ok: string, bad?: string) => {
     setMsg(ok);
     setError(bad ?? "");
-    setTimeout(() => { setMsg(""); setError(""); }, 3200);
+    if (ok) setTimeout(() => setMsg(""), 3200);
   };
 
+  // نقد ۱ — بارگذاری با کمک‌کنندهٔ مرکزی؛ خطا پیام + تلاش دوباره دارد
   const load = useCallback(async () => {
-    const [propRes, actRes, visRes, custRes, usersRes] = await Promise.all([
-      fetch(`/api/properties/${id}`).then((r) => r.json()),
-      fetch(`/api/activities?propertyId=${id}`).then((r) => r.json()),
-      fetch(`/api/viewings?propertyId=${id}`).then((r) => r.json()),
-      fetch("/api/customers?limit=200").then((r) => r.json()),
-      fetch("/api/users").then((r) => r.json()),
-    ]);
-    if (propRes?.id) {
-      setP(propRes);
-      setForm({
-        title: propRes.title ?? "",
-        region: propRes.region ?? "",
-        status: propRes.status ?? "",
-        salePriceToman: propRes.salePriceToman ?? "",
-        depositToman: propRes.depositToman ?? "",
-        monthlyRentToman: propRes.monthlyRentToman ?? "",
-        listedById: propRes.listedBy?.id ?? "",
-        description: propRes.description ?? "",
-      });
+    setLoading(true);
+    setLoadError(null);
+    try {
+      const [propRes, actRes, visRes, custRes, usersRes, meRes] = await Promise.all([
+        apiJson<Prop>(`/api/properties/${id}`),
+        apiJson<Activity[]>(`/api/activities?propertyId=${id}`),
+        apiJson<Viewing[]>(`/api/viewings?propertyId=${id}`),
+        apiJson<{ customers?: { id: string; name: string; phone?: string }[] } | { id: string; name: string; phone?: string }[]>("/api/customers?limit=200"),
+        apiJson<{ id: string; name: string; role?: string; active?: boolean }[]>("/api/users"),
+        apiJson<{ user?: { id: string; permissions?: Record<string, boolean> } }>("/api/auth/me"),
+      ]);
+      if (meRes?.user?.id) setMeId(meRes.user.id);
+      if (meRes?.user?.permissions) setMePermissions(meRes.user.permissions);
+      if (propRes?.id) {
+        setP(propRes);
+        setAccessUserIds((propRes.accessList ?? []).map((a) => a.userId));
+        setForm({
+          title: propRes.title ?? "",
+          region: propRes.region ?? "",
+          status: propRes.status ?? "",
+          salePriceToman: propRes.salePriceToman ?? "",
+          depositToman: propRes.depositToman ?? "",
+          monthlyRentToman: propRes.monthlyRentToman ?? "",
+          listedById: propRes.listedBy?.id ?? "",
+          description: propRes.description ?? "",
+        });
+      }
+      setActivities(Array.isArray(actRes) ? actRes : []);
+      setViewings(Array.isArray(visRes) ? visRes : []);
+      const custs = Array.isArray(custRes) ? custRes : custRes?.customers ?? [];
+      setCustomers(custs.map((c: { id: string; name: string; phone?: string }) => ({ id: c.id, name: c.name, phone: c.phone })));
+      const us = Array.isArray(usersRes) ? usersRes : [];
+      setAgents(us.map((u: { id: string; name: string; role?: string; active?: boolean }) => ({ id: u.id, name: u.name, role: u.role, active: u.active })));
+    } catch (e) {
+      setLoadError(errorMessage(e));
+    } finally {
+      setLoading(false);
     }
-    setActivities(Array.isArray(actRes) ? actRes : []);
-    setViewings(Array.isArray(visRes) ? visRes : []);
-    const custs = Array.isArray(custRes) ? custRes : custRes?.customers ?? [];
-    setCustomers(custs.map((c: { id: string; name: string; phone?: string }) => ({ id: c.id, name: c.name, phone: c.phone })));
-    const us = Array.isArray(usersRes) ? usersRes : [];
-    setAgents(us.map((u: { id: string; name: string }) => ({ id: u.id, name: u.name })));
   }, [id]);
 
   useEffect(() => {
@@ -164,14 +194,15 @@ export default function PropertyDetailPage() {
     if (form.monthlyRentToman) body.monthlyRentToman = form.monthlyRentToman;
     body.description = form.description?.trim() ? form.description.trim() : null;
     if (isOwner && form.listedById) body.listedById = form.listedById;
-    const res = await fetch(`/api/properties/${id}`, {
-      method: "PATCH",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify(body),
-    });
-    const data = await res.json().catch(() => ({}));
-    if (!res.ok) {
-      setError(data.error ?? "خطا");
+    if (canManageAccess) body.accessUserIds = accessUserIds;
+    try {
+      await apiFetch(`/api/properties/${id}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(body),
+      });
+    } catch (e) {
+      setError(errorMessage(e));
       return;
     }
     setEditing(false);
@@ -180,35 +211,53 @@ export default function PropertyDetailPage() {
   }
 
   async function handleDelete() {
-    if (!confirm("حذف فایل؟ فقط مدیر می‌تواند حذف کند.")) return;
-    const res = await fetch(`/api/properties/${id}`, { method: "DELETE" });
-    if (!res.ok) {
-      const j = await res.json().catch(() => ({}));
-      flash("", j.error || "حذف مجاز نیست");
+    if (!confirm("حذف فایل؟ این کار برگشت‌پذیر نیست.")) return;
+    try {
+      await apiFetch(`/api/properties/${id}`, { method: "DELETE" });
+    } catch (e) {
+      flash("", errorMessage(e));
       return;
     }
     router.push("/properties");
   }
 
+  async function handleArchive() {
+    const archiving = p?.status !== "ARCHIVED";
+    if (!confirm(archiving ? "فایل بایگانی شود؟ دیگر در فهرست اصلی دیده نمی‌شود." : "فایل از بایگانی برگردد؟")) return;
+    try {
+      await apiFetch(`/api/properties/${id}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ status: archiving ? "ARCHIVED" : "ACTIVE" }),
+      });
+    } catch (e) {
+      flash("", errorMessage(e));
+      return;
+    }
+    flash(archiving ? "فایل بایگانی شد" : "فایل برگشت");
+    load();
+  }
+
   async function addNote() {
     if (!note.trim()) return;
     setSavingNote(true);
-    const res = await fetch("/api/activities", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        type: "NOTE",
-        propertyId: id,
-        customerId: noteCustomer || null,
-        description: note.trim(),
-      }),
-    });
-    setSavingNote(false);
-    if (!res.ok) {
-      const j = await res.json().catch(() => ({}));
-      flash("", j.error || "خطا در ثبت یادداشت");
+    try {
+      await apiFetch("/api/activities", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          type: "NOTE",
+          propertyId: id,
+          customerId: noteCustomer || null,
+          description: note.trim(),
+        }),
+      });
+    } catch (e) {
+      setSavingNote(false);
+      flash("", errorMessage(e));
       return;
     }
+    setSavingNote(false);
     setNote("");
     flash("یادداشت ثبت شد");
     load();
@@ -229,26 +278,32 @@ export default function PropertyDetailPage() {
     };
     if (isOwner && visAgent) body.agentId = visAgent;
     if (visStatus === "DONE") body.endAt = visDate;
-    const res = await fetch("/api/viewings", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify(body),
-    });
-    const j = await res.json().catch(() => ({}));
-    setSavingVis(false);
-    if (!res.ok) {
-      flash("", j.error || "خطا در ثبت بازدید");
+    try {
+      await apiFetch("/api/viewings", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(body),
+      });
+    } catch (e) {
+      setSavingVis(false);
+      flash("", errorMessage(e));
       return;
     }
+    setSavingVis(false);
     setVisFeedback("");
     flash("بازدید ثبت شد");
     load();
   }
 
-  if (!p) return <div className="p-8 text-center text-zinc-400">بارگذاری...</div>;
+  if (loading && !p) return <PageSkeleton rows={4} />;
+  if (loadError && !p) return <PageError message={loadError} onRetry={load} />;
+  if (!p) return <PageSkeleton rows={4} />;
 
   const isSale = p.dealType === "SALE";
   const typeLabel = PROPERTY_TYPE_LABELS[p.type] ?? p.type;
+  const canManageAccess = isOwner || p.listedBy?.id === meId;
+  const canArchive = isOwner || (p.listedBy?.id === meId && hasPermission({ role: "AGENT", permissions: mePermissions }, "canArchiveProperty"));
+  const accessCandidates = agents.filter((a) => a.role === "AGENT" && a.id !== meId && a.active !== false);
 
   return (
     <div>
@@ -258,13 +313,16 @@ export default function PropertyDetailPage() {
         action={
           <div className="flex gap-2">
             <Button variant="outline" onClick={() => setEditing(!editing)}>{editing ? "انصراف" : "ویرایش"}</Button>
+            {canArchive && (
+              <Button variant="outline" onClick={handleArchive}>{p.status === "ARCHIVED" ? "بازگردانی" : "بایگانی"}</Button>
+            )}
             {isOwner && (
               <Button variant="ghost" onClick={handleDelete} className="text-red-600 hover:bg-red-50">حذف</Button>
             )}
           </div>
         }
       />
-      <div className="p-6 space-y-5 max-w-4xl">
+      <div className="p-4 sm:p-6 space-y-5 max-w-4xl">
         {error && <div className="rounded-lg bg-red-50 px-3 py-2 text-sm text-red-700">{error}</div>}
         {msg && <div className="rounded-lg bg-emerald-50 px-3 py-2 text-sm text-emerald-700">{msg}</div>}
 
@@ -315,9 +373,15 @@ export default function PropertyDetailPage() {
             <Row
               label={isSale ? "قیمت فروش" : "رهن / اجاره"}
               value={
-                isSale
-                  ? formatToman(p.salePriceToman)
-                  : `${formatToman(p.depositToman)} / ${formatToman(p.monthlyRentToman)}`
+                isSale ? (
+                  <MoneyText value={p.salePriceToman} />
+                ) : (
+                  <>
+                    ودیعه {p.depositToman ? <MoneyText value={p.depositToman} /> : "—"}
+                    {" / "}
+                    اجاره {p.monthlyRentToman ? <MoneyText value={p.monthlyRentToman} /> : "—"}
+                  </>
+                )
               }
             />
             <Row label={p.type === "VILLA" || p.type === "KOLANGI" ? "متراژ مسکونی (زیربنا)" : "متراژ کل"} value={p.sizeSqm != null ? `${p.sizeSqm} متر` : null} />
@@ -337,7 +401,7 @@ export default function PropertyDetailPage() {
             <Row label="بازسازی‌شده" value={yesNo(p.hasRenovated)} />
             <Row label="نوساز" value={yesNo(p.isNewBuild)} />
             <div className="flex items-center justify-between gap-3 py-2 border-b border-[var(--line)] last:border-0">
-              <dt className="text-[12.5px] text-[var(--ink-3)]">کارشناسی</dt>
+              <dt className="shrink-0 text-[12.5px] text-[var(--ink-3)]">کارشناسی</dt>
               <dd>
                 <AppraisalCheck
                   key={`${p.id}-${p.isAppraised ? "on" : "off"}`}
@@ -357,32 +421,59 @@ export default function PropertyDetailPage() {
           <Card>
             <h3 className="font-semibold mb-3">ویرایش فایل</h3>
             <div className="grid gap-3 md:grid-cols-2">
-              <div><Label>عنوان</Label><Input className="mt-1" value={form.title} onChange={(e) => setForm({ ...form, title: e.target.value })} /></div>
-              <div><Label>منطقه</Label><Input className="mt-1" value={form.region} onChange={(e) => setForm({ ...form, region: e.target.value })} /></div>
+              <div><Label htmlFor="f-title">عنوان</Label><Input id="f-title" className="mt-1" value={form.title} onChange={(e) => setForm({ ...form, title: e.target.value })} /></div>
+              <div><Label htmlFor="f-region">منطقه</Label><Input id="f-region" className="mt-1" value={form.region} onChange={(e) => setForm({ ...form, region: e.target.value })} /></div>
               <div>
-                <Label>وضعیت</Label>
-                <Select className="mt-1" value={form.status} onChange={(e) => setForm({ ...form, status: e.target.value })}>
+                <Label htmlFor="f-status">وضعیت</Label>
+                <Select id="f-status" className="mt-1" value={form.status} onChange={(e) => setForm({ ...form, status: e.target.value })}>
                   <option value="ACTIVE">فعال</option>
                   <option value="RESERVED">رزرو</option>
                   <option value="SOLD">فروخته‌شده</option>
                   <option value="RENTED">اجاره‌رفته</option>
+                  <option value="ARCHIVED">بایگانی‌شده</option>
                 </Select>
               </div>
               {isOwner && (
                 <div>
-                  <Label>مشاور مسئول فایل</Label>
-                  <Select className="mt-1" value={form.listedById} onChange={(e) => setForm({ ...form, listedById: e.target.value })}>
+                  <Label htmlFor="f-listedById">مشاور مسئول فایل</Label>
+                  <Select id="f-listedById" className="mt-1" value={form.listedById} onChange={(e) => setForm({ ...form, listedById: e.target.value })}>
                     {agents.map((a) => <option key={a.id} value={a.id}>{a.name}</option>)}
                   </Select>
                 </div>
               )}
-              <div><Label>قیمت فروش</Label><Input className="mt-1" dir="ltr" value={form.salePriceToman} onChange={(e) => setForm({ ...form, salePriceToman: e.target.value })} /></div>
-              <div><Label>ودیعه</Label><Input className="mt-1" dir="ltr" value={form.depositToman} onChange={(e) => setForm({ ...form, depositToman: e.target.value })} /></div>
-              <div><Label>اجاره ماهانه</Label><Input className="mt-1" dir="ltr" value={form.monthlyRentToman} onChange={(e) => setForm({ ...form, monthlyRentToman: e.target.value })} /></div>
+              <div><Label htmlFor="f-salePriceToman">قیمت فروش</Label><Input id="f-salePriceToman" className="mt-1" dir="ltr" value={form.salePriceToman} onChange={(e) => setForm({ ...form, salePriceToman: e.target.value })} /></div>
+              <div><Label htmlFor="f-depositToman">ودیعه</Label><Input id="f-depositToman" className="mt-1" dir="ltr" value={form.depositToman} onChange={(e) => setForm({ ...form, depositToman: e.target.value })} /></div>
+              <div><Label htmlFor="f-monthlyRentToman">اجاره ماهانه</Label><Input id="f-monthlyRentToman" className="mt-1" dir="ltr" value={form.monthlyRentToman} onChange={(e) => setForm({ ...form, monthlyRentToman: e.target.value })} /></div>
               <div className="md:col-span-2">
-                <Label>توضیحات فایل</Label>
-                <Textarea className="mt-1" rows={3} value={form.description} onChange={(e) => setForm({ ...form, description: e.target.value })} placeholder="نکات فایل: مالک عجله دارد، قیمت قابل مذاکره است..." />
+                <Label htmlFor="f-description">توضیحات فایل</Label>
+                <Textarea id="f-description" className="mt-1" rows={3} value={form.description} onChange={(e) => setForm({ ...form, description: e.target.value })} placeholder="نکات فایل: مالک عجله دارد، قیمت قابل مذاکره است..." />
               </div>
+              {canManageAccess && (
+                <div className="md:col-span-2 rounded-[12px] border border-[var(--line)] bg-[var(--paper-2)] p-3">
+                  <div className="text-[13px] font-bold mb-1">دسترسی کامل مشاورهای دیگر</div>
+                  <p className="text-[12px] text-[var(--ink-3)] mb-2">
+                    مشاورهای تیک‌خورده آدرس دقیق، نام و شماره مالک را می‌بینند. بقیه فقط اطلاعات جزئی فایل را می‌بینند.
+                  </p>
+                  {accessCandidates.length === 0 ? (
+                    <p className="text-[13px] text-[var(--ink-3)]">مشاور دیگری در سیستم نیست.</p>
+                  ) : (
+                    <div className="flex flex-wrap gap-x-5 gap-y-2">
+                      {accessCandidates.map((a) => (
+                        <label key={a.id} className="flex items-center gap-2 text-[13px] cursor-pointer">
+                          <input
+                            type="checkbox"
+                            checked={accessUserIds.includes(a.id)}
+                            onChange={() =>
+                              setAccessUserIds((s) => (s.includes(a.id) ? s.filter((x) => x !== a.id) : [...s, a.id]))
+                            }
+                          />
+                          {a.name}
+                        </label>
+                      ))}
+                    </div>
+                  )}
+                </div>
+              )}
             </div>
             <div className="mt-3"><Button onClick={save}>ذخیره</Button></div>
           </Card>
@@ -403,12 +494,12 @@ export default function PropertyDetailPage() {
               />
             </div>
             <div>
-              <Label>تاریخ بازدید (شمسی) *</Label>
-              <div className="mt-1"><JalaliDatePicker value={visDate} onChange={setVisDate} /></div>
+              <Label htmlFor="f-visDate">تاریخ بازدید (شمسی) *</Label>
+              <div className="mt-1"><JalaliDatePicker id="f-visDate" value={visDate} onChange={setVisDate} /></div>
             </div>
             <div>
-              <Label>وضعیت</Label>
-              <Select className="mt-1" value={visStatus} onChange={(e) => setVisStatus(e.target.value)}>
+              <Label htmlFor="f-visStatus">وضعیت</Label>
+              <Select id="f-visStatus" className="mt-1" value={visStatus} onChange={(e) => setVisStatus(e.target.value)}>
                 <option value="SCHEDULED">برنامه‌ریزی‌شده</option>
                 <option value="DONE">انجام شد</option>
               </Select>
@@ -425,8 +516,8 @@ export default function PropertyDetailPage() {
               </div>
             )}
             <div className="md:col-span-2">
-              <Label>گزارش بازدید</Label>
-              <Textarea
+              <Label htmlFor="f-visFeedback">گزارش بازدید</Label>
+              <Textarea id="f-visFeedback"
                 className="mt-1"
                 rows={2}
                 value={visFeedback}

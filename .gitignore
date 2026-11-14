@@ -42,3 +42,7 @@ next-env.d.ts
 
 # netlify build artifacts
 /.netlify/
+
+# dev smoke logs
+.next-dev-smoke.log
+.next-dev-smoke.err.log
