@@ -268,16 +268,24 @@ export async function POST(req: NextRequest) {
       listedById: session.user.id,
       visibility: (d.visibility as never) ?? "TEAM_VISIBLE",
       isAdvertised: d.isAdvertised ?? false,
-      // کارشناسی فقط از مسیر /api/appraise ثبت می‌شود — ورودی مستقیم نادیده گرفته می‌شود
-      isAppraised: false,
-      appraisedById: null,
-      appraisedAt: null,
+      // تیک «از قبل کارشناسی شده» در فرم ثبت: ثبت‌کننده همان کارشناس است —
+      // appraisedById ورودی مشتری نادیده گرفته می‌شود (فقط مدیر می‌تواند
+      // کارشناسی را به نام دیگری ثبت کند، آن هم از مسیر /api/appraise)
+      isAppraised: d.isAppraised === true,
+      appraisedById: d.isAppraised === true ? session.user.id : null,
+      appraisedAt: d.isAppraised === true ? new Date() : null,
       nextOwnerFollowUpAt: d.nextOwnerFollowUpAt ? new Date(d.nextOwnerFollowUpAt) : null,
     },
   });
 
   await createAuditLog({ actorId: session.user.id, action: "PROPERTY_CREATED", entityType: "Property", entityId: property.id, newValue: { code: property.code, title: d.title } as never });
   await prisma.activity.create({ data: { type: "NOTE", agentId: session.user.id, propertyId: property.id, description: `فایل جدید ${property.code}: ${d.title}` } });
+
+  // کارشناسیِ ثبت‌شده در فرم: Activity + Audit مثل مسیر /appraise، تا آمار مدیر آن را ببیند
+  if (d.isAppraised === true) {
+    await prisma.activity.create({ data: { type: "APPRAISAL", agentId: session.user.id, propertyId: property.id, description: `کارشناسی فایل ${property.code} انجام شد` } });
+    await createAuditLog({ actorId: session.user.id, action: "PROPERTY_APPRAISED", entityType: "Property", entityId: property.id, newValue: { appraisedById: session.user.id } as never });
+  }
 
   // مشاورهای تیک‌خورده در فرم ثبت: دسترسی کامل به فایل
   if (d.accessUserIds !== undefined) {
