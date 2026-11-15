@@ -39,44 +39,69 @@ export async function GET() {
     }),
   ]);
 
+  // سهم‌بندی حل‌شدهٔ هر معامله را یک بار حساب کن — برای جمع دفتر/تعاون و جمع هر مشاور
+  const splits = deals.map((d) => resolveSplit(d));
+
   // سهم دفتر و تعاون روی همه معامله‌های دارای کمیسیون؛ جمع کل کمیسیون مبلغ کامل معامله می‌ماند
   let officeTotal = BigInt(0);
   let externalTotal = BigInt(0);
   let commissionGrandTotal = BigInt(0);
-  for (const d of deals) {
-    if (d.commissionToman == null) continue;
+  deals.forEach((d, i) => {
+    if (d.commissionToman == null) return;
     commissionGrandTotal += d.commissionToman;
-    const split = resolveSplit(d);
+    const split = splits[i];
     officeTotal += split.officeAmount ?? BigInt(0);
     for (const s of split.shares) {
       if (s.isExternal) externalTotal += s.amount;
     }
-  }
+  });
 
-  const rows = users.map((u) => {
+  // ردیف برای اجتماعِ صاحبان معامله و دارندگان سهم و همه کاربران فعال؛
+  // مشاوری که فقط سهم دارد ولی صاحب معامله نیست هم ردیف خودش را می‌گیرد.
+  const knownIds = new Set(users.map((u) => u.id));
+  const extraIds = new Set<string>();
+  deals.forEach((d, i) => {
+    if (!knownIds.has(d.agentId)) extraIds.add(d.agentId);
+    for (const s of splits[i].shares) {
+      if (s.userId && !knownIds.has(s.userId)) extraIds.add(s.userId);
+    }
+  });
+  const extraUsers =
+    extraIds.size > 0
+      ? await prisma.user.findMany({
+          where: { id: { in: [...extraIds] } },
+          select: { id: true, name: true, role: true },
+        })
+      : [];
+  const allUsers = [...users, ...extraUsers].sort((a, b) => a.name.localeCompare(b.name, "fa"));
+
+  const rows = allUsers.map((u) => {
     let dealsCompleted = 0;
     let dealsWithCommission = 0;
     let saleVolume = BigInt(0);
     let commissionTotal = BigInt(0);
     let commissionPaid = BigInt(0);
     let commissionUnpaid = BigInt(0);
-    for (const d of deals) {
-      if (d.agentId !== u.id) continue;
-      if (d.status === "COMPLETED") {
-        dealsCompleted += 1;
-        saleVolume += d.dealSalePriceToman ?? BigInt(0);
+    deals.forEach((d, i) => {
+      // تعداد قرارداد و حجم فروش فقط از معامله‌هایی که صاحبشان است
+      if (d.agentId === u.id) {
+        if (d.status === "COMPLETED") {
+          dealsCompleted += 1;
+          saleVolume += d.dealSalePriceToman ?? BigInt(0);
+        }
+        if (d.commissionToman != null) dealsWithCommission += 1;
       }
+      // جمع کمیسیون فقط سهم‌های خودش است — در همه معامله‌ها، نه فقط معامله‌های خودش؛
+      // معامله تقسیم‌نشده همان سهم مجازی ۱۰۰٪ برای مشاور معامله را می‌دهد
       if (d.commissionToman != null) {
-        dealsWithCommission += 1;
-        // جمع مشاور فقط سهم‌های خودش است، نه مبلغ کامل معامله
-        const mine = resolveSplit(d).shares.filter((s) => s.userId === u.id);
-        for (const s of mine) {
+        for (const s of splits[i].shares) {
+          if (s.userId !== u.id) continue;
           commissionTotal += s.amount;
           if (s.settled) commissionPaid += s.amount;
           else commissionUnpaid += s.amount;
         }
       }
-    }
+    });
     return {
       id: u.id,
       name: u.name,

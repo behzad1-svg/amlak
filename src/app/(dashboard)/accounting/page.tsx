@@ -282,7 +282,9 @@ export default function AccountingPage() {
     setEditPercent(deal.commissionPercent != null ? String(deal.commissionPercent) : "");
     setEditAmount(deal.commissionToman ?? "");
     setEditError("");
-    // سهم‌بندی: اگر سهم واقعی دارد همان را بیاور؛ وگرنه پیش‌فرض دفتر ۵۰٪ + مشاور معامله ۵۰٪
+    // سهم‌بندی: اگر سهم واقعی دارد همان را بیاور؛ وگرنه پیش‌فرض دفتر ۵۰٪ + مشاور معامله ۵۰٪ —
+    // چه کمیسیون داشته باشد چه هنوز «تعیین نشده» باشد؛ وگرنه با محاسبه خودکار مبلغ از روی
+    // قیمت × درصد، بخش سهم‌بندی با دفتر ۵۰٪ تنها و هشدار مجموع ۵۰٪ باز می‌شد.
     const realShares = deal.shares.filter((s) => !s.virtual);
     if (realShares.length > 0) {
       setEditOfficePct(deal.officePct != null ? String(deal.officePct) : "50");
@@ -295,12 +297,9 @@ export default function AccountingPage() {
           isExternal: s.isExternal,
         }))
       );
-    } else if (deal.commissionToman != null) {
-      setEditOfficePct("50");
-      setEditShares([{ key: "s-new-0", userId: deal.agent.id, name: deal.agent.name, pct: "50", isExternal: false }]);
     } else {
       setEditOfficePct("50");
-      setEditShares([]);
+      setEditShares([{ key: "s-new-0", userId: deal.agent.id, name: deal.agent.name, pct: "50", isExternal: false }]);
     }
     // لیست کاربران برای انتخاب مشاور در سهم‌ها
     apiJson<{ id: string; name: string; role: string; active: boolean }[]>("/api/users")
@@ -365,6 +364,19 @@ export default function AccountingPage() {
     const office = Number(toEnDigits(editOfficePct).replace(/[^0-9.]/g, "")) || 0;
     return office + editShares.reduce((t, s) => t + (Number(toEnDigits(s.pct).replace(/[^0-9.]/g, "")) || 0), 0);
   }
+
+  // بنر خطای مجموع، زنده با هر ویرایش به‌روز می‌شود: وقتی مجموع درست شد پاک می‌شود،
+  // و تا وقتی غلط است عدد تازه را نشان می‌دهد — نه عدد لحظه ذخیره.
+  useEffect(() => {
+    if (!editError.startsWith("مجموع سهم دفتر")) return;
+    const total = sharesTotal();
+    if (Math.abs(total - 100) < 0.01) {
+      setEditError("");
+    } else {
+      setEditError(`مجموع سهم دفتر و سهم‌ها باید دقیقاً ۱۰۰٪ شود (الان ${toFaDigits(String(Math.round(total * 100) / 100))}٪ است)`);
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [editOfficePct, editShares]);
 
   function onEditAmount(v: string) {
     const clean = toEnDigits(v).replace(/[^0-9]/g, "");

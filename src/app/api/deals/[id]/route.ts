@@ -144,6 +144,15 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
     d.commissionPercent !== undefined ||
     d.officePct !== undefined ||
     d.shares !== undefined;
+  // سوراخ قفل تسویه: تسویه یک سهم به‌تنهایی commissionPaid را true نمی‌کند، پس قفل
+  // تسویه کلی جلوی تغییر نرخ/مبلغ را نمی‌گیرد — در حالی که مبلغ سهم تسویه‌شده از روی
+  // کمیسیون تازه دوباره محاسبه می‌شود. اگر هر سهمی تسویه شده باشد، هر تغییر پولی ممنوع است.
+  if (existing.shares.some((s) => s.settled) && wantsMoneyChange) {
+    return NextResponse.json(
+      { error: "سهمی تسویه شده است؛ برای تغییر اول تسویه را برگردانید" },
+      { status: 400 }
+    );
+  }
   if (existing.commissionPaid && wantsMoneyChange) {
     return NextResponse.json(
       { error: "این معامله تسویه شده است؛ برای تغییر قیمت یا کمیسیون اول تسویه را برگردانید" },
