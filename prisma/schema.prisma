@@ -108,6 +108,7 @@ enum NotificationType {
   FOLLOW_UP_OVERDUE
   VIEWING_REMINDER
   ACCESS_GRANTED
+  CUSTOMER_TRANSFERRED
 }
 
 enum ActivityType {

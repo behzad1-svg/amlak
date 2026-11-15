@@ -17,6 +17,7 @@ const TYPE_LABELS: Record<string, string> = {
   FOLLOW_UP_OVERDUE: "پیگیری",
   VIEWING_REMINDER: "بازدید",
   ACCESS_GRANTED: "دسترسی",
+  CUSTOMER_TRANSFERRED: "انتقال",
 };
 
 const PRIORITY_LABELS: Record<string, string> = {
@@ -31,6 +32,7 @@ const TYPE_FILTERS = [
   { key: "FOLLOW_UP_OVERDUE", label: "پیگیری" },
   { key: "VIEWING_REMINDER", label: "بازدید" },
   { key: "ACCESS_GRANTED", label: "دسترسی" },
+  { key: "CUSTOMER_TRANSFERRED", label: "انتقال" },
 ] as const;
 
 type NotificationRow = {

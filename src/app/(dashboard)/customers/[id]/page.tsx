@@ -127,6 +127,10 @@ export default function CustomerDetailPage() {
   const [nextPrompt, setNextPrompt] = useState<{ type: string; date: string | null; note: string } | null>(null);
   const [nextSaving, setNextSaving] = useState(false);
   const [quickSaving, setQuickSaving] = useState<string | null>(null);
+  const [agents, setAgents] = useState<{ id: string; name: string; role: string; active?: boolean }[]>([]);
+  const [transferTo, setTransferTo] = useState("");
+  const [transferring, setTransferring] = useState(false);
+  const [transferOk, setTransferOk] = useState("");
 
   // نقد ۱ — بارگذاری با کمک‌کنندهٔ مرکزی؛ خطا پیام + تلاش دوباره دارد
   // و صفحه دیگر روی «بارگذاری...» گیر نمی‌کند.
@@ -179,6 +183,9 @@ export default function CustomerDetailPage() {
     load();
     apiJson<{ regions?: string[]; propertyTypes?: { value: string; label: string }[]; customerTags?: string[] }>("/api/settings")
       .then((d) => { if (d.regions) setRegions(d.regions); if (d.propertyTypes) setPropertyTypes(d.propertyTypes); if (d.customerTags) setCustomerTags(d.customerTags); })
+      .catch(() => {});
+    apiJson<{ id: string; name: string; role: string; active?: boolean }[]>("/api/users")
+      .then((d) => { if (Array.isArray(d)) setAgents(d.filter((u) => u.active !== false)); })
       .catch(() => {});
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [id]);
@@ -240,6 +247,26 @@ export default function CustomerDetailPage() {
       return;
     }
     router.push("/customers");
+  }
+
+  async function transferCustomer() {
+    if (!transferTo || !c) return;
+    const target = agents.find((a) => a.id === transferTo);
+    if (!target) return;
+    if (!confirm(`مشتری «${c.name}» به ${target.name} منتقل شود؟`)) return;
+    setTransferring(true);
+    setTransferOk("");
+    setError("");
+    try {
+      await apiFetch(`/api/customers/${id}/transfer`, { method: "PATCH", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ toAgentId: transferTo }) });
+      setTransferOk(`مشتری به ${target.name} منتقل شد.`);
+      setTransferTo("");
+      load();
+    } catch (e) {
+      setError(errorMessage(e));
+    } finally {
+      setTransferring(false);
+    }
   }
 
   async function addActivity() {
@@ -812,6 +839,25 @@ export default function CustomerDetailPage() {
               <div className="flex justify-between gap-2"><dt className="text-zinc-500 flex shrink-0 items-center gap-1.5"><User className="h-3.5 w-3.5" /> مشاور</dt><dd className="font-medium min-w-0 break-words">{c.assignedAgent?.name ?? "—"}</dd></div>
               <div className="flex justify-between gap-2"><dt className="text-zinc-500 shrink-0">تاریخ ثبت</dt><dd className="min-w-0 break-words">{formatDate(c.createdAt)}</dd></div>
             </dl>
+          </Card>
+
+          <Card>
+            <h3 className="flex items-center gap-2 text-sm font-semibold mb-2">
+              <User className="h-4 w-4 text-zinc-500" /> انتقال به مشاور دیگر
+            </h3>
+            <p className="text-[12px] text-[var(--ink-3)] mb-3">مشتری مستقیم و بدون تأیید مدیر به مشاور دیگری منتقل می‌شود؛ پیگیری‌ها، معامله‌ها و بازدیدها با او منتقل می‌شوند.</p>
+            <div className="flex flex-col gap-2 sm:flex-row">
+              <Select value={transferTo} onChange={(e) => setTransferTo(e.target.value)} className="flex-1" aria-label="مشاور مقصد">
+                <option value="">انتخاب مشاور...</option>
+                {agents.filter((a) => a.id !== c.assignedAgent?.id).map((a) => (
+                  <option key={a.id} value={a.id}>{a.name}{a.role === "OWNER" ? " (مدیر)" : ""}</option>
+                ))}
+              </Select>
+              <Button onClick={transferCustomer} disabled={!transferTo || transferring} className="w-full sm:w-auto">
+                {transferring ? "در حال انتقال..." : "انتقال بده"}
+              </Button>
+            </div>
+            {transferOk && <p className="mt-2 text-[13px] font-medium text-green-700">{transferOk}</p>}
           </Card>
         </div>
 

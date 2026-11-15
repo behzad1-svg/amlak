@@ -184,6 +184,10 @@ export const commissionSettleSchema = z.object({
   commissionPaid: z.boolean(),
 });
 
+export const customerTransferSchema = z.object({
+  toAgentId: z.string().min(1, "مشاور مقصد را انتخاب کنید"),
+});
+
 export const activityCreateSchema = z.object({
   type: z.enum(["CALL", "MESSAGE", "MEETING", "NOTE", "APPRAISAL", "ADVERTISED", "VIEWING_DONE", "STAGE_CHANGE", "OTHER"]),
   customerId: z.string().optional().nullable(),
