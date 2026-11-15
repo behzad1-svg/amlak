@@ -1,7 +1,7 @@
 "use client";
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
-import { LayoutDashboard, Users, Building2, Bell, LogOut, BarChart3, Settings, UserCog, TrendingUp } from "lucide-react";
+import { LayoutDashboard, Users, Building2, Bell, LogOut, BarChart3, Settings, UserCog, TrendingUp, Wallet } from "lucide-react";
 import { cn } from "@/lib/utils";
 import Image from "next/image";
 
@@ -10,6 +10,7 @@ const nav = [
   { href: "/customers", label: "مشتریان", icon: Users },
   { href: "/properties", label: "فایل‌ها", icon: Building2 },
   { href: "/notifications", label: "اعلان‌ها", icon: Bell },
+  { href: "/accounting", label: "حسابداری", icon: Wallet },
 ];
 
 export function Sidebar({ role, unreadCount, onClose }: { role?: string; unreadCount?: number; onClose?: () => void }) {

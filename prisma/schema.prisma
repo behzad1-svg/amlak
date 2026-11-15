@@ -145,6 +145,7 @@ model User {
   notifications    Notification[]
   activities       Activity[]
   auditLogs        AuditLog[]
+  cashboxEntries CashboxEntry[] @relation("CashboxCreatedBy")
 }
 
 model Customer {
@@ -352,6 +353,11 @@ enum DealStatus {
   CANCELED
 }
 
+enum CashboxType {
+  IN
+  OUT
+}
+
 model Deal {
   id         String     @id @default(cuid())
   customerId String
@@ -366,6 +372,8 @@ model Deal {
   notes       String?
   commissionToman   BigInt?
   commissionPercent Float?
+  commissionPaid    Boolean  @default(false)
+  commissionPaidAt  DateTime?
 
   dealSalePriceToman   BigInt?
   dealDepositToman     BigInt?
@@ -379,6 +387,21 @@ model Deal {
   @@index([propertyId, status])
   @@index([agentId, status])
   @@index([status, createdAt])
+}
+
+model CashboxEntry {
+  id          String      @id @default(cuid())
+  type        CashboxType
+  amount      BigInt
+  title       String
+  note        String?
+  occurredAt  DateTime    @default(now())
+  createdById String
+  createdBy   User        @relation("CashboxCreatedBy", fields: [createdById], references: [id])
+  createdAt   DateTime    @default(now())
+
+  @@index([occurredAt])
+  @@index([createdById])
 }
 
 model FollowUp {

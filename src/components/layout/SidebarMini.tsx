@@ -1,7 +1,7 @@
 "use client";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { LayoutDashboard, Users, Building2, Bell, BarChart3, Settings, PanelLeftOpen, UserCog, TrendingUp } from "lucide-react";
+import { LayoutDashboard, Users, Building2, Bell, BarChart3, Settings, PanelLeftOpen, UserCog, TrendingUp, Wallet } from "lucide-react";
 import { cn } from "@/lib/utils";
 import Image from "next/image";
 
@@ -10,6 +10,7 @@ const nav = [
   { href: "/customers", icon: Users },
   { href: "/properties", icon: Building2 },
   { href: "/notifications", icon: Bell },
+  { href: "/accounting", icon: Wallet },
 ];
 
 export function SidebarMini({ role, unreadCount, onExpand }: { role?: string; unreadCount?: number; onExpand?: () => void }) {

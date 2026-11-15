@@ -172,6 +172,18 @@ export const dealUpdateSchema = z.object({
   dealMonthlyRentToman: z.string().regex(/^[0-9]*$/, "فقط عدد").optional().nullable(),
 });
 
+export const cashboxEntrySchema = z.object({
+  type: z.enum(["IN", "OUT"]),
+  amount: z.string().regex(/^[0-9]+$/, "مبلغ فقط عدد"),
+  title: z.string().min(1, "عنوان لازم است").max(200),
+  note: z.string().max(2000).optional().nullable(),
+  occurredAt: z.string().optional().nullable(),
+});
+
+export const commissionSettleSchema = z.object({
+  commissionPaid: z.boolean(),
+});
+
 export const activityCreateSchema = z.object({
   type: z.enum(["CALL", "MESSAGE", "MEETING", "NOTE", "APPRAISAL", "ADVERTISED", "VIEWING_DONE", "STAGE_CHANGE", "OTHER"]),
   customerId: z.string().optional().nullable(),
