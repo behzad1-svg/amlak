@@ -15,8 +15,10 @@ export async function GET() {
   const isOwner = session.user.role === "OWNER";
   const agentFilter = isOwner ? {} : { agentId: session.user.id };
 
+  // «معامله قطعی» روی همه معامله‌های غیرلغوشده شمرده می‌شود، نه فقط آن‌هایی که کمیسیون دارند؛
+  // جمع‌های کمیسیون فقط از معامله‌های دارای کمیسیون می‌آیند.
   const deals = await prisma.deal.findMany({
-    where: { ...agentFilter, status: { not: "CANCELED" }, commissionToman: { not: null } },
+    where: { ...agentFilter, status: { not: "CANCELED" } },
     select: { commissionToman: true, commissionPaid: true, status: true },
   });
 
@@ -25,15 +27,18 @@ export async function GET() {
   let commissionUnpaid = BigInt(0);
   let unpaidCount = 0;
   let dealsCompleted = 0;
+  let dealsWithCommission = 0;
   for (const d of deals) {
-    const amount = d.commissionToman ?? BigInt(0);
+    if (d.status === "COMPLETED") dealsCompleted += 1;
+    if (d.commissionToman == null) continue;
+    dealsWithCommission += 1;
+    const amount = d.commissionToman;
     commissionTotal += amount;
     if (d.commissionPaid) commissionPaid += amount;
     else {
       commissionUnpaid += amount;
       unpaidCount += 1;
     }
-    if (d.status === "COMPLETED") dealsCompleted += 1;
   }
 
   let cashboxBalance: bigint | null = null;
@@ -62,7 +67,7 @@ export async function GET() {
       commissionUnpaid,
       unpaidCount,
       dealsCompleted,
-      dealsWithCommission: deals.length,
+      dealsWithCommission,
     })
   );
 }

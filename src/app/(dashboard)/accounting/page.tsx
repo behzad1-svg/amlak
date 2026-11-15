@@ -6,7 +6,7 @@ import { Button } from "@/components/ui/Button";
 import { PageError, PageSkeleton } from "@/components/ui/LoadState";
 import { useRole } from "@/hooks/useRole";
 import { apiFetch, apiJson, errorMessage } from "@/lib/api";
-import { formatDate, formatToman, toFaDigits } from "@/lib/utils";
+import { formatDate, formatToman, toEnDigits, toFaDigits } from "@/lib/utils";
 
 type Summary = {
   isOwner: boolean;
@@ -99,6 +99,8 @@ export default function AccountingPage() {
   const [tab, setTab] = useState<Tab>("summary");
   const [summary, setSummary] = useState<Summary | null>(null);
   const [commissions, setCommissions] = useState<CommissionDeal[]>([]);
+  // تب «پیگیری دریافتی‌ها» فهرست خودش را دارد (paid=unpaid) و از فیلتر تب کمیسیون‌ها اثر نمی‌پذیرد
+  const [unpaid, setUnpaid] = useState<CommissionDeal[]>([]);
   const [paidFilter, setPaidFilter] = useState<"all" | "paid" | "unpaid">("all");
   const [cashbox, setCashbox] = useState<{ entries: CashboxEntry[]; balance: string } | null>(null);
   const [agents, setAgents] = useState<AgentsData | null>(null);
@@ -120,12 +122,14 @@ export default function AccountingPage() {
     setLoading(true);
     setLoadError(null);
     try {
-      const [s, c] = await Promise.all([
+      const [s, c, u] = await Promise.all([
         apiJson<Summary>("/api/accounting/summary"),
         apiJson<CommissionDeal[]>(`/api/accounting/commissions?paid=${paidFilter}`),
+        apiJson<CommissionDeal[]>("/api/accounting/commissions?paid=unpaid"),
       ]);
       setSummary(s);
       setCommissions(c);
+      setUnpaid(u);
     } catch (e) {
       setLoadError(errorMessage(e));
     } finally {
@@ -194,7 +198,7 @@ export default function AccountingPage() {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           type: entryType,
-          amount: entryAmount.replace(/[^0-9]/g, ""),
+          amount: toEnDigits(entryAmount).replace(/[^0-9]/g, ""),
           title: entryTitle,
           note: entryNote || null,
           occurredAt: entryDate ? new Date(entryDate).toISOString() : null,
@@ -217,7 +221,6 @@ export default function AccountingPage() {
   if (loading) return <PageSkeleton rows={4} />;
   if (loadError && !summary) return <PageError message={loadError} onRetry={loadBase} />;
 
-  const unpaid = commissions.filter((d) => !d.commissionPaid);
   const visibleTabs = TABS.filter((t) => !t.ownerOnly || isOwner);
 
   return (
@@ -391,7 +394,7 @@ export default function AccountingPage() {
                       className="mt-1 w-full rounded-[10px] border border-[var(--line)] px-3 py-2 text-[14px]"
                       inputMode="numeric"
                       value={entryAmount}
-                      onChange={(e) => setEntryAmount(e.target.value.replace(/[^0-9۰-۹]/g, ""))}
+                      onChange={(e) => setEntryAmount(toEnDigits(e.target.value).replace(/[^0-9]/g, ""))}
                       placeholder="مثلاً ۵۰۰۰۰۰۰"
                       required
                     />

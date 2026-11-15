@@ -113,13 +113,16 @@ export function StageOutcomeModal({
   const isSaleRef = useRef(isSaleDeal);
   isSaleRef.current = isSaleDeal;
 
-  // پیش‌فرض قیمت فروش از فایل انتخاب‌شده (فقط وقتی مدیر هنوز دستی وارد نکرده)
+  // پیش‌فرض قیمت فروش از فایل انتخاب‌شده؛ با عوض شدن فایل، قیمت به قیمت فایل تازه برمی‌گردد
+  // (ویرایش دستی مدیر فقط تا وقتی سر جایش می‌ماند که فایل عوض نشده باشد).
+  const lastPricedPropertyId = useRef("");
   useEffect(() => {
     if (!isWon) return;
     const p = properties.find((pp) => pp.id === propertyId);
-    if (p && p.dealType === "SALE" && p.salePriceToman) {
-      setSalePriceToman((prev) => (prev === "" ? p.salePriceToman ?? "" : prev));
-    }
+    if (!p) return;
+    if (lastPricedPropertyId.current === p.id) return;
+    lastPricedPropertyId.current = p.id;
+    setSalePriceToman(p.dealType === "SALE" ? (p.salePriceToman ?? "") : "");
   }, [isWon, properties, propertyId]);
 
   // محاسبه خودکار مبلغ کمیسیون: درصد × قیمت فروش (فقط فروش؛ اجاره دستی است).

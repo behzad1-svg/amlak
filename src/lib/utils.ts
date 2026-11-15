@@ -22,9 +22,21 @@ export function formatToman(value: bigint | string | number | null | undefined):
 
 const FA_DIGITS = "۰۱۲۳۴۵۶۷۸۹";
 
+const FA_TO_EN: Record<string, string> = {
+  "۰": "0", "۱": "1", "۲": "2", "۳": "3", "۴": "4",
+  "۵": "5", "۶": "6", "۷": "7", "۸": "8", "۹": "9",
+  "٠": "0", "١": "1", "٢": "2", "٣": "3", "٤": "4",
+  "٥": "5", "٦": "6", "٧": "7", "٨": "8", "٩": "9",
+};
+
 /** اعداد لاتین را به فارسی تبدیل می‌کند */
 export function toFaDigits(s: string): string {
   return s.replace(/[0-9]/g, (d) => FA_DIGITS[Number(d)]);
+}
+
+/** ارقام فارسی و عربی را به لاتین تبدیل می‌کند (برای ورودی‌های عددی) */
+export function toEnDigits(s: string): string {
+  return s.replace(/[۰-۹٠-٩]/g, (d) => FA_TO_EN[d] ?? d);
 }
 
 /**
