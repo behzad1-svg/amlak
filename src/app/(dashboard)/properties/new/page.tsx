@@ -106,7 +106,7 @@ export default function NewPropertyPage() {
     setAccessUserIds((s) => (s.includes(id) ? s.filter((x) => x !== id) : [...s, id]));
 
   useEffect(() => {
-    apiJson<{ customers?: { id: string; name: string; phone?: string }[] } | { id: string; name: string; phone?: string }[]>("/api/customers?showLost=true&limit=200")
+    apiJson<{ customers?: { id: string; name: string; phone?: string }[] } | { id: string; name: string; phone?: string }[]>("/api/customers?showLost=true&limit=200&category=owners")
       .then((d) => {
         const list = Array.isArray(d) ? d : d?.customers ?? [];
         setOwners(list);
@@ -144,7 +144,7 @@ export default function NewPropertyPage() {
     const pickExisting = async (): Promise<boolean> => {
       try {
         const found = await apiJson<{ customers?: { id: string; name: string; phone: string }[] } | { id: string; name: string; phone: string }[]>(
-          `/api/customers?search=${encodeURIComponent(phone)}&showLost=true&limit=100`
+          `/api/customers?search=${encodeURIComponent(phone)}&showLost=true&limit=100&category=owners`
         );
         const list = Array.isArray(found) ? found : (found.customers ?? []);
         const hit = list.find((x) => x.phone === phone);

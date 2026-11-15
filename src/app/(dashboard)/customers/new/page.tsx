@@ -50,6 +50,13 @@ export default function NewCustomerPage() {
   const [loading, setLoading] = useState(false);
   const upd = (k: string, v: string) => setForm((f) => ({ ...f, [k]: v }));
 
+  // نوع پیش‌فرض از لینک (تب «مالکان» با ?type=OWNER می‌آید)
+  useEffect(() => {
+    const t = new URLSearchParams(window.location.search).get("type");
+    if (t === "OWNER" || t === "BUYER" || t === "SELLER" || t === "TENANT") upd("type", t);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
   useEffect(() => {
     apiJson<{ regions?: string[]; propertyTypes?: { value: string; label: string }[] }>("/api/settings")
       .then((d) => {
@@ -64,7 +71,7 @@ export default function NewCustomerPage() {
     if (!/^[0-9]{10,15}$/.test(phone)) return;
     let cancelled = false;
     const t = setTimeout(() => {
-      apiJson<{ customers?: { id: string; name: string; phone: string }[] }>(`/api/customers?search=${encodeURIComponent(phone)}&limit=100`)
+      apiJson<{ customers?: { id: string; name: string; phone: string }[] }>(`/api/customers?search=${encodeURIComponent(phone)}&limit=100&category=${form.type === "OWNER" ? "owners" : "customers"}`)
         .then((d) => {
           if (cancelled) return;
           const list = Array.isArray(d) ? d : (d.customers ?? []);
@@ -74,7 +81,7 @@ export default function NewCustomerPage() {
         .catch(() => {});
     }, 300);
     return () => { cancelled = true; clearTimeout(t); };
-  }, [form.phone]);
+  }, [form.phone, form.type]);
 
   useEffect(() => {
     if (role !== "OWNER") return;

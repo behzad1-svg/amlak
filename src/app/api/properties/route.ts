@@ -228,6 +228,28 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: "به این مشتری دسترسی ندارید" }, { status: 403 });
   }
 
+  // جلوگیری از ثبت دوبارهٔ همان فایل توسط مشاور دیگر — مدیر معاف است.
+  // «همان فایل» یعنی: همان مالک + همان آدرس + همان متراژ/نوع/نوع معامله؛
+  // اگر آدرس وارد نشده باشد، همان مالک + همان منطقه/نوع/نوع معامله/متراژ.
+  // فایلی با متراژ یا مشخصات متفاوت، فایل دیگری است و ثبتش آزاد است.
+  // (برای ثبت دو واحد یکسان، آدرس/واحد را کامل کنید تا از هم جدا شوند.)
+  if (session.user.role !== "OWNER") {
+    const normAddr = (s?: string | null) => (s ?? "").replace(/\s+/g, " ").trim();
+    const addr = normAddr(d.address);
+    const size = d.sizeSqm ?? null;
+    const candidates = await prisma.property.findMany({
+      where: { ownerId: d.ownerId, deletedAt: null, status: { not: "ARCHIVED" } },
+      select: { id: true, code: true, address: true, region: true, type: true, dealType: true, sizeSqm: true, listedBy: { select: { name: true } } },
+    });
+    const dup = candidates.find((p) => {
+      if (addr) return normAddr(p.address) === addr && p.sizeSqm === size && p.type === d.type && p.dealType === d.dealType;
+      return p.region === d.region && p.type === d.type && p.dealType === d.dealType && p.sizeSqm === size;
+    });
+    if (dup) {
+      return NextResponse.json({ error: `این فایل قبلاً ثبت شده است (کد ${dup.code ?? ""}، ثبت‌کننده: ${dup.listedBy?.name ?? "—"})؛ اگر ملک دیگری است، آدرس یا مشخصات را کامل کنید.` }, { status: 409 });
+    }
+  }
+
   // وضعیت فروخته/اجاره‌داده‌شده فقط از مسیر معامله می‌آید — مشاور نمی‌تواند مستقیم SOLD/RENTED بسازد
   const status = session.user.role === "OWNER" ? ((d.status as never) ?? "ACTIVE") : "ACTIVE";
 

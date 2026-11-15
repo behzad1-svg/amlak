@@ -190,7 +190,7 @@ export default function CustomerDetailPage() {
     if (!/^[0-9]{10,15}$/.test(phone) || phone === c.phone) return;
     let cancelled = false;
     const t = setTimeout(() => {
-      apiJson<{ customers?: { id: string; name: string; phone: string }[] }>(`/api/customers?search=${encodeURIComponent(phone)}&limit=100`)
+      apiJson<{ customers?: { id: string; name: string; phone: string }[] }>(`/api/customers?search=${encodeURIComponent(phone)}&limit=100&category=${form.type === "OWNER" ? "owners" : "customers"}`)
         .then((d) => {
           if (cancelled) return;
           const list = Array.isArray(d) ? d : (d.customers ?? []);
@@ -201,7 +201,7 @@ export default function CustomerDetailPage() {
     }, 300);
     return () => { cancelled = true; clearTimeout(t); }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [form.phone, editing]);
+  }, [form.phone, form.type, editing]);
 
   async function save() {
     setError("");

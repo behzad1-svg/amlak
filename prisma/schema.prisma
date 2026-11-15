@@ -150,7 +150,7 @@ model User {
 model Customer {
   id              String               @id @default(cuid())
   name            String
-  phone           String               @unique
+  phone           String
   type            CustomerType
   stage           CustomerPipelineStage @default(NEW)
   temperature     CustomerTemperature  @default(WARM)
@@ -201,7 +201,8 @@ model Customer {
   @@index([name])
   @@index([assignedAgentId, deletedAt, stage])
   @@index([nextFollowUpAt])
-  // phone already @unique
+  @@unique([phone, type])
+  // یک شماره در هر دسته (مالک / مشتری) یک بار — یکتایی کلی در API کنترل می‌شود
 }
 
 model AppSetting {

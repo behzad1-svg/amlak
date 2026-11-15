@@ -50,6 +50,8 @@ export async function GET(req: NextRequest) {
   const sort = searchParams.get("sort") ?? "followup";
   const source = searchParams.get("source");
   const tag = searchParams.get("tag");
+  const type = searchParams.get("type");
+  const category = searchParams.get("category"); // owners | customers
   const staleOnly = searchParams.get("staleOnly") === "true";
 
   if (source && !["INSTAGRAM", "DIVAR", "DIRECT_CALL", "REFERRAL", "SIGN_BOARD", "WEBSITE", "IN_PERSON", "ADVERTISEMENT", "OTHER", "FILE_FINDING"].includes(source)) {
@@ -57,6 +59,12 @@ export async function GET(req: NextRequest) {
   }
   if (tag && tag.length > 30) {
     return NextResponse.json({ error: "مقدار «tag» معتبر نیست" }, { status: 400 });
+  }
+  if (type && !["BUYER", "SELLER", "TENANT", "OWNER"].includes(type)) {
+    return NextResponse.json({ error: "مقدار «type» معتبر نیست" }, { status: 400 });
+  }
+  if (category && !["owners", "customers"].includes(category)) {
+    return NextResponse.json({ error: "مقدار «category» معتبر نیست" }, { status: 400 });
   }
 
   if (temperature && !["HOT", "WARM", "COLD"].includes(temperature)) {
@@ -93,6 +101,9 @@ export async function GET(req: NextRequest) {
   if (sizeMax) and.push({ preferredSizeMin: { lte: parseFloat(sizeMax) } });
   if (temperature === "HOT" || temperature === "WARM" || temperature === "COLD") and.push({ temperature });
   if (source) and.push({ source });
+  if (type) and.push({ type });
+  if (category === "owners") and.push({ type: "OWNER" });
+  else if (category === "customers") and.push({ type: { in: ["BUYER", "SELLER", "TENANT"] } });
   if (tag) and.push({ tags: { has: tag } });
   if (preferredType) and.push({ preferredType });
   if (preferredArea) {
@@ -228,10 +239,16 @@ export async function POST(req: NextRequest) {
     assignedAgentId = agent.id;
   }
 
-  const phoneClash = await prisma.customer.findUnique({ where: { phone: d.phone } });
+  // یک شماره در هر دسته یک بار: مالک (OWNER) جدا از مشتری (BUYER/SELLER/TENANT) —
+  // اگر مالکی بعداً مشتری شد، به‌عنوان مشتریِ تازه ثبت می‌شود (و برعکس).
+  // فقط رکوردهای فعال دیده می‌شوند (شمارهٔ یک مشتری حذف‌شده قابل استفادهٔ دوباره است).
+  const isOwner = d.type === "OWNER";
+  const phoneClash = await prisma.customer.findFirst({
+    where: { phone: d.phone, deletedAt: null, ...(isOwner ? { type: "OWNER" } : { type: { not: "OWNER" } }) },
+  });
   if (phoneClash) {
     return NextResponse.json(
-      { error: "مشتری با این شماره قبلا ثبت شده است" },
+      { error: isOwner ? "مالک با این شماره قبلا ثبت شده است" : "مشتری با این شماره قبلا ثبت شده است" },
       { status: 409 }
     );
   }

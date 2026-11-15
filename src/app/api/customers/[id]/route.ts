@@ -38,10 +38,14 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
   const d = parsed.data;
 
   if (d.phone !== undefined && d.phone !== existing.phone) {
-    const phoneClash = await prisma.customer.findUnique({ where: { phone: d.phone } });
+    const nextType = (d as { type?: string }).type ?? existing.type;
+    const nextIsOwner = nextType === "OWNER";
+    const phoneClash = await prisma.customer.findFirst({
+      where: { phone: d.phone, deletedAt: null, id: { not: id }, ...(nextIsOwner ? { type: "OWNER" } : { type: { not: "OWNER" } }) },
+    });
     if (phoneClash) {
       return NextResponse.json(
-        { error: "مشتری دیگری با این شماره ثبت شده است" },
+        { error: nextIsOwner ? "مالک دیگری با این شماره ثبت شده است" : "مشتری دیگری با این شماره ثبت شده است" },
         { status: 409 }
       );
     }
