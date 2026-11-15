@@ -7,7 +7,7 @@ import Link from "next/link";
 import { Header } from "@/components/layout/Header";
 import { Card, CardHeader, CardTitle } from "@/components/ui/Card";
 import { Button } from "@/components/ui/Button";
-import { Input, Label, PhoneInput, Select } from "@/components/ui/Input";
+import { Input, Label, PasswordInput, PhoneInput, Select } from "@/components/ui/Input";
 import { PageError, PageSkeleton } from "@/components/ui/LoadState";
 import { apiFetch, apiJson, errorMessage } from "@/lib/api";
 import { formatDateTime } from "@/lib/utils";
@@ -318,7 +318,7 @@ export default function AdminPage() {
             </div>
             <div>
               <Label htmlFor="f-password">رمز عبور (حداقل ۱۲ کاراکتر)</Label>
-              <Input id="f-password" type="password" className="mt-1" value={form.password} onChange={(e) => setForm({ ...form, password: e.target.value })} required minLength={12} />
+              <PasswordInput id="f-password" className="mt-1" value={form.password} onChange={(e) => setForm({ ...form, password: e.target.value })} required minLength={12} />
             </div>
             <div>
               <Label htmlFor="f-role">نقش</Label>
@@ -388,7 +388,7 @@ export default function AdminPage() {
               </div>
               <div>
                 <Label htmlFor="f-password-2">رمز جدید (اختیاری)</Label>
-                <Input id="f-password-2" type="password" className="mt-1" placeholder="خالی = بدون تغییر" value={edit.password} onChange={(e) => setEdit({ ...edit, password: e.target.value })} minLength={12} />
+                <PasswordInput id="f-password-2" className="mt-1" placeholder="خالی = بدون تغییر" value={edit.password} onChange={(e) => setEdit({ ...edit, password: e.target.value })} minLength={12} />
               </div>
               <div>
                 <Label htmlFor="f-role-2">نقش</Label>

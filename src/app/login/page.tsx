@@ -1,7 +1,7 @@
 "use client";
 import { useState } from "react";
 import { useRouter } from "next/navigation";
-import { Input, Label } from "@/components/ui/Input";
+import { Input, Label, PasswordInput } from "@/components/ui/Input";
 import { Button } from "@/components/ui/Button";
 
 export default function LoginPage() {
@@ -49,7 +49,7 @@ export default function LoginPage() {
               </div>
               <div>
                 <Label htmlFor="f-password">رمز عبور</Label>
-                <Input id="f-password" type="password" value={password} onChange={(e) => setPassword(e.target.value)} placeholder="••••••••" dir="ltr" className="mt-1.5 text-left" autoComplete="current-password" required />
+                <PasswordInput id="f-password" value={password} onChange={(e) => setPassword(e.target.value)} placeholder="••••••••" className="mt-1.5" autoComplete="current-password" required />
               </div>
               <Button type="submit" disabled={loading} className="w-full mt-2">{loading ? "در حال ورود..." : "ورود"}</Button>
             </form>

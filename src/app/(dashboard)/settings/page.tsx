@@ -6,11 +6,10 @@ import { useRouter } from "next/navigation";
 import { Header } from "@/components/layout/Header";
 import { Card } from "@/components/ui/Card";
 import { Button } from "@/components/ui/Button";
-import { Input, Label, Select } from "@/components/ui/Input";
+import { Input, Label, PasswordInput, Select } from "@/components/ui/Input";
 import { PageError, PageSkeleton } from "@/components/ui/LoadState";
 import { useRole } from "@/hooks/useRole";
 import { apiFetch, apiJson, errorMessage } from "@/lib/api";
-import { PERMISSIONS, hasPermission } from "@/lib/permissions";
 
 export default function SettingsPage() {
   const router = useRouter();
@@ -30,81 +29,6 @@ export default function SettingsPage() {
 
   const [pw, setPw] = useState({ currentPassword: "", newPassword: "", confirm: "" });
   const [pwSaving, setPwSaving] = useState(false);
-
-  // --- مدیریت کاربران (فقط مدیر) ---
-  type ManagedUser = { id: string; name: string; phone: string; role: string; active: boolean; createdAt: string; permissions?: Record<string, boolean> };
-  const [users, setUsers] = useState<ManagedUser[]>([]);
-  const [newUser, setNewUser] = useState({ name: "", phone: "", password: "", role: "AGENT" });
-  const [creatingUser, setCreatingUser] = useState(false);
-  const [userBusy, setUserBusy] = useState(false);
-  const [pwFor, setPwFor] = useState<string | null>(null);
-  const [pwValue, setPwValue] = useState("");
-  const [editFor, setEditFor] = useState<string | null>(null);
-  const [editValue, setEditValue] = useState({ name: "", phone: "" });
-
-  async function loadUsers() {
-    try {
-      const list = await apiJson<ManagedUser[]>("/api/users");
-      setUsers(Array.isArray(list) ? list : []);
-    } catch (e) {
-      flash("", errorMessage(e));
-    }
-  }
-  useEffect(() => {
-    // eslint-disable-next-line react-hooks/set-state-in-effect
-    if (role === "OWNER") void loadUsers();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [role]);
-
-  async function patchUser(id: string, body: Record<string, unknown>, okMsg: string) {
-    setUserBusy(true);
-    try {
-      await apiFetch(`/api/users/${id}`, {
-        method: "PATCH",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(body),
-      });
-      flash(okMsg);
-      await loadUsers();
-    } catch (e) {
-      flash("", errorMessage(e));
-    } finally {
-      setUserBusy(false);
-    }
-  }
-
-  async function createUser(e: React.FormEvent) {
-    e.preventDefault();
-    if (newUser.password.length < 12 || !/[A-Za-z]/.test(newUser.password) || !/[0-9]/.test(newUser.password)) {
-      flash("", "رمز باید حداقل ۱۲ کاراکتر و شامل حرف لاتین و رقم باشد");
-      return;
-    }
-    setCreatingUser(true);
-    try {
-      await apiFetch("/api/users", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(newUser),
-      });
-      setNewUser({ name: "", phone: "", password: "", role: "AGENT" });
-      flash("کاربر ساخته شد");
-      await loadUsers();
-    } catch (e2) {
-      flash("", errorMessage(e2));
-    } finally {
-      setCreatingUser(false);
-    }
-  }
-
-  async function resetUserPassword(u: ManagedUser) {
-    if (pwValue.length < 12 || !/[A-Za-z]/.test(pwValue) || !/[0-9]/.test(pwValue)) {
-      flash("", "رمز تازه باید حداقل ۱۲ کاراکتر و شامل حرف لاتین و رقم باشد");
-      return;
-    }
-    await patchUser(u.id, { password: pwValue }, `رمز ${u.name} ریست شد — جلسه‌های او بسته شد`);
-    setPwFor(null);
-    setPwValue("");
-  }
 
   // پیام موفقیت خودبه‌خود پاک می‌شود؛ پیام خطا تا اقدام بعدی می‌ماند
   function flash(ok: string, bad?: string) {
@@ -181,7 +105,7 @@ export default function SettingsPage() {
     <div>
       <Header
         title="تنظیمات"
-        subtitle={role === "OWNER" ? "مدیریت کاربران، مناطق، انواع ملک، برچسب‌های مشتری و امنیت حساب" : "امنیت حساب"}
+        subtitle={role === "OWNER" ? "مناطق، انواع ملک، برچسب‌های مشتری و امنیت حساب" : "امنیت حساب"}
       />
       <div className="p-4 sm:p-6 max-w-2xl space-y-6">
         {msg && <div className="rounded-lg bg-emerald-50 px-3 py-2 text-sm text-emerald-700">{msg}</div>}
@@ -192,15 +116,15 @@ export default function SettingsPage() {
           <form onSubmit={changePassword} className="space-y-3">
             <div>
               <Label htmlFor="f-currentPassword">رمز فعلی</Label>
-              <Input id="f-currentPassword" type="password" className="mt-1" value={pw.currentPassword} onChange={(e) => setPw({ ...pw, currentPassword: e.target.value })} required />
+              <PasswordInput id="f-currentPassword" className="mt-1" value={pw.currentPassword} onChange={(e) => setPw({ ...pw, currentPassword: e.target.value })} required />
             </div>
             <div>
               <Label htmlFor="f-newPassword">رمز جدید (حداقل ۱۲ کاراکتر، شامل حرف و رقم)</Label>
-              <Input id="f-newPassword" type="password" className="mt-1" value={pw.newPassword} onChange={(e) => setPw({ ...pw, newPassword: e.target.value })} required minLength={12} />
+              <PasswordInput id="f-newPassword" className="mt-1" value={pw.newPassword} onChange={(e) => setPw({ ...pw, newPassword: e.target.value })} required minLength={12} />
             </div>
             <div>
               <Label htmlFor="f-confirm">تکرار رمز جدید</Label>
-              <Input id="f-confirm" type="password" className="mt-1" value={pw.confirm} onChange={(e) => setPw({ ...pw, confirm: e.target.value })} required minLength={12} />
+              <PasswordInput id="f-confirm" className="mt-1" value={pw.confirm} onChange={(e) => setPw({ ...pw, confirm: e.target.value })} required minLength={12} />
             </div>
             <Button type="submit" disabled={pwSaving}>{pwSaving ? "..." : "تغییر رمز"}</Button>
           </form>
@@ -208,127 +132,6 @@ export default function SettingsPage() {
 
         {role === "OWNER" && (
           <>
-            <Card>
-              <h3 className="font-semibold mb-3">مدیریت کاربران</h3>
-              <div className="space-y-3">
-                {users.map((u) => (
-                  <div key={u.id} className="rounded-[12px] border border-[var(--line)] p-3">
-                    <div className="flex flex-wrap items-center gap-2">
-                      <span className="font-bold text-[13px]">{u.name}</span>
-                      <span dir="ltr" className="text-[12px] text-[var(--ink-3)]">{u.phone}</span>
-                      <span className="rounded-full border px-2 py-0.5 text-[11px]">{u.role === "OWNER" ? "مدیر" : "مشاور"}</span>
-                      <span className={`rounded-full border px-2 py-0.5 text-[11px] ${u.active ? "bg-emerald-50 text-emerald-700 border-emerald-200" : "bg-red-50 text-red-700 border-red-200"}`}>
-                        {u.active ? "فعال" : "غیرفعال"}
-                      </span>
-                    </div>
-                    <div className="mt-2 flex flex-wrap items-center gap-2">
-                      <Select
-                        value={u.role}
-                        onChange={(e) => void patchUser(u.id, { role: e.target.value }, "نقش تغییر کرد")}
-                        disabled={userBusy}
-                        className="w-28 text-[13px]"
-                        aria-label="نقش کاربر"
-                      >
-                        <option value="AGENT">مشاور</option>
-                        <option value="OWNER">مدیر</option>
-                      </Select>
-                      <Button
-                        variant="outline"
-                        disabled={userBusy}
-                        onClick={() => {
-                          if (u.active && !confirm(`دسترسی ${u.name} قطع شود؟ دیگر نمی‌تواند وارد شود.`)) return;
-                          void patchUser(u.id, { active: !u.active }, u.active ? "کاربر غیرفعال شد" : "کاربر فعال شد");
-                        }}
-                      >
-                        {u.active ? "غیرفعال کردن" : "فعال کردن"}
-                      </Button>
-                      <Button variant="outline" disabled={userBusy} onClick={() => { setPwFor(pwFor === u.id ? null : u.id); setPwValue(""); }}>
-                        ریست رمز
-                      </Button>
-                      <Button
-                        variant="outline"
-                        disabled={userBusy}
-                        onClick={() => {
-                          if (editFor === u.id) { setEditFor(null); return; }
-                          setEditFor(u.id);
-                          setEditValue({ name: u.name, phone: u.phone });
-                        }}
-                      >
-                        ویرایش
-                      </Button>
-                    </div>
-                    <div className="mt-2">
-                      <div className="text-[12px] font-bold text-[var(--ink-3)] mb-1">دسترسی‌ها</div>
-                      <div className="flex flex-wrap gap-3">
-                        {PERMISSIONS.map((perm) => {
-                          const checked = hasPermission({ role: u.role, permissions: u.permissions }, perm.key);
-                          return (
-                            <label key={perm.key} className="flex items-center gap-1 text-[13px]">
-                              <input
-                                type="checkbox"
-                                checked={checked}
-                                disabled={userBusy || u.role === "OWNER"}
-                                onChange={(e) => void patchUser(u.id, { permissions: { ...(u.permissions ?? {}), [perm.key]: e.target.checked } }, "دسترسی به‌روز شد")}
-                              />
-                              {perm.label}
-                            </label>
-                          );
-                        })}
-                      </div>
-                      {u.role === "OWNER" && <p className="text-[11px] text-zinc-400 mt-1">مدیر همه دسترسی‌ها را دارد.</p>}
-                    </div>
-                    {pwFor === u.id && (
-                      <div className="mt-2 flex flex-col gap-2 sm:flex-row">
-                        <Input
-                          type="password"
-                          value={pwValue}
-                          onChange={(e) => setPwValue(e.target.value)}
-                          placeholder="رمز تازه (حداقل ۱۲ کاراکتر، حرف و رقم)"
-                          className="flex-1"
-                        />
-                        <Button disabled={userBusy} onClick={() => void resetUserPassword(u)} className="w-full sm:w-auto">
-                          ثبت رمز تازه
-                        </Button>
-                      </div>
-                    )}
-                    {editFor === u.id && (
-                      <div className="mt-2 flex flex-col gap-2 sm:flex-row">
-                        <Input value={editValue.name} onChange={(e) => setEditValue({ ...editValue, name: e.target.value })} placeholder="نام" className="flex-1" />
-                        <Input value={editValue.phone} onChange={(e) => setEditValue({ ...editValue, phone: e.target.value })} placeholder="شماره تماس" dir="ltr" className="flex-1 text-left" />
-                        <Button
-                          disabled={userBusy}
-                          onClick={async () => {
-                            await patchUser(u.id, { name: editValue.name.trim(), phone: editValue.phone.trim() }, "مشخصات به‌روز شد");
-                            setEditFor(null);
-                          }}
-                          className="w-full sm:w-auto"
-                        >
-                          ذخیره
-                        </Button>
-                      </div>
-                    )}
-                  </div>
-                ))}
-                {users.length === 0 && <p className="text-sm text-zinc-400">کاربری نیست.</p>}
-              </div>
-              <form onSubmit={createUser} className="mt-4 border-t border-[var(--line)] pt-3 space-y-2">
-                <div className="text-[13px] font-bold">کاربر تازه</div>
-                <div className="grid gap-2 sm:grid-cols-2">
-                  <Input value={newUser.name} onChange={(e) => setNewUser({ ...newUser, name: e.target.value })} placeholder="نام و نام خانوادگی" required />
-                  <Input value={newUser.phone} onChange={(e) => setNewUser({ ...newUser, phone: e.target.value })} placeholder="شماره تماس (مثلا 09170000004)" dir="ltr" className="text-left" required />
-                  <Input type="password" value={newUser.password} onChange={(e) => setNewUser({ ...newUser, password: e.target.value })} placeholder="رمز (حداقل ۱۲ کاراکتر، حرف و رقم)" required minLength={12} />
-                  <Select value={newUser.role} onChange={(e) => setNewUser({ ...newUser, role: e.target.value })} aria-label="نقش کاربر تازه">
-                    <option value="AGENT">مشاور</option>
-                    <option value="OWNER">مدیر</option>
-                  </Select>
-                </div>
-                <Button type="submit" disabled={creatingUser}>{creatingUser ? "..." : "ساختن کاربر"}</Button>
-              </form>
-              <p className="mt-2 text-[12px] text-[var(--ink-3)]">
-                حذف کاربر در سیستم نیست؛ برای قطع دسترسی، کاربر را غیرفعال کنید. با ریست رمز یا تغییر نقش، جلسه‌های آن کاربر بسته می‌شود.
-              </p>
-            </Card>
-
             <Card>
               <h3 className="font-semibold mb-3">مناطق بوشهر</h3>
               <div className="flex flex-wrap gap-2 mb-4">

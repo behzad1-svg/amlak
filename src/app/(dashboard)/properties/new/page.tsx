@@ -5,8 +5,9 @@ import { Header } from "@/components/layout/Header";
 import { Input, NumberInput, Select, Label, Textarea } from "@/components/ui/Input";
 import { Button } from "@/components/ui/Button";
 import { SearchSelect } from "@/components/ui/SearchSelect";
-import { apiFetch, apiJson } from "@/lib/api";
+import { apiFetch, apiJson, errorMessage } from "@/lib/api";
 import { formatTomanWithWords } from "@/lib/money";
+import { CUSTOMER_SOURCE_LABELS, CUSTOMER_SOURCE_OPTIONS } from "@/lib/constants";
 
 type Flags = {
   hasParking: boolean;
@@ -94,6 +95,11 @@ export default function NewPropertyPage() {
   const [accessUserIds, setAccessUserIds] = useState<string[]>([]);
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(false);
+  // ثبت مالک درون‌خطی — بدون رفتن به صفحه مشتریان
+  const [showNewOwner, setShowNewOwner] = useState(false);
+  const [newOwner, setNewOwner] = useState({ name: "", phone: "", source: "" });
+  const [newOwnerMsg, setNewOwnerMsg] = useState("");
+  const [newOwnerBusy, setNewOwnerBusy] = useState(false);
   const upd = (k: string, v: string) => setForm((f) => ({ ...f, [k]: v }));
   const setFlag = (k: keyof Flags, v: boolean) => setFlags((f) => ({ ...f, [k]: v }));
   const toggleAccess = (id: string) =>
@@ -125,6 +131,55 @@ export default function NewPropertyPage() {
       })
       .catch(() => {});
   }, []);
+
+  // ثبت مالک تازه همین‌جا؛ اگر شماره تکراری باشد، همان مالک قبلی انتخاب می‌شود
+  async function createOwner() {
+    setNewOwnerMsg("");
+    const name = newOwner.name.trim();
+    const phone = newOwner.phone.trim();
+    if (!name) { setNewOwnerMsg("نام مالک را وارد کنید"); return; }
+    if (!/^[0-9]{10,15}$/.test(phone)) { setNewOwnerMsg("شماره باید ۱۰ تا ۱۵ رقم باشد"); return; }
+    if (!newOwner.source) { setNewOwnerMsg("شیوه آشنایی را انتخاب کنید"); return; }
+    setNewOwnerBusy(true);
+    const pickExisting = async (): Promise<boolean> => {
+      try {
+        const found = await apiJson<{ customers?: { id: string; name: string; phone: string }[] } | { id: string; name: string; phone: string }[]>(
+          `/api/customers?search=${encodeURIComponent(phone)}&showLost=true&limit=100`
+        );
+        const list = Array.isArray(found) ? found : (found.customers ?? []);
+        const hit = list.find((x) => x.phone === phone);
+        if (!hit) return false;
+        if (!owners.some((o) => o.id === hit.id)) setOwners((os) => [...os, { id: hit.id, name: hit.name, phone: hit.phone }]);
+        upd("ownerId", hit.id);
+        setNewOwnerMsg(`این شماره قبلاً برای «${hit.name}» ثبت شده است؛ همان مالک انتخاب شد.`);
+        setShowNewOwner(false);
+        return true;
+      } catch {
+        return false;
+      }
+    };
+    try {
+      if (await pickExisting()) return;
+      const created = await apiJson<{ id: string; name: string; phone?: string }>("/api/customers", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ name, phone, type: "OWNER", stage: "INITIAL_CONTACT", source: newOwner.source }),
+      });
+      setOwners((os) => [...os, { id: created.id, name: created.name, phone: created.phone }]);
+      upd("ownerId", created.id);
+      setNewOwner({ name: "", phone: "", source: "" });
+      setShowNewOwner(false);
+      setNewOwnerMsg("مالک جدید ثبت و انتخاب شد.");
+    } catch (e) {
+      // اگر هم‌زمان با همین شماره ثبت شده باشد، همان مالک قبلی را انتخاب کن
+      if (e instanceof Error && e.message.includes("قبلا ثبت شده")) {
+        if (await pickExisting()) return;
+      }
+      setNewOwnerMsg(errorMessage(e));
+    } finally {
+      setNewOwnerBusy(false);
+    }
+  }
 
   async function submit(e: React.FormEvent) {
     e.preventDefault();
@@ -259,6 +314,29 @@ export default function NewPropertyPage() {
                 placeholder="جستجوی مالک (نام یا شماره)..."
                 emptyText="مشتری/مالکی با این عبارت نیست"
               />
+              {!showNewOwner ? (
+                <button type="button" onClick={() => { setShowNewOwner(true); setNewOwnerMsg(""); }} className="mt-1.5 text-[13px] font-medium text-[var(--pomegranate)] hover:underline">
+                  + ثبت مالک جدید
+                </button>
+              ) : (
+                <div className="mt-2 space-y-2 rounded-[12px] border border-[var(--line)] bg-[var(--paper-2)] p-3">
+                  <div className="grid gap-2 sm:grid-cols-2">
+                    <Input value={newOwner.name} onChange={(e) => setNewOwner({ ...newOwner, name: e.target.value })} placeholder="نام و نام خانوادگی مالک" onKeyDown={(e) => { if (e.key === "Enter") { e.preventDefault(); void createOwner(); } }} />
+                    <Input value={newOwner.phone} onChange={(e) => setNewOwner({ ...newOwner, phone: e.target.value.replace(/[^0-9]/g, "") })} placeholder="شماره تماس (مثلا 09170000004)" dir="ltr" className="text-left" inputMode="numeric" onKeyDown={(e) => { if (e.key === "Enter") { e.preventDefault(); void createOwner(); } }} />
+                  </div>
+                  <Select value={newOwner.source} onChange={(e) => setNewOwner({ ...newOwner, source: e.target.value })} aria-label="شیوه آشنایی مالک">
+                    <option value="">شیوه آشنایی...</option>
+                    {CUSTOMER_SOURCE_OPTIONS.map((s) => (
+                      <option key={s} value={s}>{CUSTOMER_SOURCE_LABELS[s] ?? s}</option>
+                    ))}
+                  </Select>
+                  <div className="flex gap-2">
+                    <Button type="button" size="sm" onClick={() => void createOwner()} disabled={newOwnerBusy}>{newOwnerBusy ? "..." : "ثبت مالک"}</Button>
+                    <Button type="button" size="sm" variant="outline" onClick={() => setShowNewOwner(false)}>انصراف</Button>
+                  </div>
+                </div>
+              )}
+              {newOwnerMsg && <p className="mt-1.5 text-[12.5px] text-[var(--ink-2)]">{newOwnerMsg}</p>}
             </div>
             <div>
               <Label htmlFor="f-address">آدرس دقیق</Label>

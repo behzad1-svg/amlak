@@ -1,3 +1,6 @@
+"use client";
+import { useState } from "react";
+import { Eye, EyeOff } from "lucide-react";
 import { cn } from "@/lib/utils";
 
 const fieldBase =
@@ -5,6 +8,30 @@ const fieldBase =
 
 export function Input({ className, ...props }: React.InputHTMLAttributes<HTMLInputElement>) {
   return <input className={cn(fieldBase, className)} {...props} />;
+}
+
+/** فیلد رمز با دکمه چشم برای نمایش/پنهان‌کردن رمز */
+export function PasswordInput({ className, ...props }: React.InputHTMLAttributes<HTMLInputElement>) {
+  const [show, setShow] = useState(false);
+  return (
+    <div className={cn("relative", className)}>
+      <input
+        {...props}
+        type={show ? "text" : "password"}
+        dir="ltr"
+        className={cn(fieldBase, "pr-10 text-left")}
+      />
+      <button
+        type="button"
+        onClick={() => setShow((s) => !s)}
+        className="absolute right-2 top-1/2 -translate-y-1/2 rounded-md p-1 text-[var(--ink-3)] hover:text-[var(--ink)]"
+        aria-label={show ? "پنهان کردن رمز" : "نمایش رمز"}
+        tabIndex={-1}
+      >
+        {show ? <EyeOff className="h-[18px] w-[18px]" /> : <Eye className="h-[18px] w-[18px]" />}
+      </button>
+    </div>
+  );
 }
 export function Textarea({ className, ...props }: React.TextareaHTMLAttributes<HTMLTextAreaElement>) {
   return <textarea className={cn(fieldBase, "min-h-[88px] resize-y py-3", className)} {...props} />;
