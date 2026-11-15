@@ -7,7 +7,6 @@ import Link from "next/link";
 import { Header } from "@/components/layout/Header";
 import { Card, CardHeader, CardTitle } from "@/components/ui/Card";
 import { Button } from "@/components/ui/Button";
-import { Input, Label, PasswordInput, PhoneInput, Select } from "@/components/ui/Input";
 import { PageError, PageSkeleton } from "@/components/ui/LoadState";
 import { apiFetch, apiJson, errorMessage } from "@/lib/api";
 import { formatDateTime } from "@/lib/utils";
@@ -39,14 +38,6 @@ type TeamStat = {
   breakdown: Breakdown;
 };
 
-type AdminUser = {
-  id: string;
-  name: string;
-  phone: string;
-  role: "OWNER" | "AGENT";
-  active: boolean;
-};
-
 type ActivityRow = {
   id: string;
   type: string;
@@ -69,21 +60,15 @@ type DashboardData = { teamStats: TeamStat[] | null };
 
 export default function AdminPage() {
   const [data, setData] = useState<DashboardData | null>(null);
-  const [users, setUsers] = useState<AdminUser[]>([]);
   const [errorLogs, setErrorLogs] = useState<ErrorLogRow[]>([]);
   const [errorLogsUnavailable, setErrorLogsUnavailable] = useState(false);
   const [loading, setLoading] = useState(true);
   const [loadError, setLoadError] = useState<string | null>(null);
   const [msg, setMsg] = useState("");
   const [err, setErr] = useState("");
-  const [saving, setSaving] = useState(false);
   const [selectedAgent, setSelectedAgent] = useState<TeamStat | null>(null);
   const [agentActivities, setAgentActivities] = useState<ActivityRow[]>([]);
   const [loadingActs, setLoadingActs] = useState(false);
-
-  const [form, setForm] = useState({ name: "", phone: "", password: "", role: "AGENT" });
-  const [editId, setEditId] = useState<string | null>(null);
-  const [edit, setEdit] = useState({ name: "", phone: "", role: "AGENT", active: true, password: "" });
 
   const flash = useCallback((ok: string, bad?: string) => {
     setMsg(ok);
@@ -95,13 +80,11 @@ export default function AdminPage() {
     setLoading(true);
     setLoadError(null);
     try {
-      const [dash, usersRes, logsRes] = await Promise.all([
+      const [dash, logsRes] = await Promise.all([
         apiJson<DashboardData>("/api/dashboard"),
-        apiJson<AdminUser[]>("/api/users"),
         apiJson<{ logs?: ErrorLogRow[]; unavailable?: boolean }>("/api/admin/error-logs?limit=50").catch(() => ({ logs: [], unavailable: true })),
       ]);
       setData(dash);
-      setUsers(Array.isArray(usersRes) ? usersRes : []);
       setErrorLogs(logsRes.logs ?? []);
       setErrorLogsUnavailable(Boolean(logsRes.unavailable));
     } catch (e) {
@@ -131,76 +114,12 @@ export default function AdminPage() {
     }
   }
 
-  async function createUser(e: React.FormEvent) {
-    e.preventDefault();
-    setSaving(true);
-    setErr("");
-    try {
-      await apiFetch("/api/users", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(form),
-      });
-      setForm({ name: "", phone: "", password: "", role: "AGENT" });
-      flash("کاربر ساخته شد");
-      load();
-    } catch (err2) {
-      flash("", errorMessage(err2));
-    } finally {
-      setSaving(false);
-    }
-  }
-
-  async function saveUser(e: React.FormEvent) {
-    e.preventDefault();
-    if (!editId) return;
-    setSaving(true);
-    setErr("");
-    const body: Record<string, unknown> = {
-      name: edit.name,
-      phone: edit.phone,
-      role: edit.role,
-      active: edit.active,
-    };
-    if (edit.password) body.password = edit.password;
-    try {
-      await apiFetch(`/api/users/${editId}`, {
-        method: "PATCH",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(body),
-      });
-      setEditId(null);
-      setEdit({ name: "", phone: "", role: "AGENT", active: true, password: "" });
-      flash("کاربر به‌روزرسانی شد");
-      load();
-    } catch (err2) {
-      flash("", errorMessage(err2));
-    } finally {
-      setSaving(false);
-    }
-  }
-
-  async function toggleActive(u: AdminUser) {
-    setErr("");
-    try {
-      await apiFetch(`/api/users/${u.id}`, {
-        method: "PATCH",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ active: !u.active }),
-      });
-      flash(u.active ? "کاربر غیرفعال شد" : "کاربر فعال شد");
-      load();
-    } catch (err2) {
-      flash("", errorMessage(err2));
-    }
-  }
-
   if (loading) return <PageSkeleton rows={4} />;
   if (loadError || !data) return <PageError message={loadError ?? "داده بارگذاری نشد."} onRetry={load} />;
 
   return (
     <div>
-      <Header title="مدیریت" subtitle="آمار فعالیت تیم و کاربران" />
+      <Header title="مدیریت" subtitle="آمار فعالیت تیم" />
       <div className="p-4 sm:p-6 space-y-6 max-w-[1200px]">
         {msg && <div className="rounded-lg bg-emerald-50 px-3 py-2 text-sm text-emerald-700">{msg}</div>}
         {err && <div className="rounded-lg bg-red-50 px-3 py-2 text-sm text-red-700" role="alert">{err}</div>}
@@ -303,107 +222,6 @@ export default function AdminPage() {
             )}
           </Card>
         )}
-
-        <Card>
-          <CardHeader><CardTitle>کاربران سیستم</CardTitle></CardHeader>
-
-          <form onSubmit={createUser} className="mb-5 grid gap-3 sm:grid-cols-5 items-end">
-            <div>
-              <Label htmlFor="f-name">نام</Label>
-              <Input id="f-name" className="mt-1" value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })} required />
-            </div>
-            <div>
-              <Label htmlFor="f-phone">شماره</Label>
-              <PhoneInput id="f-phone" className="mt-1" value={form.phone} onChange={(e) => setForm({ ...form, phone: e.target.value })} required />
-            </div>
-            <div>
-              <Label htmlFor="f-password">رمز عبور (حداقل ۱۲ کاراکتر)</Label>
-              <PasswordInput id="f-password" className="mt-1" value={form.password} onChange={(e) => setForm({ ...form, password: e.target.value })} required minLength={12} />
-            </div>
-            <div>
-              <Label htmlFor="f-role">نقش</Label>
-              <Select id="f-role" className="mt-1" value={form.role} onChange={(e) => setForm({ ...form, role: e.target.value })}>
-                <option value="AGENT">مشاور</option>
-                <option value="OWNER">مدیر</option>
-              </Select>
-            </div>
-            <Button type="submit" disabled={saving}>{saving ? "..." : "افزودن کاربر"}</Button>
-          </form>
-
-          <div className="overflow-x-auto">
-            <table className="w-full text-sm">
-              <thead>
-                <tr className="border-b text-zinc-500">
-                  <th className="py-2 text-right">نام</th>
-                  <th className="text-right">شماره</th>
-                  <th>نقش</th>
-                  <th>وضعیت</th>
-                  <th>عملیات</th>
-                </tr>
-              </thead>
-              <tbody>
-                {users.map((u) => (
-                  <tr key={u.id} className="border-b last:border-0">
-                    <td className="py-2 font-medium">{u.name}</td>
-                    <td dir="ltr" className="text-right">{u.phone}</td>
-                    <td className="text-center">{u.role === "OWNER" ? "مدیر" : "مشاور"}</td>
-                    <td className="text-center">
-                      <span className={u.active ? "text-emerald-600" : "text-zinc-400"}>
-                        {u.active ? "فعال" : "غیرفعال"}
-                      </span>
-                    </td>
-                    <td className="text-center">
-                      <div className="flex items-center justify-center gap-2">
-                        <Button
-                          type="button"
-                          size="sm"
-                          variant="outline"
-                          onClick={() => {
-                            setEditId(u.id);
-                            setEdit({ name: u.name, phone: u.phone, role: u.role, active: u.active, password: "" });
-                          }}
-                        >
-                          ویرایش
-                        </Button>
-                        <Button type="button" size="sm" variant={u.active ? "danger" : "outline"} onClick={() => toggleActive(u)}>
-                          {u.active ? "غیرفعال" : "فعال"}
-                        </Button>
-                      </div>
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
-
-          {editId && (
-            <form onSubmit={saveUser} className="mt-5 rounded-[12px] border border-[var(--line)] bg-[var(--paper-2)] p-4 grid gap-3 sm:grid-cols-5 items-end">
-              <div>
-                <Label htmlFor="f-name-2">نام</Label>
-                <Input id="f-name-2" className="mt-1" value={edit.name} onChange={(e) => setEdit({ ...edit, name: e.target.value })} required />
-              </div>
-              <div>
-                <Label htmlFor="f-phone-2">شماره</Label>
-                <PhoneInput id="f-phone-2" className="mt-1" value={edit.phone} onChange={(e) => setEdit({ ...edit, phone: e.target.value })} required />
-              </div>
-              <div>
-                <Label htmlFor="f-password-2">رمز جدید (اختیاری)</Label>
-                <PasswordInput id="f-password-2" className="mt-1" placeholder="خالی = بدون تغییر" value={edit.password} onChange={(e) => setEdit({ ...edit, password: e.target.value })} minLength={12} />
-              </div>
-              <div>
-                <Label htmlFor="f-role-2">نقش</Label>
-                <Select id="f-role-2" className="mt-1" value={edit.role} onChange={(e) => setEdit({ ...edit, role: e.target.value })}>
-                  <option value="AGENT">مشاور</option>
-                  <option value="OWNER">مدیر</option>
-                </Select>
-              </div>
-              <div className="flex gap-2">
-                <Button type="submit" disabled={saving}>{saving ? "..." : "ذخیره"}</Button>
-                <Button type="button" variant="ghost" onClick={() => setEditId(null)}>انصراف</Button>
-              </div>
-            </form>
-          )}
-        </Card>
 
         <Card>
           <CardHeader><CardTitle>خروجی داده (پشتیبان)</CardTitle></CardHeader>

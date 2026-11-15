@@ -10,7 +10,28 @@ import { Button } from "@/components/ui/Button";
 import { Badge } from "@/components/ui/Badge";
 import { PageError, PageSkeleton } from "@/components/ui/LoadState";
 import { apiFetch, apiJson, errorMessage } from "@/lib/api";
-import { formatDate } from "@/lib/utils";
+import { formatDate, toFaDigits } from "@/lib/utils";
+
+const TYPE_LABELS: Record<string, string> = {
+  MATCH_SUGGESTION: "تطبیق",
+  FOLLOW_UP_OVERDUE: "پیگیری",
+  VIEWING_REMINDER: "بازدید",
+  ACCESS_GRANTED: "دسترسی",
+};
+
+const PRIORITY_LABELS: Record<string, string> = {
+  HIGH: "مهم",
+  NORMAL: "معمولی",
+  LOW: "کم‌اهمیت",
+};
+
+const TYPE_FILTERS = [
+  { key: "all", label: "همه" },
+  { key: "MATCH_SUGGESTION", label: "تطبیق" },
+  { key: "FOLLOW_UP_OVERDUE", label: "پیگیری" },
+  { key: "VIEWING_REMINDER", label: "بازدید" },
+  { key: "ACCESS_GRANTED", label: "دسترسی" },
+] as const;
 
 type NotificationRow = {
   id: string;
@@ -29,12 +50,14 @@ export default function NotificationsPage() {
   const [loading, setLoading] = useState(true);
   const [loadError, setLoadError] = useState<string | null>(null);
   const [actionError, setActionError] = useState("");
+  const [typeFilter, setTypeFilter] = useState<string>("all");
+  const [quickSaving, setQuickSaving] = useState<string | null>(null);
 
   const load = useCallback(async () => {
     setLoading(true);
     setLoadError(null);
     try {
-      const d = await apiJson<{ notifications?: NotificationRow[] }>("/api/notifications");
+      const d = await apiJson<{ notifications?: NotificationRow[] }>("/api/notifications?limit=100");
       setList(d.notifications ?? []);
     } catch (e) {
       setLoadError(errorMessage(e));
@@ -81,6 +104,37 @@ export default function NotificationsPage() {
     }
   }
 
+  function isoInDays(n: number): string {
+    return new Date(Date.now() + n * 86_400_000).toISOString();
+  }
+
+  // ثبت سریع نتیجه تماس از داخل اعلان پیگیری: تماس ثبت می‌شود، پیگیری
+  // بعدی به فردا می‌رود و اعلان خوانده می‌شود.
+  async function quickCalled(n: NotificationRow) {
+    if (!n.relatedId || quickSaving) return;
+    setQuickSaving(n.id);
+    setActionError("");
+    try {
+      await apiFetch("/api/activities", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ type: "CALL", customerId: n.relatedId, description: "تماس: جواب داد" }),
+      });
+      await apiFetch(`/api/customers/${n.relatedId}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ nextFollowUpAt: isoInDays(1) }),
+      });
+      await markOne(n.id);
+    } catch (e) {
+      setActionError(errorMessage(e));
+    } finally {
+      setQuickSaving(null);
+    }
+  }
+
+  const filtered = typeFilter === "all" ? list : list.filter((n) => n.type === typeFilter);
+
   if (loading) return <PageSkeleton rows={4} />;
   if (loadError) return <PageError message={loadError} onRetry={load} />;
 
@@ -91,23 +145,38 @@ export default function NotificationsPage() {
         {actionError && (
           <div className="rounded-lg bg-red-50 px-3 py-2 text-sm text-red-700" role="alert">{actionError}</div>
         )}
-        {list.length === 0 ? <p className="text-zinc-400">اعلانی ندارید</p> : list.map((n) => (
+        <div className="flex flex-wrap gap-2">
+          {TYPE_FILTERS.map((f) => (
+            <Button key={f.key} size="sm" variant={typeFilter === f.key ? "primary" : "outline"} onClick={() => setTypeFilter(f.key)}>
+              {f.label}
+              {f.key !== "all" && ` (${toFaDigits(String(list.filter((n) => n.type === f.key).length))})`}
+            </Button>
+          ))}
+        </div>
+        {filtered.length === 0 ? <p className="text-zinc-400">{list.length === 0 ? "اعلانی ندارید" : "در این دسته اعلانی ندارید"}</p> : filtered.map((n) => (
           <Card key={n.id} className={n.read ? "opacity-60" : "border-amber-200 bg-amber-50/30"}>
             <div className="flex items-start justify-between gap-3">
               <div className="flex-1 min-w-0">
-                <div className="flex flex-wrap gap-2 mb-1"><Badge className={n.priority === "HIGH" ? "bg-red-100 text-red-700 border-red-200" : ""}>{n.priority}</Badge><Badge>{n.type}</Badge></div>
+                <div className="flex flex-wrap gap-2 mb-1"><Badge className={n.priority === "HIGH" ? "bg-red-100 text-red-700 border-red-200" : ""}>{PRIORITY_LABELS[n.priority] ?? n.priority}</Badge><Badge>{TYPE_LABELS[n.type] ?? n.type}</Badge></div>
                 <p className="text-sm break-words">{n.message}</p>
                 <p className="text-xs text-zinc-400 mt-1">{formatDate(n.createdAt)}</p>
-                {n.type === "MATCH_SUGGESTION" && n.relatedId && n.relatedType && (
+                {n.relatedId && n.relatedType && (
                   <Link
-                    href={n.relatedType === "Property" ? `/properties/${n.relatedId}` : `/customers/${n.relatedId}`}
+                    href={n.relatedType === "Property" ? `/properties/${n.relatedId}` : n.relatedType === "Customer" ? `/customers/${n.relatedId}` : "/viewings"}
                     className="mt-2 inline-block rounded-md border border-amber-300 bg-white px-2 py-1 text-xs font-medium text-amber-800 hover:bg-amber-50"
                   >
-                    {n.relatedType === "Property" ? "مشاهده فایل" : "مشاهده مشتری"}
+                    {n.relatedType === "Property" ? "مشاهده فایل" : n.relatedType === "Customer" ? "مشاهده مشتری" : "مشاهده بازدیدها"}
                   </Link>
                 )}
               </div>
-              {!n.read && <Button size="sm" variant="outline" onClick={() => markOne(n.id)}>خواندم</Button>}
+              <div className="flex shrink-0 flex-col gap-2">
+                {n.type === "FOLLOW_UP_OVERDUE" && n.relatedType === "Customer" && n.relatedId && !n.read && (
+                  <Button size="sm" onClick={() => quickCalled(n)} disabled={quickSaving === n.id}>
+                    {quickSaving === n.id ? "..." : "تماس گرفتم"}
+                  </Button>
+                )}
+                {!n.read && <Button size="sm" variant="outline" onClick={() => markOne(n.id)}>خواندم</Button>}
+              </div>
             </div>
           </Card>
         ))}

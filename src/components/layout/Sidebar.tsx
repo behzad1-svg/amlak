@@ -1,7 +1,7 @@
 "use client";
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
-import { LayoutDashboard, Users, Building2, Bell, LogOut, BarChart3, Settings, UserCog } from "lucide-react";
+import { LayoutDashboard, Users, Building2, Bell, LogOut, BarChart3, Settings, UserCog, TrendingUp } from "lucide-react";
 import { cn } from "@/lib/utils";
 
 const nav = [
@@ -87,6 +87,16 @@ export function Sidebar({ role, unreadCount, onClose }: { role?: string; unreadC
               )}
             >
               <UserCog className={cn("h-[18px] w-[18px]", pathname?.startsWith("/users") ? "text-white" : "text-[var(--ink-3)]")} /> کاربران
+            </Link>
+            <Link
+              href="/reports"
+              onClick={onClose}
+              className={cn(
+                "flex items-center gap-3 rounded-[12px] px-3 py-2.5 text-[13.5px] font-medium",
+                pathname?.startsWith("/reports") ? "bg-[var(--ink)] text-white" : "text-[var(--ink-2)] hover:bg-[var(--paper-2)]"
+              )}
+            >
+              <TrendingUp className={cn("h-[18px] w-[18px]", pathname?.startsWith("/reports") ? "text-white" : "text-[var(--ink-3)]")} /> گزارش عملکرد
             </Link>
           </>
         )}

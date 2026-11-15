@@ -267,10 +267,13 @@ export async function createMatchNotifications(
   sourceId: string,
   sourceAgentId: string
 ) {
-  if (matches.length === 0) return;
+  // فقط تطبیق‌های قوی (امتیاز ۸۰ به بالا) اعلان می‌شوند؛ تطبیق‌های ضعیف
+  // (۷۰ تا ۷۹) فقط در لیست تطبیق فایل/مشتری دیده می‌شوند، نه به‌عنوان اعلان.
+  const strong = matches.filter((m) => m.score >= 80);
+  if (strong.length === 0) return;
   const since = new Date(Date.now() - 24 * 60 * 60 * 1000);
   // نام موجودیت تازه‌ساخته‌شده (منبع تطبیق) یک بار خوانده می‌شود تا متن
-  // هر دو اعلان، نام مشتری و عنوان فایل را با هم داشته باشد.
+  // اعلان، نام مشتری و عنوان فایل را با هم داشته باشد.
   let sourceName: string | null = null;
   if (sourceType === "customer") {
     const src = await prisma.customer.findUnique({ where: { id: sourceId }, select: { name: true } });
@@ -280,13 +283,13 @@ export async function createMatchNotifications(
     sourceName = src?.title ?? null;
   }
 
-  // نقد ۷ — ردیف‌های اعلان اول در حافظه ساخته می‌شوند، بعد با یک کوئری
-  // بررسی می‌شود کدام‌ها در ۲۴ ساعت گذشته ساخته شده‌اند، و بقیه با یک
-  // createMany نوشته می‌شوند. قبلاً برای هر تطبیق دو findFirst و تا دو
-  // create جداگانه اجرا می‌شد (N+1).
-  type Row = { userId: string; type: string; relatedId: string; relatedType: string; priority: string; message: string };
-  const rows: Row[] = [];
-  for (const match of matches) {
+  // اعلان‌ها به‌ازای هر (کاربر، موجودیت تازه) گروه‌بندی می‌شوند: اگر یک فایل
+  // تازه با پنج مشتری تطبیق بخورد، سازندهٔ فایل یک اعلان با هر پنج مورد
+  // می‌گیرد، نه پنج اعلان جدا؛ و مشاور هر مشتری هم یک اعلان گروهی می‌گیرد.
+  type Group = { userId: string; relatedType: string; relatedId: string; priority: string; kind: "target" | "source"; entries: { label: string; score: number; reasons: string }[] };
+  const groups = new Map<string, Group>();
+  const sourceRelatedType = sourceType === "customer" ? "Customer" : "Property";
+  for (const match of strong) {
     const targetId = match.id;
     let targetAgentId: string | null = null;
     let custName: string | null = null;
@@ -309,40 +312,49 @@ export async function createMatchNotifications(
     }
 
     if (!targetAgentId) continue;
-
     const score = match.score;
     const reasons = match.reasons.join("، ");
-    const priority = score >= 90 ? "HIGH" : score >= 80 ? "NORMAL" : "LOW";
-    const custLabel = custName ? `مشتری ${custName}` : "مشتری";
-    const propLabel = propTitle ? `فایل «${propTitle}»` : "فایل";
-    const pair = `${custLabel} با ${propLabel} ${score}% تطبیق دارد — ${reasons}`;
-    // ردیف مالکِ طرفِ مقابل به موجودیت تازه (منبع) اشاره می‌کند تا لینک،
-    // مشتری/فایل جدید را باز کند، نه موجودیتِ خودِ او؛ ردیف سازندهٔ اعلان
-    // به موجودیت تطبیق‌یافته اشاره می‌کند.
-    const sourceRelatedType = sourceType === "customer" ? "Customer" : "Property";
-    const matchRelatedType = sourceType === "customer" ? "Property" : "Customer";
+    const priority = score >= 90 ? "HIGH" : "NORMAL";
+    // موجودیتِ طرف مقابل، از دید گیرندهٔ اعلان
+    const otherLabel = sourceType === "customer"
+      ? (propTitle ? `فایل «${propTitle}»` : "فایل")
+      : (custName ? `مشتری ${custName}` : "مشتری");
 
     if (targetAgentId !== sourceAgentId) {
-      rows.push({
-        userId: targetAgentId,
-        type: "MATCH_SUGGESTION",
-        priority,
-        relatedType: sourceRelatedType,
-        relatedId: sourceId,
-        message: `${pair} — برای هماهنگی تماس بگیرید.`,
-      });
+      const key = `${targetAgentId}:${sourceId}:target`;
+      let g = groups.get(key);
+      if (!g) {
+        g = { userId: targetAgentId, relatedType: sourceRelatedType, relatedId: sourceId, priority, kind: "target", entries: [] };
+        groups.set(key, g);
+      }
+      if (score >= 90) g.priority = "HIGH";
+      g.entries.push({ label: otherLabel, score, reasons });
     }
 
-    rows.push({
-      userId: sourceAgentId,
-      type: "MATCH_SUGGESTION",
-      priority,
-      relatedType: matchRelatedType,
-      relatedId: targetId,
-      message: `${pair} — تطبیق یافت.`,
-    });
+    const skey = `${sourceAgentId}:${sourceId}:source`;
+    let sg = groups.get(skey);
+    if (!sg) {
+      sg = { userId: sourceAgentId, relatedType: sourceRelatedType, relatedId: sourceId, priority, kind: "source", entries: [] };
+      groups.set(skey, sg);
+    }
+    if (score >= 90) sg.priority = "HIGH";
+    sg.entries.push({ label: otherLabel, score, reasons });
   }
-  if (rows.length === 0) return;
+  if (groups.size === 0) return;
+
+  const sourceLabel = sourceType === "customer"
+    ? (sourceName ? `مشتری ${sourceName}` : "مشتری")
+    : (sourceName ? `فایل «${sourceName}»` : "فایل");
+  const rows: { userId: string; type: string; relatedId: string; relatedType: string; priority: string; message: string }[] = [];
+  for (const g of groups.values()) {
+    const sorted = [...g.entries].sort((a, b) => b.score - a.score);
+    const shown = sorted.slice(0, 3).map((e) => `${e.label} (${e.score}٪ — ${e.reasons})`).join("، ");
+    const rest = sorted.length > 3 ? ` و ${sorted.length - 3} مورد دیگر` : "";
+    const message = g.kind === "target"
+      ? `برای ${sourceLabel} ${sorted.length} تطبیق تازه: ${shown}${rest} — برای هماهنگی تماس بگیرید.`
+      : `برای ${sourceLabel} ${sorted.length} تطبیق تازه یافت شد: ${shown}${rest}.`;
+    rows.push({ userId: g.userId, type: "MATCH_SUGGESTION", priority: g.priority, relatedType: g.relatedType, relatedId: g.relatedId, message });
+  }
 
   const userIds = [...new Set(rows.map((r) => r.userId))];
   const relatedIds = [...new Set(rows.map((r) => r.relatedId))];
@@ -352,11 +364,9 @@ export async function createMatchNotifications(
   });
   const seen = new Set(existing.map((n) => `${n.userId}:${n.relatedId}`));
   const fresh = rows.filter((r) => !seen.has(`${r.userId}:${r.relatedId}`));
-  // اگر یک جفت (کاربر، فایل/مشتری) چند بار در همین دسته آمده باشد، فقط یک اعلان
-  const deduped = [...new Map(fresh.map((r) => [`${r.userId}:${r.relatedId}`, r] as [string, Row])).values()];
-  if (deduped.length === 0) return;
+  if (fresh.length === 0) return;
   await prisma.notification.createMany({
-    data: deduped.map((r) => ({
+    data: fresh.map((r) => ({
       userId: r.userId,
       type: "MATCH_SUGGESTION" as never,
       priority: r.priority as never,
