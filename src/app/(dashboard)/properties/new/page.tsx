@@ -1,5 +1,5 @@
 "use client";
-import { useState, useEffect, useId } from "react";
+import { useState, useEffect, useId, useRef } from "react";
 import { useRouter } from "next/navigation";
 import { Header } from "@/components/layout/Header";
 import { Input, NumberInput, Select, Label, Textarea } from "@/components/ui/Input";
@@ -84,7 +84,7 @@ export default function NewPropertyPage() {
   const [propertyTypes, setPropertyTypes] = useState<{ value: string; label: string }[]>([]);
   const [form, setForm] = useState<Record<string, string>>({
     title: "", type: "APARTMENT", dealType: "SALE", region: "", ownerId: "",
-    salePriceToman: "", depositToman: "", monthlyRentToman: "",
+    salePriceToman: "", pricePerSqm: "", depositToman: "", monthlyRentToman: "",
     sizeSqm: "", landSizeSqm: "", builtYear: "", address: "", description: "",
     floor: "", totalFloors: "", unitsPerFloor: "", unitCount: "",
     beds: "", passageWidth: "", buildingFrontage: "", buildingFloors: "",
@@ -104,6 +104,48 @@ export default function NewPropertyPage() {
   const setFlag = (k: keyof Flags, v: boolean) => setFlags((f) => ({ ...f, [k]: v }));
   const toggleAccess = (id: string) =>
     setAccessUserIds((s) => (s.includes(id) ? s.filter((x) => x !== id) : [...s, id]));
+
+  // قیمت هر متر — محاسبه دوطرفه با قیمت کل، مثل محاسبه خودکار کمیسیون:
+  // مقدار دستی هر فیلد تا وقتی فیلد دیگر عوض شود می‌ماند.
+  const lastPriceField = useRef<"total" | "perMetre" | null>(null);
+  // متراژ مبنا: زمین/ویلا/کلنگی → متراژ زمین، بقیه → متراژ
+  const baseSizeNum = (() => {
+    const villaLike = form.type === "VILLA" || form.type === "KOLANGI" || form.type === "LAND";
+    const raw = villaLike ? form.landSizeSqm : form.sizeSqm;
+    const n = parseFloat(raw || "");
+    return Number.isFinite(n) && n > 0 ? n : 0;
+  })();
+  function onSalePrice(v: string) {
+    upd("salePriceToman", v);
+    lastPriceField.current = "total";
+    if (v !== "" && baseSizeNum > 0) {
+      const n = Math.round(Number(v) / baseSizeNum);
+      if (Number.isFinite(n) && n > 0) upd("pricePerSqm", String(n));
+    }
+  }
+  function onPerMetre(v: string) {
+    upd("pricePerSqm", v);
+    lastPriceField.current = "perMetre";
+    if (v !== "" && baseSizeNum > 0) {
+      const n = Math.round(Number(v) * baseSizeNum);
+      if (Number.isFinite(n) && n > 0) upd("salePriceToman", String(n));
+    }
+  }
+  // با عوض شدن متراژ مبنا (تغییر متراژ یا نوع ملک)، قیمتِ آخرین‌بار دستی‌واردشده
+  // ثابت می‌ماند و دیگری دوباره محاسبه می‌شود
+  useEffect(() => {
+    if (baseSizeNum <= 0) return;
+    if (lastPriceField.current === "perMetre") {
+      if (form.pricePerSqm !== "") {
+        const n = Math.round(Number(form.pricePerSqm) * baseSizeNum);
+        if (Number.isFinite(n) && n > 0 && String(n) !== form.salePriceToman) upd("salePriceToman", String(n));
+      }
+    } else if (form.salePriceToman !== "") {
+      const n = Math.round(Number(form.salePriceToman) / baseSizeNum);
+      if (Number.isFinite(n) && n > 0 && String(n) !== form.pricePerSqm) upd("pricePerSqm", String(n));
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [baseSizeNum]);
 
   useEffect(() => {
     apiJson<{ customers?: { id: string; name: string; phone?: string }[] } | { id: string; name: string; phone?: string }[]>("/api/customers?showLost=true&limit=200&category=owners")
@@ -257,6 +299,7 @@ export default function NewPropertyPage() {
   }
 
   const saleWords = form.salePriceToman ? formatTomanWithWords(form.salePriceToman).words : "";
+  const perMetreWords = form.pricePerSqm ? formatTomanWithWords(form.pricePerSqm).words : "";
   const depositWords = form.depositToman ? formatTomanWithWords(form.depositToman).words : "";
   const rentWords = form.monthlyRentToman ? formatTomanWithWords(form.monthlyRentToman).words : "";
 
@@ -347,11 +390,22 @@ export default function NewPropertyPage() {
               <Textarea id="f-description" value={form.description} onChange={(e) => upd("description", e.target.value)} placeholder="نکات فایل: مالک عجله دارد، قیمت قابل مذاکره است..." rows={3} className="mt-1" />
             </div>
             {form.dealType === "SALE" ? (
-              <div>
-                <Label htmlFor="f-salePriceToman">قیمت فروش (تومان)</Label>
-                <NumberInput id="f-salePriceToman" value={form.salePriceToman} onChange={(e) => upd("salePriceToman", e.target.value)} placeholder="3500000000" className="mt-1" />
-                {saleWords && <p className="mt-1 text-xs text-[var(--ink-3)]">{saleWords}</p>}
-              </div>
+              <>
+                <div>
+                  <Label htmlFor="f-salePriceToman">قیمت فروش (تومان)</Label>
+                  <NumberInput id="f-salePriceToman" value={form.salePriceToman} onChange={(e) => onSalePrice(e.target.value)} placeholder="3500000000" className="mt-1" />
+                  {saleWords && <p className="mt-1 text-xs text-[var(--ink-3)]">{saleWords}</p>}
+                </div>
+                <div>
+                  <Label htmlFor="f-pricePerSqm">قیمت هر متر (تومان)</Label>
+                  <NumberInput id="f-pricePerSqm" value={form.pricePerSqm} onChange={(e) => onPerMetre(e.target.value)} placeholder="35000000" className="mt-1" disabled={baseSizeNum <= 0} />
+                  {perMetreWords ? (
+                    <p className="mt-1 text-xs text-[var(--ink-3)]">{perMetreWords}</p>
+                  ) : baseSizeNum <= 0 ? (
+                    <p className="mt-1 text-xs text-[var(--ink-3)]">اول متراژ را وارد کنید</p>
+                  ) : null}
+                </div>
+              </>
             ) : (
               <>
                 <div>

@@ -1,12 +1,12 @@
 "use client";
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import Link from "next/link";
 import { useParams, useRouter } from "next/navigation";
 import { Header } from "@/components/layout/Header";
 import { Card } from "@/components/ui/Card";
 import { Badge } from "@/components/ui/Badge";
 import { Button } from "@/components/ui/Button";
-import { Input, Select, Label, Textarea } from "@/components/ui/Input";
+import { Input, NumberInput, Select, Label, Textarea } from "@/components/ui/Input";
 import dynamic from "next/dynamic";
 import { SearchSelect } from "@/components/ui/SearchSelect";
 import { AppraisalCheck } from "@/components/properties/AppraisalCheck";
@@ -18,8 +18,9 @@ const JalaliDatePicker = dynamic(
   () => import("@/components/ui/JalaliDatePicker").then((m) => m.JalaliDatePicker),
   { ssr: false, loading: () => <div className="h-10 rounded-[12px] border border-[var(--line)] bg-[var(--paper-2)] animate-pulse" /> }
 );
-import { formatDate } from "@/lib/utils";
+import { formatDate, toEnDigits } from "@/lib/utils";
 import { MoneyText } from "@/components/ui/MoneyText";
+import { formatTomanWithWords } from "@/lib/money";
 import {
   PROPERTY_TYPE_LABELS,
   DEAL_TYPE_LABELS,
@@ -114,6 +115,8 @@ export default function PropertyDetailPage() {
   const [mePermissions, setMePermissions] = useState<Record<string, boolean>>({});
   const [editing, setEditing] = useState(false);
   const [form, setForm] = useState<Record<string, string>>({});
+  const [pricePerSqm, setPricePerSqm] = useState("");
+  const lastPriceField = useRef<"total" | "perMetre" | null>(null);
   const [error, setError] = useState("");
   const [msg, setMsg] = useState("");
   const [loading, setLoading] = useState(true);
@@ -165,6 +168,17 @@ export default function PropertyDetailPage() {
           listedById: propRes.listedBy?.id ?? "",
           description: propRes.description ?? "",
         });
+        // متری از قیمت و متراژ ثبت‌شده محاسبه می‌شود
+        const base =
+          propRes.type === "VILLA" || propRes.type === "KOLANGI" || propRes.type === "LAND"
+            ? propRes.landSizeSqm
+            : propRes.sizeSqm;
+        if (propRes.dealType === "SALE" && propRes.salePriceToman && base) {
+          const n = Math.round(Number(propRes.salePriceToman) / base);
+          setPricePerSqm(Number.isFinite(n) && n > 0 ? String(n) : "");
+        } else {
+          setPricePerSqm("");
+        }
       }
       setActivities(Array.isArray(actRes) ? actRes : []);
       setViewings(Array.isArray(visRes) ? visRes : []);
@@ -300,6 +314,31 @@ export default function PropertyDetailPage() {
   if (!p) return <PageSkeleton rows={4} />;
 
   const isSale = p.dealType === "SALE";
+  // متراژ مبنا برای متری: زمین/ویلا/کلنگی → متراژ زمین، بقیه → متراژ
+  const detailBaseSize =
+    p.type === "VILLA" || p.type === "KOLANGI" || p.type === "LAND" ? p.landSizeSqm : p.sizeSqm;
+  const detailPerMetre =
+    isSale && p.salePriceToman && detailBaseSize ? Math.round(Number(p.salePriceToman) / detailBaseSize) : null;
+  const perMetreWords = pricePerSqm ? formatTomanWithWords(pricePerSqm).words : "";
+  // محاسبه دوطرفه قیمت کل و متری در ویرایش، مثل محاسبه خودکار کمیسیون
+  function onEditSalePrice(v: string) {
+    const clean = toEnDigits(v).replace(/[^0-9]/g, "");
+    setForm((f) => ({ ...f, salePriceToman: clean }));
+    lastPriceField.current = "total";
+    if (clean !== "" && detailBaseSize) {
+      const n = Math.round(Number(clean) / detailBaseSize);
+      if (Number.isFinite(n) && n > 0) setPricePerSqm(String(n));
+    }
+  }
+  function onEditPerMetre(v: string) {
+    const clean = toEnDigits(v).replace(/[^0-9]/g, "");
+    setPricePerSqm(clean);
+    lastPriceField.current = "perMetre";
+    if (clean !== "" && detailBaseSize) {
+      const n = Math.round(Number(clean) * detailBaseSize);
+      if (Number.isFinite(n) && n > 0) setForm((f) => ({ ...f, salePriceToman: String(n) }));
+    }
+  }
   const typeLabel = PROPERTY_TYPE_LABELS[p.type] ?? p.type;
   const canManageAccess = isOwner || p.listedBy?.id === meId;
   const canArchive = isOwner || (p.listedBy?.id === meId && hasPermission({ role: "AGENT", permissions: mePermissions }, "canArchiveProperty"));
@@ -374,7 +413,14 @@ export default function PropertyDetailPage() {
               label={isSale ? "قیمت فروش" : "رهن / اجاره"}
               value={
                 isSale ? (
-                  <MoneyText value={p.salePriceToman} />
+                  <>
+                    <MoneyText value={p.salePriceToman} />
+                    {detailPerMetre ? (
+                      <span className="text-[12px] text-[var(--ink-3)]">
+                        {" "}· متری {formatTomanWithWords(String(detailPerMetre)).formatted}
+                      </span>
+                    ) : null}
+                  </>
                 ) : (
                   <>
                     ودیعه {p.depositToman ? <MoneyText value={p.depositToman} /> : "—"}
@@ -440,7 +486,18 @@ export default function PropertyDetailPage() {
                   </Select>
                 </div>
               )}
-              <div><Label htmlFor="f-salePriceToman">قیمت فروش</Label><Input id="f-salePriceToman" className="mt-1" dir="ltr" value={form.salePriceToman} onChange={(e) => setForm({ ...form, salePriceToman: e.target.value })} /></div>
+              <div><Label htmlFor="f-salePriceToman">قیمت فروش</Label><Input id="f-salePriceToman" className="mt-1" dir="ltr" value={form.salePriceToman} onChange={(e) => onEditSalePrice(e.target.value)} /></div>
+              {isSale && (
+                <div>
+                  <Label htmlFor="f-pricePerSqm">قیمت هر متر (تومان)</Label>
+                  <NumberInput id="f-pricePerSqm" className="mt-1" value={pricePerSqm} onChange={(e) => onEditPerMetre(e.target.value)} disabled={!detailBaseSize} />
+                  {perMetreWords ? (
+                    <p className="mt-1 text-xs text-[var(--ink-3)]">{perMetreWords}</p>
+                  ) : !detailBaseSize ? (
+                    <p className="mt-1 text-xs text-[var(--ink-3)]">متراژ ثبت نشده است</p>
+                  ) : null}
+                </div>
+              )}
               <div><Label htmlFor="f-depositToman">ودیعه</Label><Input id="f-depositToman" className="mt-1" dir="ltr" value={form.depositToman} onChange={(e) => setForm({ ...form, depositToman: e.target.value })} /></div>
               <div><Label htmlFor="f-monthlyRentToman">اجاره ماهانه</Label><Input id="f-monthlyRentToman" className="mt-1" dir="ltr" value={form.monthlyRentToman} onChange={(e) => setForm({ ...form, monthlyRentToman: e.target.value })} /></div>
               <div className="md:col-span-2">
