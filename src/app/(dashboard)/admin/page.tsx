@@ -226,7 +226,7 @@ export default function AdminPage() {
         <Card>
           <CardHeader><CardTitle>خروجی داده (پشتیبان)</CardTitle></CardHeader>
           <p className="text-[13px] leading-6 text-[var(--ink-3)]">
-            دانلود همهٔ مشتریان و فایل‌ها به‌صورت CSV — برای پشتیبان‌گیری یا انتقال به سیستم دیگر. فقط مدیر به این خروجی دسترسی دارد.
+            دانلود همهٔ مشتریان و فایل‌ها به‌صورت CSV — برای پشتیبان‌گیری یا انتقال به سیستم دیگر. پشتیبان کامل دیتابیس همهٔ جداول را یک‌جا می‌گیرد و با pg_restore بازگردانی می‌شود. فقط مدیر به این خروجی دسترسی دارد.
           </p>
           <div className="mt-3 flex flex-wrap gap-2">
             <a href="/api/admin/export?kind=customers" className="inline-flex min-h-10 items-center justify-center gap-1.5 rounded-[12px] border border-[var(--line)] bg-white px-4 py-2 text-[13.5px] font-medium text-[var(--ink-2)] hover:bg-[var(--paper-2)]">
@@ -234,6 +234,9 @@ export default function AdminPage() {
             </a>
             <a href="/api/admin/export?kind=properties" className="inline-flex min-h-10 items-center justify-center gap-1.5 rounded-[12px] border border-[var(--line)] bg-white px-4 py-2 text-[13.5px] font-medium text-[var(--ink-2)] hover:bg-[var(--paper-2)]">
               دانلود CSV فایل‌ها
+            </a>
+            <a href="/api/admin/backup" className="inline-flex min-h-10 items-center justify-center gap-1.5 rounded-[12px] border border-[var(--line)] bg-white px-4 py-2 text-[13.5px] font-medium text-[var(--ink-2)] hover:bg-[var(--paper-2)]">
+              دانلود پشتیبان کامل دیتابیس
             </a>
           </div>
         </Card>
