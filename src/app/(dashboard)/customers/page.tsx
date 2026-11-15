@@ -71,7 +71,6 @@ export default function CustomersPage() {
   const [loadingMore, setLoadingMore] = useState(false);
   const [loadError, setLoadError] = useState<string | null>(null);
   const [showLost, setShowLost] = useState(false);
-  const [tab, setTab] = useState<"customers" | "owners">("customers");
   const [staleOnly, setStaleOnly] = useState(false);
   const [sourceStats, setSourceStats] = useState<SourceStat[]>([]);
   const [tags, setTags] = useState<string[]>([]);
@@ -119,10 +118,9 @@ export default function CustomersPage() {
       if (filters.source) params.set("source", filters.source);
       if (filters.tag) params.set("tag", filters.tag);
       if (staleOnly) params.set("staleOnly", "true");
-      params.set("category", tab);
       return params.toString();
     },
-    [showLost, search, filters, staleOnly, tab]
+    [showLost, search, filters, staleOnly]
   );
 
   const load = useCallback(
@@ -157,7 +155,7 @@ export default function CustomersPage() {
     const t = setTimeout(() => load(1, false), 250);
     return () => clearTimeout(t);
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [showLost, search, filters, staleOnly, tab]);
+  }, [showLost, search, filters, staleOnly]);
 
   useEffect(() => {
     apiJson<{ regions?: string[]; propertyTypes?: { value: string; label: string }[]; customerTags?: string[] }>("/api/settings")
@@ -264,8 +262,8 @@ export default function CustomersPage() {
   return (
     <div>
       <Header
-        title={tab === "owners" ? "مالکان" : "مشتریان"}
-        subtitle={tab === "owners" ? "صاحبان فایل‌ها — ثبت مالک تازه از همین‌جا" : "خط فروش — تماس اولیه · بازدید · مذاکره · قرارداد"}
+        title="مشتریان"
+        subtitle="خط فروش — تماس اولیه · بازدید · مذاکره · قرارداد"
         action={
           <div className="flex flex-wrap items-center gap-2">
             <Button variant="outline" size="sm" onClick={() => setShowAdvanced((v) => !v)}>
@@ -285,24 +283,20 @@ export default function CustomersPage() {
             <label className="hidden sm:flex items-center gap-2 rounded-[12px] border border-[var(--line)] bg-white px-3 py-2 text-[12px]">
               <input type="checkbox" checked={staleOnly} onChange={(e) => setStaleOnly(e.target.checked)} /> فقط راکدها
             </label>
-            <Link href={tab === "owners" ? "/customers/new?type=OWNER" : "/customers/new"}><Button>＋ {tab === "owners" ? "مالک جدید" : "مشتری جدید"}</Button></Link>
+            <Link href="/customers/new"><Button>＋ مشتری جدید</Button></Link>
           </div>
         }
       />
-      <div className="mx-4 sm:mx-6 mt-3 flex gap-2">
-        <Button variant={tab === "customers" ? "primary" : "outline"} size="sm" onClick={() => setTab("customers")}>مشتریان</Button>
-        <Button variant={tab === "owners" ? "primary" : "outline"} size="sm" onClick={() => setTab("owners")}>مالکان</Button>
-      </div>
       {total > 0 && (
         <div className="mx-4 sm:mx-6 mt-3 text-[12px] text-[var(--ink-3)]">
-          نمایش {toFaDigits(String(customers.length))} از {toFaDigits(String(total))} {tab === "owners" ? "مالک" : "مشتری"}
+          نمایش {toFaDigits(String(customers.length))} از {toFaDigits(String(total))} مشتری
         </div>
       )}
       {sourceStats.length > 0 && (
         <div className="mx-4 sm:mx-6 mt-2 flex flex-wrap gap-1.5">
           {sourceStats.map((s) => (
             <span key={s.source ?? "none"} className="rounded-full border border-[var(--line)] bg-white px-2.5 py-1 text-[11px] text-[var(--ink-2)]">
-              {s.source ? (CUSTOMER_SOURCE_LABELS[s.source] ?? s.source) : "بدون منبع"}: {toFaDigits(String(s.total))} {tab === "owners" ? "مالک" : "مشتری"} · {toFaDigits(String(s.contracts))} قرارداد
+              {s.source ? (CUSTOMER_SOURCE_LABELS[s.source] ?? s.source) : "بدون منبع"}: {toFaDigits(String(s.total))} مشتری · {toFaDigits(String(s.contracts))} قرارداد
             </span>
           ))}
         </div>

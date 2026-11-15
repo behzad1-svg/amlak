@@ -50,13 +50,6 @@ export default function NewCustomerPage() {
   const [loading, setLoading] = useState(false);
   const upd = (k: string, v: string) => setForm((f) => ({ ...f, [k]: v }));
 
-  // نوع پیش‌فرض از لینک (تب «مالکان» با ?type=OWNER می‌آید)
-  useEffect(() => {
-    const t = new URLSearchParams(window.location.search).get("type");
-    if (t === "OWNER" || t === "BUYER" || t === "SELLER" || t === "TENANT") upd("type", t);
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
-
   useEffect(() => {
     apiJson<{ regions?: string[]; propertyTypes?: { value: string; label: string }[] }>("/api/settings")
       .then((d) => {
