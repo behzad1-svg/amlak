@@ -251,7 +251,6 @@ export default function PropertiesPage() {
             <Select value={filters.status} onChange={(e) => setFilters({ ...filters, status: e.target.value })}>
               <option value="">همه به‌جز بایگانی‌شده</option>
               <option value="ACTIVE">فعال</option>
-              <option value="RESERVED">رزرو</option>
               <option value="SOLD">فروخته‌شده</option>
               <option value="RENTED">اجاره‌رفته</option>
               <option value="ARCHIVED">بایگانی‌شده</option>

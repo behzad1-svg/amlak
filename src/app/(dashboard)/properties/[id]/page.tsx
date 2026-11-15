@@ -427,7 +427,6 @@ export default function PropertyDetailPage() {
                 <Label htmlFor="f-status">وضعیت</Label>
                 <Select id="f-status" className="mt-1" value={form.status} onChange={(e) => setForm({ ...form, status: e.target.value })}>
                   <option value="ACTIVE">فعال</option>
-                  <option value="RESERVED">رزرو</option>
                   <option value="SOLD">فروخته‌شده</option>
                   <option value="RENTED">اجاره‌رفته</option>
                   <option value="ARCHIVED">بایگانی‌شده</option>
