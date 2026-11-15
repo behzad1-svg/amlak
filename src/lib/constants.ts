@@ -122,9 +122,10 @@ export const CUSTOMER_SOURCE_LABELS: Record<string, string> = {
   IN_PERSON: "حضوری",
   ADVERTISEMENT: "آگهی",
   OTHER: "سایر",
+  FILE_FINDING: "فایل‌یابی",
 };
 
-// گزینه‌های «شیوه آشنایی» در فرم ثبت مشتری — فقط همین ۶ مقدار
+// گزینه‌های «شیوه آشنایی» در فرم ثبت مشتری — فقط همین ۷ مقدار
 // (مقادیر قدیمی SIGN_BOARD و WEBSITE در دیتابیس می‌مانند و در پروفایل نمایش داده می‌شوند)
 export const CUSTOMER_SOURCE_OPTIONS = [
   "DIVAR",
@@ -133,6 +134,7 @@ export const CUSTOMER_SOURCE_OPTIONS = [
   "DIRECT_CALL",
   "IN_PERSON",
   "ADVERTISEMENT",
+  "FILE_FINDING",
 ] as const;
 
 // برچسب‌های پیش‌فرض مشتری — قابل ویرایش از صفحه تنظیمات (DB: AppSetting با کلید customerTags)

@@ -52,7 +52,7 @@ export async function GET(req: NextRequest) {
   const tag = searchParams.get("tag");
   const staleOnly = searchParams.get("staleOnly") === "true";
 
-  if (source && !["INSTAGRAM", "DIVAR", "DIRECT_CALL", "REFERRAL", "SIGN_BOARD", "WEBSITE", "IN_PERSON", "ADVERTISEMENT", "OTHER"].includes(source)) {
+  if (source && !["INSTAGRAM", "DIVAR", "DIRECT_CALL", "REFERRAL", "SIGN_BOARD", "WEBSITE", "IN_PERSON", "ADVERTISEMENT", "OTHER", "FILE_FINDING"].includes(source)) {
     return NextResponse.json({ error: "مقدار «source» معتبر نیست" }, { status: 400 });
   }
   if (tag && tag.length > 30) {

@@ -58,7 +58,7 @@ export const customerCreateSchema = z.object({
   type: z.enum(["BUYER", "SELLER", "TENANT", "OWNER"]),
   stage: z.enum(["NEW", "INITIAL_CONTACT", "QUALIFIED", "VIEWING", "CONTRACT", "WON", "FAILED", "LOST"]).optional(),
   temperature: z.enum(["HOT", "WARM", "COLD"]).optional(),
-  source: z.enum(["INSTAGRAM", "DIVAR", "DIRECT_CALL", "REFERRAL", "SIGN_BOARD", "WEBSITE", "IN_PERSON", "ADVERTISEMENT", "OTHER"]).optional().nullable(),
+  source: z.enum(["INSTAGRAM", "DIVAR", "DIRECT_CALL", "REFERRAL", "SIGN_BOARD", "WEBSITE", "IN_PERSON", "ADVERTISEMENT", "OTHER", "FILE_FINDING"]).optional().nullable(),
   tags: z.array(z.string().min(1).max(30)).max(10).optional(),
   notes: z.string().max(2000).optional().nullable(),
   description: z.string().max(3000).optional().nullable(),
