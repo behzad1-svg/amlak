@@ -148,6 +148,9 @@ model User {
   activities       Activity[]
   auditLogs        AuditLog[]
   cashboxEntries CashboxEntry[] @relation("CashboxCreatedBy")
+  transfersFrom  CustomerTransfer[] @relation("TransferFrom")
+  transfersTo    CustomerTransfer[] @relation("TransferTo")
+  transfersBy    CustomerTransfer[] @relation("TransferBy")
 }
 
 model Customer {
@@ -197,6 +200,7 @@ model Customer {
   tasks           Task[]
   activities      Activity[]
   followUps       FollowUp[]
+  transfers       CustomerTransfer[] @relation("CustomerTransfers")
 
   @@index([assignedAgentId])
   @@index([stage])
@@ -206,6 +210,21 @@ model Customer {
   @@index([nextFollowUpAt])
   @@unique([phone, type])
   // یک شماره در هر دسته (مالک / مشتری) یک بار — یکتایی کلی در API کنترل می‌شود
+}
+
+model CustomerTransfer {
+  id          String   @id @default(cuid())
+  customerId  String
+  customer    Customer @relation("CustomerTransfers", fields: [customerId], references: [id], onDelete: Cascade)
+  fromAgentId String?
+  fromAgent   User?    @relation("TransferFrom", fields: [fromAgentId], references: [id], onDelete: SetNull)
+  toAgentId   String?
+  toAgent     User?    @relation("TransferTo", fields: [toAgentId], references: [id], onDelete: SetNull)
+  byUserId    String?
+  byUser      User?    @relation("TransferBy", fields: [byUserId], references: [id], onDelete: SetNull)
+  createdAt   DateTime @default(now())
+
+  @@index([customerId, createdAt])
 }
 
 model AppSetting {

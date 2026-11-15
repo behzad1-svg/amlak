@@ -34,6 +34,17 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
   if (toAgentId === customer.assignedAgentId) {
     return NextResponse.json({ error: "مشتری همین حالا به این مشاور منتسب است" }, { status: 400 });
   }
+  // مشتری منتقل‌شده دست‌به‌دست نمی‌شود: مشاور غیرمدیر فقط می‌تواند او را به مشاور قبلی‌ فوری برگرداند؛ انتقال به هر مقصد دیگری فقط با مدیر است. اولین انتقال (بدون سابقه) مثل قبل آزاد است.
+  if (session.user.role !== "OWNER") {
+    const latest = await prisma.customerTransfer.findFirst({
+      where: { customerId: id },
+      orderBy: { createdAt: "desc" },
+      select: { fromAgentId: true },
+    });
+    if (latest && latest.fromAgentId !== toAgentId) {
+      return NextResponse.json({ error: "این مشتری منتقل شده است؛ فقط مدیر می‌تواند دوباره منتقلش کند" }, { status: 403 });
+    }
+  }
   const target = await prisma.user.findUnique({ where: { id: toAgentId } });
   if (!target) return NextResponse.json({ error: "مشاور مقصد یافت نشد" }, { status: 404 });
   if (!target.active) return NextResponse.json({ error: "مشاور مقصد فعال نیست" }, { status: 400 });
@@ -43,6 +54,16 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
     where: { id },
     data: { assignedAgentId: toAgentId },
     include: { assignedAgent: { select: { id: true, name: true } }, ownedProperties: true },
+  });
+
+  // سابقه انتقال بهصورت ساختیافته ثبت می‌شود تا مبدا و سابقه آن مشخص باشد
+  await prisma.customerTransfer.create({
+    data: {
+      customerId: id,
+      fromAgentId: customer.assignedAgentId,
+      toAgentId,
+      byUserId: session.user.id,
+    },
   });
 
   await prisma.activity.create({

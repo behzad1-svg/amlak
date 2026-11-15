@@ -61,6 +61,14 @@ type Customer = Record<string, unknown> & {
   lostReasonCategory: string | null; lostReasonDetail: string | null;
   assignedAgent: { id: string; name: string } | null;
   createdAt: string;
+  transfers?: TransferHistory[];
+};
+
+type TransferHistory = {
+  id: string; createdAt: string;
+  fromAgent: { id: string; name: string; active: boolean } | null;
+  toAgent: { id: string; name: string; active: boolean } | null;
+  byUser: { id: string; name: string } | null;
 };
 
 type Activity = { id: string; type: string; description: string | null; createdAt: string; agent: { name: string } };
@@ -130,6 +138,7 @@ export default function CustomerDetailPage() {
   const [agents, setAgents] = useState<{ id: string; name: string; role: string; active?: boolean }[]>([]);
   const [transferTo, setTransferTo] = useState("");
   const [transferring, setTransferring] = useState(false);
+  const [reverting, setReverting] = useState(false);
   const [transferOk, setTransferOk] = useState("");
 
   // نقد ۱ — بارگذاری با کمک‌کنندهٔ مرکزی؛ خطا پیام + تلاش دوباره دارد
@@ -266,6 +275,24 @@ export default function CustomerDetailPage() {
       setError(errorMessage(e));
     } finally {
       setTransferring(false);
+    }
+  }
+
+  async function revertTransfer() {
+    if (!c || !c.transfers?.[0]?.fromAgent) return;
+    const prev = c.transfers[0].fromAgent;
+    if (!confirm(`مشتری «${c.name}» به ${prev.name} برگردانده شود؟`)) return;
+    setReverting(true);
+    setTransferOk("");
+    setError("");
+    try {
+      await apiFetch(`/api/customers/${id}/transfer/revert`, { method: "POST" });
+      setTransferOk(`مشتری به ${prev.name} برگردانده شد.`);
+      load();
+    } catch (e) {
+      setError(errorMessage(e));
+    } finally {
+      setReverting(false);
     }
   }
 
@@ -846,18 +873,43 @@ export default function CustomerDetailPage() {
               <User className="h-4 w-4 text-zinc-500" /> انتقال به مشاور دیگر
             </h3>
             <p className="text-[12px] text-[var(--ink-3)] mb-3">مشتری مستقیم و بدون تأیید مدیر به مشاور دیگری منتقل می‌شود؛ پیگیری‌ها، معامله‌ها و بازدیدها با او منتقل می‌شوند.</p>
+            {c.transfers && c.transfers.length > 0 && (
+              <div className="mb-3 rounded-lg bg-zinc-50 p-3 text-[13px] space-y-2">
+                <p>منتقل‌شده از: <span className="font-medium">{c.transfers[0].fromAgent?.name ?? "—"}</span></p>
+                {c.transfers[0].fromAgent?.active ? (
+                  <Button variant="outline" size="sm" onClick={revertTransfer} disabled={reverting}>
+                    {reverting ? "در حال بازگرداندن..." : `بازگرداندن به ${c.transfers[0].fromAgent.name}`}
+                  </Button>
+                ) : (
+                  <p className="text-[12px] text-[var(--ink-3)]">مشاور قبلی فعال نیست؛ از انتقال عادی استفاده کنید.</p>
+                )}
+              </div>
+            )}
+            {!isOwner && c.transfers && c.transfers.length > 0 && (
+              <p className="text-[12px] text-amber-700 mb-3">این مشتری منتقل شده است؛ فقط مدیر می‌تواند دوباره منتقلش کند.</p>
+            )}
             <div className="flex flex-col gap-2 sm:flex-row">
-              <Select value={transferTo} onChange={(e) => setTransferTo(e.target.value)} className="flex-1" aria-label="مشاور مقصد">
+              <Select value={transferTo} onChange={(e) => setTransferTo(e.target.value)} className="flex-1" aria-label="مشاور مقصد" disabled={!isOwner && (c.transfers?.length ?? 0) > 0}>
                 <option value="">انتخاب مشاور...</option>
                 {agents.filter((a) => a.id !== c.assignedAgent?.id).map((a) => (
                   <option key={a.id} value={a.id}>{a.name}{a.role === "OWNER" ? " (مدیر)" : ""}</option>
                 ))}
               </Select>
-              <Button onClick={transferCustomer} disabled={!transferTo || transferring} className="w-full sm:w-auto">
+              <Button onClick={transferCustomer} disabled={!transferTo || transferring || (!isOwner && (c.transfers?.length ?? 0) > 0)} className="w-full sm:w-auto">
                 {transferring ? "در حال انتقال..." : "انتقال بده"}
               </Button>
             </div>
             {transferOk && <p className="mt-2 text-[13px] font-medium text-green-700">{transferOk}</p>}
+            {c.transfers && c.transfers.length > 0 && (
+              <div className="mt-3">
+                <p className="text-[13px] font-medium mb-1">سابقه انتقال</p>
+                <ul className="space-y-1 text-[12px] text-[var(--ink-3)]">
+                  {c.transfers.map((t) => (
+                    <li key={t.id}>از {t.fromAgent?.name ?? "—"} به {t.toAgent?.name ?? "—"} — توسط {t.byUser?.name ?? "—"} — {formatDate(t.createdAt)}</li>
+                  ))}
+                </ul>
+              </div>
+            )}
           </Card>
         </div>
 

@@ -18,7 +18,23 @@ export async function GET(_req: NextRequest, { params }: { params: Promise<{ id:
   const session = await getSession();
   if (!session) return NextResponse.json({ error: "وارد نشده‌اید" }, { status: 401 });
   const { id } = await params;
-  const customer = await prisma.customer.findUnique({ where: { id }, include: { assignedAgent: { select: { id: true, name: true } }, ownedProperties: true } });
+  const customer = await prisma.customer.findUnique({
+    where: { id },
+    include: {
+      assignedAgent: { select: { id: true, name: true } },
+      ownedProperties: true,
+      // سابقه انتقال برای نمایش مبدا و بازگرداندن
+      transfers: {
+        orderBy: { createdAt: "desc" },
+        take: 50,
+        include: {
+          fromAgent: { select: { id: true, name: true, active: true } },
+          toAgent: { select: { id: true, name: true, active: true } },
+          byUser: { select: { id: true, name: true } },
+        },
+      },
+    },
+  });
   if (!customer || customer.deletedAt) return NextResponse.json({ error: "یافت نشد" }, { status: 404 });
   if (!canAccessCustomer(session.user, customer)) return NextResponse.json({ error: "دسترسی ندارید" }, { status: 403 });
   return NextResponse.json(serializeBigInt(customer));
