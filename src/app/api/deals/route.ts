@@ -108,7 +108,8 @@ export async function POST(req: NextRequest) {
       data: {
         customerId: d.customerId,
         propertyId: d.propertyId,
-        agentId: session.user.id,
+        // کمیسیون مال مشاورِ مشتری است، نه کسی که دکمه «موفق» را زده
+        agentId: customer.assignedAgentId,
         status: status as never,
         contractAt: d.contractAt ? new Date(d.contractAt) : status === "COMPLETED" ? new Date() : null,
         notes: d.notes,
