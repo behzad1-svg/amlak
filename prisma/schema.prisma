@@ -142,6 +142,7 @@ model User {
   accessGranted    PropertyAccess[]    @relation("AccessGrantedBy")
   viewings         Viewing[]           @relation("ViewingAgent")
   deals            Deal[]              @relation("DealAgent")
+  dealShares       DealShare[]         @relation("DealShareUser")
   tasks            Task[]              @relation("TaskAgent")
   notifications    Notification[]
   activities       Activity[]
@@ -367,6 +368,7 @@ model Deal {
   property   Property   @relation(fields: [propertyId], references: [id])
   agentId    String
   agent      User       @relation("DealAgent", fields: [agentId], references: [id])
+  shares     DealShare[]
 
   status      DealStatus @default(PENDING)
   contractAt  DateTime?
@@ -375,6 +377,7 @@ model Deal {
   commissionPercent Float?
   commissionPaid    Boolean  @default(false)
   commissionPaidAt  DateTime?
+  officePct         Decimal  @default(50) @db.Decimal(5, 2)
 
   dealSalePriceToman   BigInt?
   dealDepositToman     BigInt?
@@ -388,6 +391,23 @@ model Deal {
   @@index([propertyId, status])
   @@index([agentId, status])
   @@index([status, createdAt])
+}
+
+model DealShare {
+  id        String   @id @default(cuid())
+  dealId    String
+  deal      Deal     @relation(fields: [dealId], references: [id], onDelete: Cascade)
+  userId    String?
+  user      User?    @relation("DealShareUser", fields: [userId], references: [id], onDelete: SetNull)
+  name      String
+  pct       Decimal  @db.Decimal(5, 2)
+  settled   Boolean  @default(false)
+  settledAt DateTime?
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([dealId])
+  @@index([userId])
 }
 
 model CashboxEntry {

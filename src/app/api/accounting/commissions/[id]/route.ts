@@ -4,10 +4,13 @@ import { getSessionFromCookies } from "@/lib/auth";
 import { commissionSettleSchema } from "@/lib/validation";
 import { serializeBigInt } from "@/lib/utils";
 import { createAuditLog } from "@/lib/audit";
+import { resolveSplit } from "@/lib/shares";
 
 /**
  * تسویه یا برگرداندن تسویه کمیسیون یک معامله — فقط مدیر.
  * PATCH /api/accounting/commissions/[id] { commissionPaid: boolean }
+ * دکمه «تسویه شد» همه سهم‌های معامله را تسویه می‌کند و «برگرداندن» همه را برمی‌گرداند؛
+ * معامله بدون سهم واقعی همان رفتار قبلی را دارد.
  */
 export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
   const session = await getSessionFromCookies();
@@ -23,25 +26,45 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
     return NextResponse.json({ error: parsed.error.issues[0].message }, { status: 400 });
   }
 
-  const deal = await prisma.deal.findUnique({ where: { id } });
+  const deal = await prisma.deal.findUnique({ where: { id }, include: { shares: true } });
   if (!deal) return NextResponse.json({ error: "معامله یافت نشد" }, { status: 404 });
   if (deal.commissionToman == null) {
     return NextResponse.json({ error: "برای این معامله کمیسیونی ثبت نشده است" }, { status: 400 });
   }
 
   const paid = parsed.data.commissionPaid;
-  const updated = await prisma.deal.update({
-    where: { id },
-    data: {
-      commissionPaid: paid,
-      commissionPaidAt: paid ? new Date() : null,
-    },
-    include: {
-      customer: { select: { id: true, name: true, phone: true } },
-      property: { select: { id: true, title: true, dealType: true, region: true } },
-      agent: { select: { id: true, name: true } },
-    },
+  const updated = await prisma.$transaction(async (tx) => {
+    if (deal.shares.length > 0) {
+      await tx.dealShare.updateMany({
+        where: { dealId: id },
+        data: { settled: paid, settledAt: paid ? new Date() : null },
+      });
+    }
+    return tx.deal.update({
+      where: { id },
+      data: {
+        commissionPaid: paid,
+        commissionPaidAt: paid ? new Date() : null,
+      },
+      include: {
+        customer: { select: { id: true, name: true, phone: true } },
+        property: { select: { id: true, title: true, dealType: true, region: true } },
+        agent: { select: { id: true, name: true } },
+        shares: {
+          select: { id: true, userId: true, name: true, pct: true, settled: true, settledAt: true },
+          orderBy: { createdAt: "asc" },
+        },
+      },
+    });
   });
+
+  const split = resolveSplit(updated);
+  const out = {
+    ...updated,
+    officePct: split.officePct,
+    officeAmount: split.officeAmount,
+    shares: split.shares,
+  };
 
   await createAuditLog({
     actorId: session.user.id,
@@ -51,5 +74,5 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
     newValue: { commissionPaid: paid } as never,
   });
 
-  return NextResponse.json(serializeBigInt(updated));
+  return NextResponse.json(serializeBigInt(out));
 }

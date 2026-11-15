@@ -4,6 +4,7 @@ import { getSessionFromCookies } from "@/lib/auth";
 import { dealUpdateSchema } from "@/lib/validation";
 import { serializeBigInt } from "@/lib/utils";
 import { createAuditLog } from "@/lib/audit";
+import { validateSplitInput } from "@/lib/shares";
 
 // ماشین وضعیت معامله — CANCELED ترمینال است و برنمی‌گردد؛
 // COMPLETED فقط از PENDING می‌آید؛ COMPLETED می‌تواند لغو شود.
@@ -43,7 +44,7 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
   const session = await getSessionFromCookies();
   if (!session) return NextResponse.json({ error: "وارد نشده‌اید" }, { status: 401 });
   const { id } = await params;
-  const existing = await prisma.deal.findUnique({ where: { id }, include: { property: true, customer: true } });
+  const existing = await prisma.deal.findUnique({ where: { id }, include: { property: true, customer: true, shares: true } });
   if (!existing) return NextResponse.json({ error: "یافت نشد" }, { status: 404 });
   if (session.user.role !== "OWNER" && existing.agentId !== session.user.id) {
     return NextResponse.json({ error: "دسترسی ندارید" }, { status: 403 });
@@ -63,13 +64,86 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
     return NextResponse.json({ error: "کمیسیون را فقط مدیر تعیین می‌کند" }, { status: 403 });
   }
 
+  // سهم‌بندی را فقط مدیر تعیین می‌کند؛ officePct و shares همیشه با هم می‌آیند
+  const wantsShares = d.officePct !== undefined || d.shares !== undefined;
+  if (wantsShares && session.user.role !== "OWNER") {
+    return NextResponse.json({ error: "سهم‌بندی را فقط مدیر تعیین می‌کند" }, { status: 403 });
+  }
+
+  // سهم‌بندی فقط وقتی معنا دارد که کمیسیون معامله تعیین شده باشد
+  let shareRows: { userId: string | null; name: string; pct: number }[] | null = null;
+  if (wantsShares) {
+    if (d.officePct === undefined || d.shares === undefined) {
+      return NextResponse.json({ error: "سهم دفتر و سهم‌ها را با هم بفرستید" }, { status: 400 });
+    }
+    // خالی کردن کمیسیون یعنی پاک شدن سهم‌بندی (سهم دفتر ۱۰۰٪ و بدون سهم)؛
+    // در این حالت چک «کمیسیون تعیین شده» اعمال نمی‌شود
+    const clearingWithShares =
+      d.commissionToman !== undefined && (d.commissionToman === null || d.commissionToman === "");
+    if (clearingWithShares) {
+      if (d.shares.length > 0 || d.officePct !== 100) {
+        return NextResponse.json(
+          { error: "با خالی کردن کمیسیون، سهم‌بندی هم باید پاک شود (سهم دفتر ۱۰۰٪ و بدون سهم)" },
+          { status: 400 }
+        );
+      }
+    } else {
+      const effectiveCommission = d.commissionToman ?? existing.commissionToman;
+      if (effectiveCommission == null || effectiveCommission === "") {
+        return NextResponse.json({ error: "اول کمیسیون معامله را تعیین کنید؛ سهم‌بندی بدون کمیسیون معنا ندارد" }, { status: 400 });
+      }
+    }
+    // قفل سهم‌بندی: اگر هر سهمی تسویه شده باشد، کل تقسیم قفل است
+    if (existing.shares.some((s) => s.settled)) {
+      return NextResponse.json(
+        { error: "سهمی تسویه شده است؛ برای تغییر اول تسویه را برگردانید" },
+        { status: 400 }
+      );
+    }
+    const splitError = validateSplitInput(
+      d.officePct,
+      d.shares.map((s) => ({ userId: s.userId ?? null, name: s.name ?? null, pct: s.pct }))
+    );
+    if (splitError) return NextResponse.json({ error: splitError }, { status: 400 });
+    // مشاور داخلی باید کاربر فعال موجود باشد؛ نامش از روی کاربر برداشته می‌شود
+    const internalIds = [...new Set(d.shares.filter((s) => s.userId).map((s) => s.userId as string))];
+    const users =
+      internalIds.length > 0
+        ? await prisma.user.findMany({
+            where: { id: { in: internalIds }, active: true },
+            select: { id: true, name: true },
+          })
+        : [];
+    if (users.length !== internalIds.length) {
+      return NextResponse.json({ error: "مشاور انتخاب‌شده معتبر نیست یا غیرفعال است" }, { status: 400 });
+    }
+    const userById = new Map(users.map((u) => [u.id, u.name]));
+    shareRows = d.shares.map((s) =>
+      s.userId
+        ? { userId: s.userId, name: userById.get(s.userId) ?? "", pct: s.pct }
+        : { userId: null, name: (s.name ?? "").trim(), pct: s.pct }
+    );
+  }
+
+  // خالی کردن کمیسیون وقتی سهمی تسویه شده، قفل سهم‌بندی را نامرئی می‌کند — ممنوع
+  const clearingCommission =
+    d.commissionToman !== undefined && (d.commissionToman === null || d.commissionToman === "");
+  if (clearingCommission && existing.shares.some((s) => s.settled)) {
+    return NextResponse.json(
+      { error: "سهمی تسویه شده است؛ برای تغییر اول تسویه را برگردانید" },
+      { status: 400 }
+    );
+  }
+
   // پس از تسویه، قیمت/کمیسیون قفل است — اول باید تسویه برگردد؛ تغییر وضعیت (لغو) از این قفل مستثناست
   const wantsMoneyChange =
     d.dealSalePriceToman !== undefined ||
     d.dealDepositToman !== undefined ||
     d.dealMonthlyRentToman !== undefined ||
     d.commissionToman !== undefined ||
-    d.commissionPercent !== undefined;
+    d.commissionPercent !== undefined ||
+    d.officePct !== undefined ||
+    d.shares !== undefined;
   if (existing.commissionPaid && wantsMoneyChange) {
     return NextResponse.json(
       { error: "این معامله تسویه شده است؛ برای تغییر قیمت یا کمیسیون اول تسویه را برگردانید" },
@@ -130,6 +204,7 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
     if (d.commissionToman !== undefined)
       data.commissionToman = d.commissionToman ? BigInt(d.commissionToman) : null;
     if (d.commissionPercent !== undefined) data.commissionPercent = d.commissionPercent;
+    if (d.officePct !== undefined) data.officePct = d.officePct;
   }
   if (d.dealSalePriceToman !== undefined)
     data.dealSalePriceToman = d.dealSalePriceToman ? BigInt(d.dealSalePriceToman) : null;
@@ -146,6 +221,23 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
 
   const deal = await prisma.$transaction(async (tx) => {
     const updated = await tx.deal.update({ where: { id }, data });
+
+    // سهم‌بندی تازه جایگزین سهم‌های قبلی می‌شود (سهم تسویه‌شده‌ای نیست — بالاتر قفل شده)
+    if (shareRows) {
+      await tx.dealShare.deleteMany({ where: { dealId: id } });
+      if (shareRows.length > 0) {
+        await tx.dealShare.createMany({
+          data: shareRows.map((r) => ({
+            dealId: id,
+            userId: r.userId,
+            name: r.name,
+            pct: r.pct,
+            settled: false,
+            settledAt: null,
+          })),
+        });
+      }
+    }
 
     const prop = existing.property;
     const cust = existing.customer;
