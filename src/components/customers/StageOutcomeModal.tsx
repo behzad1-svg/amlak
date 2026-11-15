@@ -1,7 +1,9 @@
 "use client";
 import { useEffect, useRef, useState } from "react";
 import { Button } from "@/components/ui/Button";
-import { Label, Textarea } from "@/components/ui/Input";
+import { Label, Textarea, NumberInput } from "@/components/ui/Input";
+import { MoneyInput } from "@/components/ui/MoneyInput";
+import { useRole } from "@/hooks/useRole";
 import { SearchSelect } from "@/components/ui/SearchSelect";
 import { LOST_REASON_LABELS, PROPERTY_TYPE_LABELS, DEAL_TYPE_LABELS } from "@/lib/constants";
 import { formatTomanCompact, toFaDigits } from "@/lib/utils";
@@ -38,6 +40,9 @@ export function StageOutcomeModal({
     lostReasonCategory?: string;
     lostReasonDetail?: string | null;
     propertyId?: string | null;
+    commissionToman?: string | null;
+    commissionPercent?: number | null;
+    dealSalePriceToman?: string | null;
   }) => Promise<void>;
 }) {
   const isWon = kind === "WON";
@@ -78,6 +83,10 @@ export function StageOutcomeModal({
   const [notes, setNotes] = useState("");
   const [reasonCat, setReasonCat] = useState("OTHER");
   const [reasonDetail, setReasonDetail] = useState("");
+  const { isOwner } = useRole();
+  const [commissionToman, setCommissionToman] = useState("");
+  const [commissionPercent, setCommissionPercent] = useState("");
+  const [salePriceToman, setSalePriceToman] = useState("");
   const [saving, setSaving] = useState(false);
   const [err, setErr] = useState("");
 
@@ -99,6 +108,31 @@ export function StageOutcomeModal({
       });
   }, [isWon, preferredDealType, preferredType]);
 
+  const selectedProperty = properties.find((p) => p.id === propertyId);
+  const isSaleDeal = selectedProperty ? selectedProperty.dealType === "SALE" : preferredDealType !== "RENT";
+  const isSaleRef = useRef(isSaleDeal);
+  isSaleRef.current = isSaleDeal;
+
+  // پیش‌فرض قیمت فروش از فایل انتخاب‌شده (فقط وقتی مدیر هنوز دستی وارد نکرده)
+  useEffect(() => {
+    if (!isWon) return;
+    const p = properties.find((pp) => pp.id === propertyId);
+    if (p && p.dealType === "SALE" && p.salePriceToman) {
+      setSalePriceToman((prev) => (prev === "" ? p.salePriceToman ?? "" : prev));
+    }
+  }, [isWon, properties, propertyId]);
+
+  // محاسبه خودکار مبلغ کمیسیون: درصد × قیمت فروش (فقط فروش؛ اجاره دستی است).
+  // فقط وقتی درصد یا قیمت عوض شود حساب می‌شود، پس ویرایش دستی مبلغ سر جایش می‌ماند.
+  useEffect(() => {
+    if (!isWon || !isOwner || !isSaleRef.current) return;
+    if (commissionPercent === "" || salePriceToman === "") return;
+    const pct = Number(commissionPercent);
+    const price = Number(salePriceToman);
+    if (!Number.isFinite(pct) || !Number.isFinite(price) || pct < 0 || pct > 100 || price <= 0) return;
+    setCommissionToman(String(Math.round((price * pct) / 100)));
+  }, [isWon, isOwner, commissionPercent, salePriceToman]);
+
   async function submit(e: React.FormEvent) {
     e.preventDefault();
     setErr("");
@@ -110,6 +144,13 @@ export function StageOutcomeModal({
       setErr("فایلی که مشتری گرفته را انتخاب کنید تا بایگانی شود");
       return;
     }
+    if (isWon && isOwner && commissionPercent !== "") {
+      const pct = Number(commissionPercent);
+      if (!Number.isFinite(pct) || pct < 0 || pct > 100) {
+        setErr("درصد کمیسیون باید بین ۰ تا ۱۰۰ باشد");
+        return;
+      }
+    }
     setSaving(true);
     try {
       await onSubmit({
@@ -118,6 +159,9 @@ export function StageOutcomeModal({
         lostReasonCategory: isWon ? undefined : reasonCat,
         lostReasonDetail: isWon ? null : reasonDetail.trim() || null,
         propertyId: isWon ? propertyId : null,
+        commissionToman: isWon && isOwner && commissionToman !== "" ? commissionToman : null,
+        commissionPercent: isWon && isOwner && commissionPercent !== "" ? Number(commissionPercent) : null,
+        dealSalePriceToman: isWon && isOwner && isSaleDeal && salePriceToman !== "" ? salePriceToman : null,
       });
     } catch (e2) {
       setErr(e2 instanceof Error ? e2.message : "خطا در ثبت");
@@ -199,6 +243,42 @@ export function StageOutcomeModal({
                   placeholder="مثلا: از فایل بهمنی خرید کرد، قرارداد دیروز امضا شد..."
                 />
               </div>
+              {isOwner && (
+                <div className="rounded-lg border border-zinc-200 bg-zinc-50 px-3 py-3 space-y-3">
+                  <p className="text-[12.5px] font-bold">کمیسیون معامله (فقط مدیر)</p>
+                  {isSaleDeal && (
+                    <MoneyInput
+                      label="قیمت فروش معامله (تومان)"
+                      value={salePriceToman}
+                      onChange={setSalePriceToman}
+                      placeholder="مثلا ۱۰۰۰۰۰۰۰۰۰۰"
+                      hint="از قیمت فایل پر می‌شود؛ قابل تغییر است"
+                    />
+                  )}
+                  <div>
+                    <Label htmlFor="f-commissionPercent">درصد کمیسیون (۰ تا ۱۰۰)</Label>
+                    <NumberInput
+                      id="f-commissionPercent"
+                      className="mt-1"
+                      value={commissionPercent}
+                      onChange={(e) => setCommissionPercent(e.target.value)}
+                      placeholder="مثلا ۱"
+                    />
+                  </div>
+                  <MoneyInput
+                    label="مبلغ کمیسیون (تومان)"
+                    value={commissionToman}
+                    onChange={setCommissionToman}
+                    placeholder="مثلا ۵۰۰۰۰۰۰۰"
+                    hint="خالی بماند یعنی بدون کمیسیون"
+                  />
+                  <p className="text-[11px] text-[var(--ink-3)]">
+                    {isSaleDeal
+                      ? "مبلغ از روی درصد × قیمت فروش حساب می‌شود؛ می‌توانید دستی هم عوضش کنید."
+                      : "برای اجاره مبلغ کمیسیون دستی وارد می‌شود."}
+                  </p>
+                </div>
+              )}
             </>
           ) : (
             <>
