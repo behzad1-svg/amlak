@@ -417,7 +417,7 @@ export default function PropertyDetailPage() {
                     <MoneyText value={p.salePriceToman} />
                     {detailPerMetre ? (
                       <span className="text-[12px] text-[var(--ink-3)]">
-                        {" "}· متری {formatTomanWithWords(String(detailPerMetre)).formatted}
+                        {" "}· متری{" "}{formatTomanWithWords(String(detailPerMetre)).formatted}
                       </span>
                     ) : null}
                   </>
