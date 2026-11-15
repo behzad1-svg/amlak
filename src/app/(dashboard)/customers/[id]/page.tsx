@@ -317,9 +317,6 @@ export default function CustomerDetailPage() {
     lostReasonCategory?: string;
     lostReasonDetail?: string | null;
     propertyId?: string | null;
-    commissionToman?: string | null;
-    commissionPercent?: number | null;
-    dealSalePriceToman?: string | null;
   }) {
     // ۱) اگر موفق و فایل انتخاب شده: معامله قطعی → فایل SOLD/RENTED و مشتری WON (فقط از مسیر معامله)
     if (payload.stage === "WON" && payload.propertyId) {
@@ -332,11 +329,6 @@ export default function CustomerDetailPage() {
             propertyId: payload.propertyId,
             status: "COMPLETED",
             notes: payload.notes || "موفق — از پروفایل مشتری ثبت شد",
-            ...(payload.commissionToman ? { commissionToman: payload.commissionToman } : {}),
-            ...(payload.commissionPercent !== undefined && payload.commissionPercent !== null
-              ? { commissionPercent: payload.commissionPercent }
-              : {}),
-            ...(payload.dealSalePriceToman ? { dealSalePriceToman: payload.dealSalePriceToman } : {}),
           }),
         });
       } catch (e) {

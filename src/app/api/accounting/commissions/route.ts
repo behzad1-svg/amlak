@@ -7,6 +7,8 @@ import { serializeBigInt } from "@/lib/utils";
  * فهرست کمیسیون‌ها — از روی معامله‌های ثبت‌شده.
  * GET /api/accounting/commissions?paid=all|paid|unpaid
  * مدیر: همه؛ مشاور: فقط معامله‌های خودش. لغوشده‌ها نمی‌آیند.
+ * معامله‌های قطعیِ بدون کمیسیون هم می‌آیند (وضعیت «تعیین نشده»)؛
+ * در فیلتر «پرداخت‌نشده» فقط معامله‌های دارای کمیسیونِ پرداخت‌نشده‌اند.
  */
 export async function GET(req: NextRequest) {
   const session = await getSessionFromCookies();
@@ -16,11 +18,14 @@ export async function GET(req: NextRequest) {
   const paid = new URL(req.url).searchParams.get("paid") ?? "all";
   const where: Record<string, unknown> = {
     status: { not: "CANCELED" },
-    commissionToman: { not: null },
   };
   if (!isOwner) where.agentId = session.user.id;
   if (paid === "paid") where.commissionPaid = true;
-  else if (paid === "unpaid") where.commissionPaid = false;
+  else if (paid === "unpaid") {
+    // معامله بدون کمیسیون «پرداخت‌نشده» نیست — فقط دارای کمیسیون‌ها
+    where.commissionPaid = false;
+    where.commissionToman = { not: null };
+  }
 
   const deals = await prisma.deal.findMany({
     where,

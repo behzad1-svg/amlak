@@ -63,6 +63,20 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
     return NextResponse.json({ error: "کمیسیون را فقط مدیر تعیین می‌کند" }, { status: 403 });
   }
 
+  // پس از تسویه، قیمت/کمیسیون قفل است — اول باید تسویه برگردد؛ تغییر وضعیت (لغو) از این قفل مستثناست
+  const wantsMoneyChange =
+    d.dealSalePriceToman !== undefined ||
+    d.dealDepositToman !== undefined ||
+    d.dealMonthlyRentToman !== undefined ||
+    d.commissionToman !== undefined ||
+    d.commissionPercent !== undefined;
+  if (existing.commissionPaid && wantsMoneyChange) {
+    return NextResponse.json(
+      { error: "این معامله تسویه شده است؛ برای تغییر قیمت یا کمیسیون اول تسویه را برگردانید" },
+      { status: 400 }
+    );
+  }
+
   // معامله تکمیل‌شده برای مشاور قفل است — فقط لغو مجاز است، نه تغییر مبلغ/کمیسیون/تاریخ
   if (existing.status === "COMPLETED" && session.user.role !== "OWNER") {
     const onlyCancel =

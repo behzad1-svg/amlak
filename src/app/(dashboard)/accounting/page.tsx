@@ -3,6 +3,8 @@ import { useCallback, useEffect, useState } from "react";
 import { Header } from "@/components/layout/Header";
 import { Card, CardHeader, CardTitle } from "@/components/ui/Card";
 import { Button } from "@/components/ui/Button";
+import { Label, NumberInput } from "@/components/ui/Input";
+import { MoneyInput } from "@/components/ui/MoneyInput";
 import { PageError, PageSkeleton } from "@/components/ui/LoadState";
 import { useRole } from "@/hooks/useRole";
 import { apiFetch, apiJson, errorMessage } from "@/lib/api";
@@ -31,6 +33,8 @@ type CommissionDeal = {
   commissionPaid: boolean;
   commissionPaidAt: string | null;
   dealSalePriceToman: string | null;
+  dealDepositToman: string | null;
+  dealMonthlyRentToman: string | null;
   customer: { id: string; name: string; phone: string };
   property: { id: string; title: string; dealType: string; region: string };
   agent: { id: string; name: string };
@@ -110,6 +114,16 @@ export default function AccountingPage() {
   const [actionError, setActionError] = useState<string | null>(null);
   const [settlingId, setSettlingId] = useState<string | null>(null);
 
+  // فرم ویرایش قیمت و کمیسیون (فقط مدیر، در تب کمیسیون‌ها)
+  const [editingDeal, setEditingDeal] = useState<CommissionDeal | null>(null);
+  const [editPrice, setEditPrice] = useState("");
+  const [editDeposit, setEditDeposit] = useState("");
+  const [editRent, setEditRent] = useState("");
+  const [editPercent, setEditPercent] = useState("");
+  const [editAmount, setEditAmount] = useState("");
+  const [editSaving, setEditSaving] = useState(false);
+  const [editError, setEditError] = useState("");
+
   // فرم صندوق
   const [entryType, setEntryType] = useState<"IN" | "OUT">("IN");
   const [entryAmount, setEntryAmount] = useState("");
@@ -171,6 +185,15 @@ export default function AccountingPage() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [tab]);
 
+  useEffect(() => {
+    if (!editingDeal) return;
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === "Escape") setEditingDeal(null);
+    };
+    document.addEventListener("keydown", onKey);
+    return () => document.removeEventListener("keydown", onKey);
+  }, [editingDeal]);
+
   async function toggleSettle(deal: CommissionDeal) {
     setActionError(null);
     setSettlingId(deal.id);
@@ -185,6 +208,83 @@ export default function AccountingPage() {
       setActionError(errorMessage(e));
     } finally {
       setSettlingId(null);
+    }
+  }
+
+  function openEdit(deal: CommissionDeal) {
+    // معامله تسویه‌شده قفل است — دکمه ویرایش برایش نشان داده نمی‌شود؛ اینجا هم سد دوم است
+    if (deal.commissionPaid) return;
+    setEditingDeal(deal);
+    setEditPrice(deal.dealSalePriceToman ?? "");
+    setEditDeposit(deal.dealDepositToman ?? "");
+    setEditRent(deal.dealMonthlyRentToman ?? "");
+    setEditPercent(deal.commissionPercent != null ? String(deal.commissionPercent) : "");
+    setEditAmount(deal.commissionToman ?? "");
+    setEditError("");
+  }
+
+  // محاسبه خودکار مبلغ کمیسیون از درصد × قیمت فروش (فقط فروش؛ اجاره دستی است).
+  // فقط موقع تایپ قیمت یا درصد حساب می‌شود، پس مبلغ دستیِ ذخیره‌شده با باز شدن فرم عوض نمی‌شود.
+  function calcCommissionAmount(price: string, percent: string): string | null {
+    if (price === "" || percent === "") return null;
+    const p = Number(price);
+    const pc = Number(percent);
+    if (!Number.isFinite(p) || !Number.isFinite(pc) || pc < 0 || pc > 100 || p <= 0) return null;
+    return String(Math.round((p * pc) / 100));
+  }
+
+  function onEditPrice(v: string) {
+    const clean = toEnDigits(v).replace(/[^0-9]/g, "");
+    setEditPrice(clean);
+    if (editingDeal?.property.dealType === "SALE") {
+      const next = calcCommissionAmount(clean, editPercent);
+      if (next !== null) setEditAmount(next);
+    }
+  }
+
+  function onEditPercent(v: string) {
+    const clean = toEnDigits(v).replace(/[^0-9]/g, "");
+    setEditPercent(clean);
+    if (editingDeal?.property.dealType === "SALE") {
+      const next = calcCommissionAmount(editPrice, clean);
+      if (next !== null) setEditAmount(next);
+    }
+  }
+
+  async function saveEdit(e: React.FormEvent) {
+    e.preventDefault();
+    if (!editingDeal) return;
+    setEditError("");
+    if (editPercent !== "") {
+      const pct = Number(editPercent);
+      if (!Number.isFinite(pct) || pct < 0 || pct > 100) {
+        setEditError("درصد کمیسیون باید بین ۰ تا ۱۰۰ باشد");
+        return;
+      }
+    }
+    setEditSaving(true);
+    try {
+      const isSale = editingDeal.property.dealType === "SALE";
+      const body: Record<string, unknown> = {
+        commissionPercent: editPercent === "" ? null : Number(editPercent),
+        commissionToman: editAmount === "" ? null : toEnDigits(editAmount).replace(/[^0-9]/g, ""),
+      };
+      if (isSale) body.dealSalePriceToman = editPrice === "" ? null : toEnDigits(editPrice).replace(/[^0-9]/g, "");
+      else {
+        body.dealDepositToman = editDeposit === "" ? null : toEnDigits(editDeposit).replace(/[^0-9]/g, "");
+        body.dealMonthlyRentToman = editRent === "" ? null : toEnDigits(editRent).replace(/[^0-9]/g, "");
+      }
+      await apiFetch(`/api/deals/${editingDeal.id}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(body),
+      });
+      setEditingDeal(null);
+      await loadBase();
+    } catch (err) {
+      setEditError(errorMessage(err));
+    } finally {
+      setEditSaving(false);
     }
   }
 
@@ -332,11 +432,30 @@ export default function AccountingPage() {
                           <div className="text-[12px] text-[var(--ink-3)]">{formatDate(d.contractAt ?? d.createdAt)}</div>
                         </td>
                         {isOwner && <td className="py-2.5 text-right">{d.agent.name}</td>}
-                        <td className="py-2.5 text-center">{formatToman(d.dealSalePriceToman)}</td>
+                        <td className="py-2.5 text-center">
+                          {d.property.dealType === "RENT" ? (
+                            <>
+                              {formatToman(d.dealDepositToman)}
+                              {d.dealMonthlyRentToman && (
+                                <span className="block text-[12px] font-normal text-[var(--ink-3)]">
+                                  اجاره ماهانه {formatToman(d.dealMonthlyRentToman)}
+                                </span>
+                              )}
+                            </>
+                          ) : (
+                            formatToman(d.dealSalePriceToman)
+                          )}
+                        </td>
                         <td className="py-2.5 text-center font-bold">
-                          {formatToman(d.commissionToman)}
-                          {d.commissionPercent != null && (
-                            <span className="block text-[12px] font-normal text-[var(--ink-3)]">{toFaDigits(String(d.commissionPercent))}٪</span>
+                          {d.commissionToman == null ? (
+                            <span className="font-normal text-[var(--ink-3)]">تعیین نشده</span>
+                          ) : (
+                            <>
+                              {formatToman(d.commissionToman)}
+                              {d.commissionPercent != null && (
+                                <span className="block text-[12px] font-normal text-[var(--ink-3)]">{toFaDigits(String(d.commissionPercent))}٪</span>
+                              )}
+                            </>
                           )}
                         </td>
                         <td className="py-2.5 text-center">{DEAL_STATUS[d.status] ?? d.status}</td>
@@ -346,17 +465,36 @@ export default function AccountingPage() {
                           </td>
                         )}
                         <td className="py-2.5 text-center">
-                          {d.commissionPaid ? (
+                          {d.commissionToman == null ? (
+                            <span className="text-[var(--ink-3)]">—</span>
+                          ) : d.commissionPaid ? (
                             <span className="text-emerald-600 font-bold">تسویه شد{isOwner ? ` · ${formatDate(d.commissionPaidAt)}` : ""}</span>
                           ) : (
                             <span className="text-red-600 font-bold">پرداخت‌نشده</span>
                           )}
-                          {isOwner && (
+                          {isOwner && d.commissionToman != null && (
                             <div className="mt-1">
                               <Button size="sm" variant="outline" disabled={settlingId === d.id} onClick={() => toggleSettle(d)}>
                                 {d.commissionPaid ? "برگرداندن" : "تسویه شد"}
                               </Button>
                             </div>
+                          )}
+                          {isOwner && tab === "commissions" && d.commissionToman == null && (
+                            <div className="mt-1">
+                              <Button size="sm" variant="outline" onClick={() => openEdit(d)}>
+                                تعیین کمیسیون
+                              </Button>
+                            </div>
+                          )}
+                          {isOwner && tab === "commissions" && d.commissionToman != null && !d.commissionPaid && (
+                            <div className="mt-1">
+                              <Button size="sm" variant="outline" onClick={() => openEdit(d)}>
+                                ویرایش
+                              </Button>
+                            </div>
+                          )}
+                          {isOwner && tab === "commissions" && d.commissionPaid && (
+                            <div className="mt-1 text-[11px] text-[var(--ink-3)]">تسویه شده؛ برای تغییر اول تسویه را برگردان</div>
                           )}
                         </td>
                       </tr>
@@ -366,10 +504,10 @@ export default function AccountingPage() {
               </div>
             )}
             {tab === "commissions" && commissions.length === 0 && (
-              <p className="text-sm text-[var(--ink-3)]">هنوز معامله‌ای با کمیسیون ثبت نشده است.</p>
+              <p className="text-sm text-[var(--ink-3)]">هنوز معامله‌ای ثبت نشده است.</p>
             )}
             <p className="mt-3 text-[12px] text-[var(--ink-3)]">
-              کمیسیون همان مقداری است که هنگام ثبت معامله وارد شده است؛ اینجا تعرفه یا فرمول تازه‌ای ساخته نمی‌شود.
+              قیمت و کمیسیون هر معامله را مدیر در همین‌جا نهایی می‌کند؛ تا پیش از تسویه قابل ویرایش است و پس از تسویه قفل می‌شود.
             </p>
           </Card>
         )}
@@ -521,6 +659,81 @@ export default function AccountingPage() {
               </div>
             ) : null}
           </Card>
+        )}
+
+        {editingDeal && (
+          <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
+            <button type="button" className="absolute inset-0 bg-black/40" onClick={() => setEditingDeal(null)} aria-label="بستن" />
+            <div
+              role="dialog"
+              aria-modal="true"
+              aria-label={editingDeal.commissionToman == null ? "تعیین کمیسیون" : "ویرایش قیمت و کمیسیون"}
+              className="relative w-full max-w-lg rounded-[16px] border border-[var(--line)] bg-white p-5 shadow-xl"
+            >
+              <h3 className="text-[15px] font-extrabold">
+                {editingDeal.commissionToman == null ? "تعیین کمیسیون" : "ویرایش قیمت و کمیسیون"}
+              </h3>
+              <p className="mt-1 text-[12px] text-[var(--ink-3)]">
+                {editingDeal.property.title} · {editingDeal.customer.name} · {DEAL_TYPE[editingDeal.property.dealType] ?? editingDeal.property.dealType}
+              </p>
+              <form onSubmit={saveEdit} className="mt-4 space-y-3">
+                {editingDeal.property.dealType === "SALE" ? (
+                  <MoneyInput
+                    label="قیمت فروش معامله (تومان)"
+                    value={editPrice}
+                    onChange={onEditPrice}
+                    placeholder="مثلا ۱۰۰۰۰۰۰۰۰۰۰"
+                  />
+                ) : (
+                  <>
+                    <MoneyInput
+                      label="ودیعه معامله (تومان)"
+                      value={editDeposit}
+                      onChange={(v) => setEditDeposit(toEnDigits(v).replace(/[^0-9]/g, ""))}
+                      placeholder="مثلا ۵۰۰۰۰۰۰۰۰"
+                    />
+                    <MoneyInput
+                      label="اجاره ماهانه (تومان)"
+                      value={editRent}
+                      onChange={(v) => setEditRent(toEnDigits(v).replace(/[^0-9]/g, ""))}
+                      placeholder="مثلا ۲۰۰۰۰۰۰۰"
+                    />
+                  </>
+                )}
+                <div>
+                  <Label htmlFor="f-editPercent">درصد کمیسیون (۰ تا ۱۰۰)</Label>
+                  <NumberInput
+                    id="f-editPercent"
+                    className="mt-1"
+                    value={editPercent}
+                    onChange={(e) => onEditPercent(e.target.value)}
+                    placeholder="مثلا ۱"
+                  />
+                </div>
+                <MoneyInput
+                  label="مبلغ کمیسیون (تومان)"
+                  value={editAmount}
+                  onChange={(v) => setEditAmount(toEnDigits(v).replace(/[^0-9]/g, ""))}
+                  placeholder="مثلا ۵۰۰۰۰۰۰۰"
+                  hint="خالی بماند یعنی بدون کمیسیون"
+                />
+                <p className="text-[11px] text-[var(--ink-3)]">
+                  {editingDeal.property.dealType === "SALE"
+                    ? "مبلغ از روی درصد × قیمت فروش حساب می‌شود؛ می‌توانید دستی هم عوضش کنید."
+                    : "برای اجاره مبلغ کمیسیون دستی وارد می‌شود."}
+                </p>
+                {editError && <div className="rounded-lg bg-red-50 px-3 py-2 text-sm text-red-700">{editError}</div>}
+                <div className="flex gap-2 pt-1">
+                  <Button type="submit" disabled={editSaving}>
+                    {editSaving ? "در حال ذخیره..." : "ذخیره"}
+                  </Button>
+                  <Button type="button" variant="ghost" onClick={() => setEditingDeal(null)} disabled={editSaving}>
+                    انصراف
+                  </Button>
+                </div>
+              </form>
+            </div>
+          </div>
         )}
       </div>
     </div>
