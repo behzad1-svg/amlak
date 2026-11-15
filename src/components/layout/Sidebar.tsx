@@ -3,6 +3,7 @@ import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
 import { LayoutDashboard, Users, Building2, Bell, LogOut, BarChart3, Settings, UserCog, TrendingUp } from "lucide-react";
 import { cn } from "@/lib/utils";
+import Image from "next/image";
 
 const nav = [
   { href: "/dashboard", label: "داشبورد", icon: LayoutDashboard },
@@ -22,7 +23,7 @@ export function Sidebar({ role, unreadCount, onClose }: { role?: string; unreadC
     <div className="flex flex-1 flex-col bg-white">
       <div className="flex h-[64px] items-center justify-between border-b border-[var(--line)] px-5 shrink-0">
         <div className="flex items-center gap-3">
-          <span className="flex h-9 w-9 items-center justify-center rounded-[12px] bg-[var(--pomegranate)] text-[13px] font-extrabold text-white shadow-sm">س</span>
+          <Image src="/saj-logo-mark.png" alt="املاک ساج" width={1331} height={464} className="h-9 w-auto" />
           <div className="leading-none">
             <div className="text-[14px] font-extrabold tracking-tight text-[var(--ink)]">املاک ساج</div>
             <div className="mt-0.5 text-[11px] font-medium tracking-widest text-[var(--ink-3)]">بوشهر · SAJ</div>

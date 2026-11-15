@@ -3,6 +3,7 @@ import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { LayoutDashboard, Users, Building2, Bell, BarChart3, Settings, PanelLeftOpen, UserCog, TrendingUp } from "lucide-react";
 import { cn } from "@/lib/utils";
+import Image from "next/image";
 
 const nav = [
   { href: "/dashboard", icon: LayoutDashboard },
@@ -15,7 +16,7 @@ export function SidebarMini({ role, unreadCount, onExpand }: { role?: string; un
   const pathname = usePathname();
   return (
     <div className="flex flex-1 flex-col items-center bg-white py-3">
-      <span className="flex h-9 w-9 items-center justify-center rounded-[12px] bg-[var(--pomegranate)] text-[13px] font-extrabold text-white">س</span>
+      <Image src="/saj-logo-mark.png" alt="املاک ساج" width={1331} height={464} className="h-9 w-auto" />
       <button onClick={onExpand} className="mt-3 rounded-[10px] border border-[var(--line)] bg-white p-1.5 hover:bg-[var(--paper-2)]" aria-label="باز کردن منو">
         <PanelLeftOpen className="h-4 w-4" />
       </button>
