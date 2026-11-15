@@ -3,6 +3,7 @@ import { useState } from "react";
 import { useRouter } from "next/navigation";
 import { Input, Label, PasswordInput } from "@/components/ui/Input";
 import { Button } from "@/components/ui/Button";
+import Image from "next/image";
 
 export default function LoginPage() {
   const router = useRouter();
@@ -28,12 +29,9 @@ export default function LoginPage() {
       {/* Right — form */}
       <div className="flex flex-1 items-center justify-center p-6 lg:p-10">
         <div className="w-full max-w-[420px]">
-          <div className="mb-8 flex items-center gap-3">
-            <span className="flex h-10 w-10 items-center justify-center rounded-[12px] bg-[var(--pomegranate)] text-sm font-extrabold text-white">س</span>
-            <div>
-              <div className="text-[15px] font-extrabold tracking-tight">املاک ساج</div>
-              <div className="text-[11px] tracking-widest text-[var(--ink-3)]">بوشهر · SAJ REAL ESTATE</div>
-            </div>
+          <div className="mb-8">
+            <Image src="/saj-logo.png" alt="املاک ساج — مشاور املاک" width={1379} height={611} className="h-auto w-[220px]" priority />
+            <div className="mt-2 text-[11px] tracking-widest text-[var(--ink-3)]">بوشهر · SAJ REAL ESTATE</div>
           </div>
 
           <div className="rounded-[var(--radius-xl)] border border-[var(--line)] bg-white p-6 sm:p-7 shadow-[0_8px_24px_rgba(22,26,36,0.06)]">

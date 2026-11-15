@@ -50,6 +50,7 @@ export default function NotificationsPage() {
   const [loading, setLoading] = useState(true);
   const [loadError, setLoadError] = useState<string | null>(null);
   const [actionError, setActionError] = useState("");
+  const [actionOk, setActionOk] = useState("");
   const [typeFilter, setTypeFilter] = useState<string>("all");
   const [quickSaving, setQuickSaving] = useState<string | null>(null);
 
@@ -114,6 +115,7 @@ export default function NotificationsPage() {
     if (!n.relatedId || quickSaving) return;
     setQuickSaving(n.id);
     setActionError("");
+    setActionOk("");
     try {
       await apiFetch("/api/activities", {
         method: "POST",
@@ -126,6 +128,7 @@ export default function NotificationsPage() {
         body: JSON.stringify({ nextFollowUpAt: isoInDays(1) }),
       });
       await markOne(n.id);
+      setActionOk("تماس ثبت شد؛ پیگیری بعدی فردا تنظیم شد.");
     } catch (e) {
       setActionError(errorMessage(e));
     } finally {
@@ -144,6 +147,9 @@ export default function NotificationsPage() {
       <div className="p-4 sm:p-6 space-y-3 max-w-3xl">
         {actionError && (
           <div className="rounded-lg bg-red-50 px-3 py-2 text-sm text-red-700" role="alert">{actionError}</div>
+        )}
+        {actionOk && (
+          <div className="rounded-lg bg-green-50 px-3 py-2 text-sm text-green-700" role="status">{actionOk}</div>
         )}
         <div className="flex flex-wrap gap-2">
           {TYPE_FILTERS.map((f) => (
