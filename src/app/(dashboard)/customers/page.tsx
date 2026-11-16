@@ -16,18 +16,22 @@ import {
   CUSTOMER_SOURCE_LABELS,
   CUSTOMER_SOURCE_OPTIONS,
   CUSTOMER_STAGE_LABELS,
+  CUSTOMER_TYPE_LABELS,
+  CUSTOMER_TYPE_CARD,
+  CUSTOMER_TYPE_BADGE,
   LOST_REASON_LABELS,
   TEMPERATURE_COLORS,
   TEMPERATURE_LABELS,
   getStaleInfo,
 } from "@/lib/constants";
-import { formatDate, toFaDigits } from "@/lib/utils";
+import { cn, formatDate, toFaDigits } from "@/lib/utils";
 
 type Customer = {
   id: string;
   name: string;
   phone: string;
   stage: string;
+  type: string;
   temperature: string;
   source: string | null;
   tags: string[];
@@ -432,14 +436,17 @@ export default function CustomersPage() {
                       key={c.id}
                       draggable
                       onDragStart={() => setDragId(c.id)}
-                      className={`rounded-[14px] border bg-white p-3 cursor-grab active:cursor-grabbing shadow-sm hover:shadow ${
-                        overdue ? "border-[var(--pomegranate-line)]" : "border-[var(--line)]"
-                      }`}
+                      className={cn(
+                        "rounded-[14px] border bg-white p-3 cursor-grab active:cursor-grabbing shadow-sm hover:shadow",
+                        CUSTOMER_TYPE_CARD[c.type] ?? "border-[var(--line)]",
+                        overdue && "border-[var(--pomegranate-line)]"
+                      )}
                     >
                       <Link href={`/customers/${c.id}`} className="block">
                         <div className="flex items-center gap-2">
                           <span className={`h-2.5 w-2.5 rounded-full ${TEMPERATURE_COLORS[c.temperature] ?? "bg-zinc-300"}`} title={TEMPERATURE_LABELS[c.temperature] ?? c.temperature} />
                           <span className="text-[13.5px] font-bold leading-none truncate">{c.name}</span>
+                          <Badge className={`shrink-0 text-[10.5px] ${CUSTOMER_TYPE_BADGE[c.type] ?? ""}`}>{CUSTOMER_TYPE_LABELS[c.type] ?? c.type}</Badge>
                         </div>
                         <div className="mt-1 text-[11px] tracking-wide text-[var(--ink-3)]" dir="ltr">{c.phone}</div>
                         {cardTags.length > 0 && (

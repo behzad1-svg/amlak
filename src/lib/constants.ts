@@ -40,6 +40,28 @@ export const PROPERTY_TYPE_LABELS: Record<string, string> = Object.fromEntries(
   DEFAULT_PROPERTY_TYPES.map((x) => [x.value, x.label])
 );
 
+/** رنگ پس‌زمینه کارت فایل بر اساس نوع ملک — برای پیدا کردن سریع نوع فایل در لیست */
+export const PROPERTY_TYPE_CARD: Record<string, string> = {
+  APARTMENT: "bg-[#E9F7EF] border-[#B7E4C7]",
+  VILLA: "bg-[#FFF8E1] border-[#F1D9A8]",
+  KOLANGI: "bg-[#FFF1E6] border-[#F5C9A8]",
+  LAND: "bg-[#F5EFE3] border-[#DCC9A8]",
+  SHOP: "bg-[#F3EEFB] border-[#D5C6F0]",
+  OFFICE: "bg-[#EFF4FF] border-[#C7D8EE]",
+  COMMERCIAL: "bg-[#FDF0F3] border-[#F2C6D2]",
+};
+
+/** رنگ برچسب نوع ملک — هم‌خانواده با رنگ کارت */
+export const PROPERTY_TYPE_BADGE: Record<string, string> = {
+  APARTMENT: "bg-[#CDEEDB] border-[#9BD8B4] text-[#1E7A46]",
+  VILLA: "bg-[#FCEFC7] border-[#EBCB85] text-[#8A6D1B]",
+  KOLANGI: "bg-[#FFE0C7] border-[#EFB27E] text-[#9A5A1E]",
+  LAND: "bg-[#EDE3CC] border-[#CBB27F] text-[#7A5C2E]",
+  SHOP: "bg-[#E4D8F7] border-[#C0A9E8] text-[#6B4FA1]",
+  OFFICE: "bg-[#D8E5FA] border-[#A8C4EA] text-[#2F5D8A]",
+  COMMERCIAL: "bg-[#FAD9E2] border-[#EFA9BC] text-[#A13A5C]",
+};
+
 // نوع معامله فایل — فقط فروش یا رهن/اجاره (خرید در فایل معنا ندارد)
 export const DEAL_TYPE_LABELS: Record<string, string> = {
   SALE: "فروش",
@@ -151,6 +173,22 @@ export const CUSTOMER_TYPE_LABELS: Record<string, string> = {
   SELLER: "فروشنده",
   TENANT: "مستاجر",
   OWNER: "مالک",
+};
+
+/** رنگ پس‌زمینه کارت مشتری بر اساس نوع مشتری — برای پیدا کردن سریع نوع مشتری در کانبان */
+export const CUSTOMER_TYPE_CARD: Record<string, string> = {
+  BUYER: "bg-[#EFF4FF] border-[#C7D8EE]",
+  SELLER: "bg-[#E9F7EF] border-[#B7E4C7]",
+  TENANT: "bg-[#FFF8E1] border-[#F1D9A8]",
+  OWNER: "bg-[#F3EEFB] border-[#D5C6F0]",
+};
+
+/** رنگ برچسب نوع مشتری — هم‌خانواده با رنگ کارت */
+export const CUSTOMER_TYPE_BADGE: Record<string, string> = {
+  BUYER: "bg-[#D8E5FA] border-[#A8C4EA] text-[#2F5D8A]",
+  SELLER: "bg-[#CDEEDB] border-[#9BD8B4] text-[#1E7A46]",
+  TENANT: "bg-[#FCEFC7] border-[#EBCB85] text-[#8A6D1B]",
+  OWNER: "bg-[#E4D8F7] border-[#C0A9E8] text-[#6B4FA1]",
 };
 
 export const ACTIVITY_TYPE_LABELS: Record<string, string> = {

@@ -6,7 +6,7 @@ import { Button } from "@/components/ui/Button";
 import { Badge } from "@/components/ui/Badge";
 import { Card } from "@/components/ui/Card";
 import { Input, Select } from "@/components/ui/Input";
-import { PROPERTY_TYPE_LABELS, DEAL_TYPE_LABELS, PROPERTY_STATUS_LABELS, CUSTOMER_SOURCE_LABELS, CUSTOMER_SOURCE_OPTIONS } from "@/lib/constants";
+import { PROPERTY_TYPE_LABELS, PROPERTY_TYPE_CARD, PROPERTY_TYPE_BADGE, DEAL_TYPE_LABELS, PROPERTY_STATUS_LABELS, CUSTOMER_SOURCE_LABELS, CUSTOMER_SOURCE_OPTIONS } from "@/lib/constants";
 import { useRole } from "@/hooks/useRole";
 import { MoneyText } from "@/components/ui/MoneyText";
 import { PageError, PageSkeleton } from "@/components/ui/LoadState";
@@ -495,7 +495,7 @@ export default function PropertiesPage() {
               const feats = featureBadges(p);
               return (
                 <Link key={p.id} href={`/properties/${p.id}`} className="group">
-                  <Card className="h-full p-0 overflow-hidden hover:shadow-[0_8px_24px_rgba(22,26,36,0.08)] transition-shadow">
+                  <Card className={`h-full p-0 overflow-hidden hover:shadow-[0_8px_24px_rgba(22,26,36,0.08)] transition-shadow ${PROPERTY_TYPE_CARD[p.type] ?? ""}`}>
                     <div
                       className="h-1.5 w-full"
                       style={{ background: p.dealType === "SALE" ? "var(--pomegranate)" : "var(--sea)" }}
@@ -506,7 +506,7 @@ export default function PropertiesPage() {
                           {p.code && (
                             <span className="text-[12px] font-bold text-[var(--ink-2)]" dir="ltr">{p.code}</span>
                           )}
-                          <Badge className="text-[11px]">{PROPERTY_TYPE_LABELS[p.type] ?? p.type}</Badge>
+                          <Badge className={`text-[11px] ${PROPERTY_TYPE_BADGE[p.type] ?? ""}`}>{PROPERTY_TYPE_LABELS[p.type] ?? p.type}</Badge>
                           {p.isAppraised ? (
                             <span className="rounded-md bg-[var(--sea-soft)] border border-[#C7E5E0] px-1.5 py-0.5 text-[10.5px] text-[var(--sea)] font-bold">
                               کارشناسی ✓
