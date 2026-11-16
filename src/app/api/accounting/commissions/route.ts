@@ -8,7 +8,7 @@ import { resolveSplit, splitForViewer } from "@/lib/shares";
  * فهرست کمیسیون‌ها — از روی معامله‌های ثبت‌شده.
  * GET /api/accounting/commissions?paid=all|paid|unpaid
  * مدیر: همه؛ مشاور: فقط معامله‌های خودش. لغوشده‌ها نمی‌آیند.
- * معامله‌های قطعیِ بدون کمیسیون هم می‌آیند (وضعیت «تعیین نشده»)؛
+ * معامله‌های قطعیِ بدون کمیسیون و شیرینی هم می‌آیند (وضعیت «تعیین نشده»)؛
  * در فیلتر «پرداخت‌نشده» فقط معامله‌های دارای کمیسیونِ پرداخت‌نشده‌اند.
  * هر معامله سهم‌بندی‌اش را هم می‌آورد؛ مشاور فقط سهم خودش را می‌بیند
  * (سهم دفتر و سهم مشاورهای دیگر برایش پنهان است).
@@ -25,9 +25,13 @@ export async function GET(req: NextRequest) {
   if (!isOwner) where.agentId = session.user.id;
   if (paid === "paid") where.commissionPaid = true;
   else if (paid === "unpaid") {
-    // معامله بدون کمیسیون «پرداخت‌نشده» نیست — فقط دارای کمیسیون‌ها
+    // معامله بدون درآمد «پرداخت‌نشده» نیست — فقط دارای کمیسیون یا شیرینی‌ها
     where.commissionPaid = false;
-    where.commissionToman = { not: null };
+    where.OR = [
+      { commissionToman: { not: null } },
+      { sellerShiriniToman: { not: null } },
+      { buyerShiriniToman: { not: null } },
+    ];
   }
 
   const deals = await prisma.deal.findMany({

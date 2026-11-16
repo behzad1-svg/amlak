@@ -177,6 +177,8 @@ export const dealUpdateSchema = z.object({
   notes: z.string().max(2000).optional().nullable(),
   commissionToman: z.string().regex(/^[0-9]*$/, "کمیسیون فقط عدد").optional().nullable(),
   commissionPercent: z.number().min(0).max(100).optional().nullable(),
+  sellerShiriniToman: z.string().regex(/^[0-9]*$/, "شیرینی فقط عدد").optional().nullable(),
+  buyerShiriniToman: z.string().regex(/^[0-9]*$/, "شیرینی فقط عدد").optional().nullable(),
   dealSalePriceToman: z.string().regex(/^[0-9]*$/, "فقط عدد").optional().nullable(),
   dealDepositToman: z.string().regex(/^[0-9]*$/, "فقط عدد").optional().nullable(),
   dealMonthlyRentToman: z.string().regex(/^[0-9]*$/, "فقط عدد").optional().nullable(),

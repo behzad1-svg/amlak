@@ -57,9 +57,12 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
   }
   const d = parsed.data;
 
-  // کمیسیون را فقط مدیر تعیین می‌کند
+  // کمیسیون و شیرینی را فقط مدیر تعیین می‌کند
   const wantsCommission =
-    Boolean(d.commissionToman) || (d.commissionPercent !== undefined && d.commissionPercent !== null);
+    Boolean(d.commissionToman) ||
+    Boolean(d.sellerShiriniToman) ||
+    Boolean(d.buyerShiriniToman) ||
+    (d.commissionPercent !== undefined && d.commissionPercent !== null);
   if (session.user.role !== "OWNER" && wantsCommission) {
     return NextResponse.json({ error: "کمیسیون را فقط مدیر تعیین می‌کند" }, { status: 403 });
   }
@@ -70,27 +73,27 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
     return NextResponse.json({ error: "سهم‌بندی را فقط مدیر تعیین می‌کند" }, { status: 403 });
   }
 
-  // سهم‌بندی فقط وقتی معنا دارد که کمیسیون معامله تعیین شده باشد
+  // سهم‌بندی فقط وقتی معنا دارد که درآمد قابل‌تقسیم معامله (کمیسیون + شیرینی‌ها) بیشتر از صفر باشد
   let shareRows: { userId: string | null; name: string; pct: number }[] | null = null;
   if (wantsShares) {
     if (d.officePct === undefined || d.shares === undefined) {
       return NextResponse.json({ error: "سهم دفتر و سهم‌ها را با هم بفرستید" }, { status: 400 });
     }
-    // خالی کردن کمیسیون یعنی پاک شدن سهم‌بندی (سهم دفتر ۱۰۰٪ و بدون سهم)؛
-    // در این حالت چک «کمیسیون تعیین شده» اعمال نمی‌شود
-    const clearingWithShares =
-      d.commissionToman !== undefined && (d.commissionToman === null || d.commissionToman === "");
-    if (clearingWithShares) {
+    // درآمد قابل‌تقسیم بعد از این ویرایش: مقدار تازه اگر فرستاده شده، وگرنه مقدار فعلی
+    const eff = (next: string | null | undefined, prev: bigint | null) =>
+      next === undefined ? prev : next === null || next === "" ? null : BigInt(next);
+    const effectiveIncome =
+      (eff(d.commissionToman, existing.commissionToman) ?? BigInt(0)) +
+      (eff(d.sellerShiriniToman, existing.sellerShiriniToman) ?? BigInt(0)) +
+      (eff(d.buyerShiriniToman, existing.buyerShiriniToman) ?? BigInt(0));
+    // خالی کردن درآمد یعنی پاک شدن سهم‌بندی (سهم دفتر ۱۰۰٪ و بدون سهم)؛
+    // در این حالت چک «درآمد تعیین شده» اعمال نمی‌شود
+    if (effectiveIncome <= BigInt(0)) {
       if (d.shares.length > 0 || d.officePct !== 100) {
         return NextResponse.json(
-          { error: "با خالی کردن کمیسیون، سهم‌بندی هم باید پاک شود (سهم دفتر ۱۰۰٪ و بدون سهم)" },
+          { error: "با خالی کردن کمیسیون و شیرینی، سهم‌بندی هم باید پاک شود (سهم دفتر ۱۰۰٪ و بدون سهم)" },
           { status: 400 }
         );
-      }
-    } else {
-      const effectiveCommission = d.commissionToman ?? existing.commissionToman;
-      if (effectiveCommission == null || effectiveCommission === "") {
-        return NextResponse.json({ error: "اول کمیسیون معامله را تعیین کنید؛ سهم‌بندی بدون کمیسیون معنا ندارد" }, { status: 400 });
       }
     }
     // قفل سهم‌بندی: اگر هر سهمی تسویه شده باشد، کل تقسیم قفل است
@@ -125,10 +128,17 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
     );
   }
 
-  // خالی کردن کمیسیون وقتی سهمی تسویه شده، قفل سهم‌بندی را نامرئی می‌کند — ممنوع
-  const clearingCommission =
-    d.commissionToman !== undefined && (d.commissionToman === null || d.commissionToman === "");
-  if (clearingCommission && existing.shares.some((s) => s.settled)) {
+  // خالی کردن درآمد (کمیسیون + شیرینی‌ها) وقتی سهمی تسویه شده، قفل سهم‌بندی را نامرئی می‌کند — ممنوع
+  const effAfter = (next: string | null | undefined, prev: bigint | null) =>
+    next === undefined ? prev : next === null || next === "" ? null : BigInt(next);
+  const incomeTouched =
+    d.commissionToman !== undefined || d.sellerShiriniToman !== undefined || d.buyerShiriniToman !== undefined;
+  const incomeAfter =
+    (effAfter(d.commissionToman, existing.commissionToman) ?? BigInt(0)) +
+    (effAfter(d.sellerShiriniToman, existing.sellerShiriniToman) ?? BigInt(0)) +
+    (effAfter(d.buyerShiriniToman, existing.buyerShiriniToman) ?? BigInt(0));
+  const clearingIncome = incomeTouched && incomeAfter <= BigInt(0);
+  if (clearingIncome && existing.shares.some((s) => s.settled)) {
     return NextResponse.json(
       { error: "سهمی تسویه شده است؛ برای تغییر اول تسویه را برگردانید" },
       { status: 400 }
@@ -142,6 +152,8 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
     d.dealMonthlyRentToman !== undefined ||
     d.commissionToman !== undefined ||
     d.commissionPercent !== undefined ||
+    d.sellerShiriniToman !== undefined ||
+    d.buyerShiriniToman !== undefined ||
     d.officePct !== undefined ||
     d.shares !== undefined;
   // سوراخ قفل تسویه: تسویه یک سهم به‌تنهایی commissionPaid را true نمی‌کند، پس قفل
@@ -168,7 +180,9 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
       d.notes === undefined &&
       d.dealSalePriceToman === undefined &&
       d.dealDepositToman === undefined &&
-      d.dealMonthlyRentToman === undefined;
+      d.dealMonthlyRentToman === undefined &&
+      d.sellerShiriniToman === undefined &&
+      d.buyerShiriniToman === undefined;
     if (!onlyCancel) {
       return NextResponse.json(
         { error: "معامله تکمیل‌شده فقط توسط مدیر قابل ویرایش است؛ مشاور فقط می‌تواند آن را لغو کند" },
@@ -213,6 +227,10 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
     if (d.commissionToman !== undefined)
       data.commissionToman = d.commissionToman ? BigInt(d.commissionToman) : null;
     if (d.commissionPercent !== undefined) data.commissionPercent = d.commissionPercent;
+    if (d.sellerShiriniToman !== undefined)
+      data.sellerShiriniToman = d.sellerShiriniToman ? BigInt(d.sellerShiriniToman) : null;
+    if (d.buyerShiriniToman !== undefined)
+      data.buyerShiriniToman = d.buyerShiriniToman ? BigInt(d.buyerShiriniToman) : null;
     if (d.officePct !== undefined) data.officePct = d.officePct;
   }
   if (d.dealSalePriceToman !== undefined)

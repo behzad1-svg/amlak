@@ -2,7 +2,7 @@ import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { getSessionFromCookies } from "@/lib/auth";
 import { serializeBigInt } from "@/lib/utils";
-import { resolveSplit } from "@/lib/shares";
+import { dealSplittable, resolveSplit } from "@/lib/shares";
 
 /**
  * خلاصه حسابداری.
@@ -11,6 +11,8 @@ import { resolveSplit } from "@/lib/shares";
  * کمیسیون همان مقداری است که در معامله ثبت شده؛ هیچ تعرفه یا فرمولی اینجا ساخته نمی‌شود.
  * «مجموع کمیسیون» مبلغ کامل معامله می‌ماند؛ «سهم دفتر» و «بدهی به مشاوران»
  * از روی سهم‌بندی حساب می‌شوند (معامله بدون سهم واقعی = ۱۰۰٪ برای مشاور معامله).
+ * مبنای سهم‌بندی کمیسیون + شیرینی فروشنده + شیرینی خریدار است؛ «مجموع شیرینی»
+ * فقط برای مدیر حساب می‌شود (مشاور سهم خودش از شیرینی را داخل سهمش می‌بیند).
  */
 export async function GET() {
   const session = await getSessionFromCookies();
@@ -19,11 +21,13 @@ export async function GET() {
   const agentFilter = isOwner ? {} : { agentId: session.user.id };
 
   // «معامله قطعی» روی همه معامله‌های غیرلغوشده شمرده می‌شود، نه فقط آن‌هایی که کمیسیون دارند؛
-  // جمع‌های کمیسیون فقط از معامله‌های دارای کمیسیون می‌آیند.
+  // جمع‌های کمیسیون فقط از معامله‌های دارای کمیسیون می‌آیند؛ «مجموع شیرینی» جمع هر دو شیرینی است.
   const deals = await prisma.deal.findMany({
     where: { ...agentFilter, status: { not: "CANCELED" } },
     select: {
       commissionToman: true,
+      sellerShiriniToman: true,
+      buyerShiriniToman: true,
       commissionPaid: true,
       status: true,
       agentId: true,
@@ -36,19 +40,24 @@ export async function GET() {
   let commissionTotal = BigInt(0);
   let commissionPaid = BigInt(0);
   let commissionUnpaid = BigInt(0);
+  let shiriniTotal = BigInt(0);
   let unpaidCount = 0;
   let dealsCompleted = 0;
   let dealsWithCommission = 0;
-  // سهم دفتر فقط روی معامله‌های قطعی دارای کمیسیون؛ بدهی به مشاوران روی همه معامله‌های دارای کمیسیون
+  // سهم دفتر فقط روی معامله‌های قطعی دارای درآمد؛ بدهی به مشاوران روی همه معامله‌های دارای درآمد
   let officeTotal = BigInt(0);
   let debtToAgents = BigInt(0);
   for (const d of deals) {
     if (d.status === "COMPLETED") dealsCompleted += 1;
-    if (d.commissionToman == null) continue;
-    dealsWithCommission += 1;
+    if (d.commissionToman != null) dealsWithCommission += 1;
+    if (isOwner) {
+      shiriniTotal += (d.sellerShiriniToman ?? BigInt(0)) + (d.buyerShiriniToman ?? BigInt(0));
+    }
+    // معامله بدون درآمد قابل‌تقسیم (کمیسیون و هر دو شیرینی خالی/صفر) سهم‌بندی ندارد
+    if (dealSplittable(d) <= BigInt(0)) continue;
     const split = resolveSplit(d);
     if (isOwner) {
-      const amount = d.commissionToman;
+      const amount = d.commissionToman ?? BigInt(0);
       commissionTotal += amount;
       if (d.commissionPaid) commissionPaid += amount;
       else {
@@ -99,6 +108,8 @@ export async function GET() {
       commissionTotal,
       commissionPaid,
       commissionUnpaid,
+      // فقط مدیر: مجموع شیرینی فروشنده و خریدار روی معامله‌های لغونشده
+      shiriniTotal: isOwner ? shiriniTotal : null,
       unpaidCount,
       dealsCompleted,
       dealsWithCommission,

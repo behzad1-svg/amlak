@@ -4,7 +4,7 @@ import { getSessionFromCookies } from "@/lib/auth";
 import { shareSettleSchema } from "@/lib/validation";
 import { serializeBigInt } from "@/lib/utils";
 import { createAuditLog } from "@/lib/audit";
-import { syncDealCommissionPaid } from "@/lib/shares";
+import { dealSplittable, syncDealCommissionPaid } from "@/lib/shares";
 
 /**
  * تسویه یا برگرداندن تسویه یک سهم — فقط مدیر.
@@ -28,11 +28,13 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
 
   const share = await prisma.dealShare.findUnique({
     where: { id },
-    include: { deal: { select: { id: true, commissionToman: true, commissionPaid: true } } },
+    include: {
+      deal: { select: { id: true, commissionToman: true, sellerShiriniToman: true, buyerShiriniToman: true, commissionPaid: true } },
+    },
   });
   if (!share) return NextResponse.json({ error: "سهم یافت نشد" }, { status: 404 });
-  if (share.deal.commissionToman == null) {
-    return NextResponse.json({ error: "برای این معامله کمیسیونی ثبت نشده است" }, { status: 400 });
+  if (dealSplittable(share.deal) <= BigInt(0)) {
+    return NextResponse.json({ error: "برای این معامله کمیسیون یا شیرینی ثبت نشده است" }, { status: 400 });
   }
 
   const settled = parsed.data.settled;

@@ -2,7 +2,7 @@ import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { getSessionFromCookies } from "@/lib/auth";
 import { serializeBigInt } from "@/lib/utils";
-import { resolveSplit } from "@/lib/shares";
+import { dealSplittable, resolveSplit } from "@/lib/shares";
 
 /**
  * گزارش حسابداری به تفکیک هر مشاور — فقط مدیر.
@@ -30,6 +30,8 @@ export async function GET() {
         agentId: true,
         status: true,
         commissionToman: true,
+        sellerShiriniToman: true,
+        buyerShiriniToman: true,
         commissionPaid: true,
         dealSalePriceToman: true,
         officePct: true,
@@ -42,13 +44,14 @@ export async function GET() {
   // سهم‌بندی حل‌شدهٔ هر معامله را یک بار حساب کن — برای جمع دفتر/تعاون و جمع هر مشاور
   const splits = deals.map((d) => resolveSplit(d));
 
-  // سهم دفتر و تعاون روی همه معامله‌های دارای کمیسیون؛ جمع کل کمیسیون مبلغ کامل معامله می‌ماند
+  // سهم دفتر و تعاون روی همه معامله‌های دارای درآمد؛ جمع کل مبنای تقسیم (کمیسیون + هر دو شیرینی) می‌ماند
   let officeTotal = BigInt(0);
   let externalTotal = BigInt(0);
   let commissionGrandTotal = BigInt(0);
   deals.forEach((d, i) => {
-    if (d.commissionToman == null) return;
-    commissionGrandTotal += d.commissionToman;
+    const base = dealSplittable(d);
+    if (base <= BigInt(0)) return;
+    commissionGrandTotal += base;
     const split = splits[i];
     officeTotal += split.officeAmount ?? BigInt(0);
     for (const s of split.shares) {
@@ -93,7 +96,7 @@ export async function GET() {
       }
       // جمع کمیسیون فقط سهم‌های خودش است — در همه معامله‌ها، نه فقط معامله‌های خودش؛
       // معامله تقسیم‌نشده همان سهم مجازی ۱۰۰٪ برای مشاور معامله را می‌دهد
-      if (d.commissionToman != null) {
+      if (dealSplittable(d) > BigInt(0)) {
         for (const s of splits[i].shares) {
           if (s.userId !== u.id) continue;
           commissionTotal += s.amount;

@@ -4,7 +4,7 @@ import { getSessionFromCookies } from "@/lib/auth";
 import { commissionSettleSchema } from "@/lib/validation";
 import { serializeBigInt } from "@/lib/utils";
 import { createAuditLog } from "@/lib/audit";
-import { resolveSplit } from "@/lib/shares";
+import { dealSplittable, resolveSplit } from "@/lib/shares";
 
 /**
  * تسویه یا برگرداندن تسویه کمیسیون یک معامله — فقط مدیر.
@@ -28,8 +28,9 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
 
   const deal = await prisma.deal.findUnique({ where: { id }, include: { shares: true } });
   if (!deal) return NextResponse.json({ error: "معامله یافت نشد" }, { status: 404 });
-  if (deal.commissionToman == null) {
-    return NextResponse.json({ error: "برای این معامله کمیسیونی ثبت نشده است" }, { status: 400 });
+  const dealIncome = dealSplittable(deal);
+  if (dealIncome <= BigInt(0)) {
+    return NextResponse.json({ error: "برای این معامله کمیسیون یا شیرینی ثبت نشده است" }, { status: 400 });
   }
 
   const paid = parsed.data.commissionPaid;

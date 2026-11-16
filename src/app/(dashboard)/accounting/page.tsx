@@ -18,6 +18,8 @@ type Summary = {
   commissionTotal: string;
   commissionPaid: string;
   commissionUnpaid: string;
+  /** فقط مدیر؛ برای مشاور null است */
+  shiriniTotal: string | null;
   unpaidCount: number;
   dealsCompleted: number;
   dealsWithCommission: number;
@@ -44,6 +46,8 @@ type CommissionDeal = {
   createdAt: string;
   commissionToman: string | null;
   commissionPercent: number | null;
+  sellerShiriniToman: string | null;
+  buyerShiriniToman: string | null;
   commissionPaid: boolean;
   commissionPaidAt: string | null;
   dealSalePriceToman: string | null;
@@ -135,6 +139,29 @@ function daysSince(iso: string | null): number {
   return Math.max(0, Math.floor(ms / (24 * 60 * 60 * 1000)));
 }
 
+/** مبلغ BigInt از رشته عددی API؛ خالی یا نامعتبر یعنی صفر. */
+function bigNum(v: string | null): bigint {
+  if (!v) return BigInt(0);
+  try {
+    return BigInt(v);
+  } catch {
+    return BigInt(0);
+  }
+}
+
+/** معامله درآمد قابل‌تقسیم دارد؟ کمیسیون یا هر شیرینی بیشتر از صفر باشد. */
+function dealHasIncome(d: Pick<CommissionDeal, "commissionToman" | "sellerShiriniToman" | "buyerShiriniToman">): boolean {
+  return bigNum(d.commissionToman) > BigInt(0) || bigNum(d.sellerShiriniToman) > BigInt(0) || bigNum(d.buyerShiriniToman) > BigInt(0);
+}
+
+/** برچسب شیرینی‌های بیشتر از صفر برای ردیف معامله، مثل «شیرینی فروشنده ۵٬۰۰۰٬۰۰۰ تومان». */
+function shiriniParts(d: Pick<CommissionDeal, "sellerShiriniToman" | "buyerShiriniToman">): string[] {
+  const parts: string[] = [];
+  if (bigNum(d.sellerShiriniToman) > BigInt(0)) parts.push(`شیرینی فروشنده ${formatToman(d.sellerShiriniToman)}`);
+  if (bigNum(d.buyerShiriniToman) > BigInt(0)) parts.push(`شیرینی خریدار ${formatToman(d.buyerShiriniToman)}`);
+  return parts;
+}
+
 export default function AccountingPage() {
   const { isOwner, loading: roleLoading } = useRole();
   const [tab, setTab] = useState<Tab>("summary");
@@ -158,6 +185,8 @@ export default function AccountingPage() {
   const [editRent, setEditRent] = useState("");
   const [editPercent, setEditPercent] = useState("");
   const [editAmount, setEditAmount] = useState("");
+  const [editSellerShirini, setEditSellerShirini] = useState("");
+  const [editBuyerShirini, setEditBuyerShirini] = useState("");
   const [editSaving, setEditSaving] = useState(false);
   const [editError, setEditError] = useState("");
 
@@ -290,6 +319,8 @@ export default function AccountingPage() {
           ? (calcCommissionAmount(deal.dealSalePriceToman, "0.25") ?? "")
           : "";
     setEditAmount(amountSeed);
+    setEditSellerShirini(deal.sellerShiriniToman ?? "");
+    setEditBuyerShirini(deal.buyerShiriniToman ?? "");
     setEditError("");
     // سهم‌بندی: اگر سهم واقعی دارد همان را بیاور؛ وگرنه پیش‌فرض دفتر ۵۰٪ + مشاور معامله ۵۰٪ —
     // چه کمیسیون داشته باشد چه هنوز «تعیین نشده» باشد؛ وگرنه با محاسبه خودکار مبلغ از روی
@@ -396,6 +427,23 @@ export default function AccountingPage() {
     }
   }
 
+  // شیرینی‌ها مثل مبلغ کمیسیون‌اند: عدد فارسی تمیز می‌شود؛ با اولین ورود، سهم‌بندی پیش‌فرض پر می‌شود
+  function onEditSellerShirini(v: string) {
+    const clean = toEnDigits(v).replace(/[^0-9]/g, "");
+    setEditSellerShirini(clean);
+    if (clean !== "" && editShares.length === 0 && editingDeal && !editingDeal.shares.some((s) => !s.virtual)) {
+      setEditShares([{ key: "s-new-0", userId: editingDeal.agent.id, name: editingDeal.agent.name, pct: "50", isExternal: false }]);
+    }
+  }
+
+  function onEditBuyerShirini(v: string) {
+    const clean = toEnDigits(v).replace(/[^0-9]/g, "");
+    setEditBuyerShirini(clean);
+    if (clean !== "" && editShares.length === 0 && editingDeal && !editingDeal.shares.some((s) => !s.virtual)) {
+      setEditShares([{ key: "s-new-0", userId: editingDeal.agent.id, name: editingDeal.agent.name, pct: "50", isExternal: false }]);
+    }
+  }
+
   // محاسبه خودکار مبلغ کمیسیون از درصد × قیمت فروش (فقط فروش؛ اجاره دستی است).
   // فقط موقع تایپ قیمت یا درصد حساب می‌شود، پس مبلغ دستیِ ذخیره‌شده با باز شدن فرم عوض نمی‌شود.
   function calcCommissionAmount(price: string, percent: string): string | null {
@@ -441,15 +489,22 @@ export default function AccountingPage() {
     // سهم‌بندی: هر درصد دستی قابل تغییر است؛ فقط مجموع باید دقیقاً ۱۰۰٪ شود
     const hasRealShares = editingDeal.shares.some((s) => !s.virtual);
     const sharesLocked = editingDeal.shares.some((s) => !s.virtual && s.settled);
+    // درآمد قابل‌تقسیم = کمیسیون + هر دو شیرینی؛ خالی یعنی صفر
+    const editHasIncome = editAmount !== "" || editSellerShirini !== "" || editBuyerShirini !== "";
+    const editTotal = (Number(editAmount) || 0) + (Number(editSellerShirini) || 0) + (Number(editBuyerShirini) || 0);
     let shareBody: Record<string, unknown> = {};
-    if (editAmount === "" && hasRealShares) {
-      // خالی کردن کمیسیون، سهم‌بندی را هم پاک می‌کند (مگر سهمی تسویه شده باشد)
+    if (!editHasIncome && hasRealShares) {
+      // خالی کردن کمیسیون و شیرینی، سهم‌بندی را هم پاک می‌کند (مگر سهمی تسویه شده باشد)
       if (sharesLocked) {
         setEditError("سهمی تسویه شده است؛ برای تغییر اول تسویه را برگردانید");
         return;
       }
       shareBody = { officePct: 100, shares: [] };
-    } else if (editAmount !== "" && !sharesLocked) {
+    } else if (editHasIncome && !sharesLocked) {
+      if (editTotal <= 0) {
+        setEditError("جمع کمیسیون و شیرینی باید بیشتر از صفر باشد");
+        return;
+      }
       const office = Number(toEnDigits(editOfficePct).replace(/[^0-9.]/g, ""));
       if (!Number.isFinite(office) || office < 0 || office > 100) {
         setEditError("سهم دفتر باید بین ۰ تا ۱۰۰ باشد");
@@ -503,6 +558,8 @@ export default function AccountingPage() {
       const body: Record<string, unknown> = {
         commissionPercent: editPercent === "" ? null : Number(editPercent),
         commissionToman: editAmount === "" ? null : toEnDigits(editAmount).replace(/[^0-9]/g, ""),
+        sellerShiriniToman: editSellerShirini === "" ? null : toEnDigits(editSellerShirini).replace(/[^0-9]/g, ""),
+        buyerShiriniToman: editBuyerShirini === "" ? null : toEnDigits(editBuyerShirini).replace(/[^0-9]/g, ""),
         ...shareBody,
       };
       if (isSale) body.dealSalePriceToman = editPrice === "" ? null : toEnDigits(editPrice).replace(/[^0-9]/g, "");
@@ -553,6 +610,9 @@ export default function AccountingPage() {
     }
   }
 
+  // مبنای پیش‌نمایش سهم‌بندی در فرم ویرایش: کمیسیون + هر دو شیرینی (خالی یعنی صفر)
+  const editSplitBase = (Number(editAmount) || 0) + (Number(editSellerShirini) || 0) + (Number(editBuyerShirini) || 0);
+
   if (roleLoading) return <PageSkeleton rows={4} />;
   if (loading) return <PageSkeleton rows={4} />;
   if (loadError && !summary) return <PageError message={loadError} onRetry={loadBase} />;
@@ -600,6 +660,12 @@ export default function AccountingPage() {
               <div className="text-[11px] text-[var(--ink-3)]">مجموع کمیسیون</div>
               <div className="text-[20px] font-extrabold">{formatToman(summary.commissionTotal)}</div>
             </div>
+            {isOwner && summary.shiriniTotal != null && (
+              <div className="rounded-[12px] border border-[var(--line)] bg-white px-3 py-2">
+                <div className="text-[11px] text-[var(--ink-3)]">مجموع شیرینی</div>
+                <div className="text-[20px] font-extrabold">{formatToman(summary.shiriniTotal)}</div>
+              </div>
+            )}
             <div className="rounded-[12px] border border-[var(--line)] bg-white px-3 py-2">
               <div className="text-[11px] text-[var(--ink-3)]">کمیسیون پرداخت‌شده</div>
               <div className="text-[20px] font-extrabold text-emerald-600">{formatToman(summary.commissionPaid)}</div>
@@ -697,13 +763,16 @@ export default function AccountingPage() {
                           )}
                         </td>
                         <td className="py-2.5 text-center font-bold">
-                          {d.commissionToman == null ? (
+                          {!dealHasIncome(d) ? (
                             <span className="font-normal text-[var(--ink-3)]">تعیین نشده</span>
                           ) : (
                             <>
                               {formatToman(d.commissionToman)}
                               {d.commissionPercent != null && (
                                 <span className="block text-[12px] font-normal text-[var(--ink-3)]">{toFaDigits(String(d.commissionPercent))}٪</span>
+                              )}
+                              {shiriniParts(d).length > 0 && (
+                                <span className="block text-[12px] font-normal text-[var(--ink-3)]">{shiriniParts(d).join(" · ")}</span>
                               )}
                               {!isOwner &&
                                 d.shares.map((s) => (
@@ -716,7 +785,7 @@ export default function AccountingPage() {
                         </td>
                         {isOwner && (
                           <td className="py-2.5 text-right text-[12px]">
-                            {d.commissionToman == null || d.shares.length === 0 ? (
+                            {!dealHasIncome(d) || d.shares.length === 0 ? (
                               <span className="text-[var(--ink-3)]">—</span>
                             ) : d.shares.some((s) => s.virtual) ? (
                               <span>تقسیم نشده — {d.shares[0]?.name} ۱۰۰٪</span>
@@ -751,28 +820,28 @@ export default function AccountingPage() {
                           </td>
                         )}
                         <td className="py-2.5 text-center">
-                          {d.commissionToman == null ? (
+                          {!dealHasIncome(d) ? (
                             <span className="text-[var(--ink-3)]">—</span>
                           ) : d.commissionPaid ? (
                             <span className="text-emerald-600 font-bold">تسویه شد{isOwner ? ` · ${formatDate(d.commissionPaidAt)}` : ""}</span>
                           ) : (
                             <span className="text-red-600 font-bold">پرداخت‌نشده</span>
                           )}
-                          {isOwner && d.commissionToman != null && (
+                          {isOwner && dealHasIncome(d) && (
                             <div className="mt-1">
                               <Button size="sm" variant="outline" disabled={settlingId === d.id} onClick={() => toggleSettle(d)}>
                                 {d.commissionPaid ? "برگرداندن" : "تسویه شد"}
                               </Button>
                             </div>
                           )}
-                          {isOwner && tab === "commissions" && d.commissionToman == null && (
+                          {isOwner && tab === "commissions" && !dealHasIncome(d) && (
                             <div className="mt-1">
                               <Button size="sm" variant="outline" onClick={() => openEdit(d)}>
                                 تعیین کمیسیون
                               </Button>
                             </div>
                           )}
-                          {isOwner && tab === "commissions" && d.commissionToman != null && !d.commissionPaid && (
+                          {isOwner && tab === "commissions" && dealHasIncome(d) && !d.commissionPaid && (
                             <div className="mt-1">
                               <Button size="sm" variant="outline" onClick={() => openEdit(d)}>
                                 ویرایش
@@ -793,8 +862,8 @@ export default function AccountingPage() {
               <p className="text-sm text-[var(--ink-3)]">هنوز معامله‌ای ثبت نشده است.</p>
             )}
             <p className="mt-3 text-[12px] text-[var(--ink-3)]">
-              قیمت و کمیسیون هر معامله را مدیر در همین‌جا نهایی می‌کند؛ تا پیش از تسویه قابل ویرایش است و پس از تسویه قفل می‌شود. سهم‌بندی (دفتر، مشاوران و
-              تعاون) هم در همین مودال انجام می‌شود و هر سهم جداگانه تسویه می‌شود.
+              قیمت، کمیسیون و شیرینی هر معامله را مدیر در همین‌جا نهایی می‌کند؛ تا پیش از تسویه قابل ویرایش است و پس از تسویه قفل می‌شود. سهم‌بندی
+              (دفتر، مشاوران و تعاون) روی جمع کمیسیون و شیرینی انجام می‌شود و هر سهم جداگانه تسویه می‌شود.
             </p>
           </Card>
         )}
@@ -946,8 +1015,8 @@ export default function AccountingPage() {
                 </table>
               </div>
               <p className="mt-3 text-[12px] text-[var(--ink-3)]">
-                سهم دفتر: {formatToman(agents.totals.officeTotal)} · تعاون (بیرونی): {formatToman(agents.totals.externalTotal)} · جمع کل کمیسیون:{" "}
-                {formatToman(agents.totals.commissionGrandTotal)}
+                سهم دفتر: {formatToman(agents.totals.officeTotal)} · تعاون (بیرونی): {formatToman(agents.totals.externalTotal)} · جمع کل درآمد (کمیسیون +{" "}
+                شیرینی): {formatToman(agents.totals.commissionGrandTotal)}
               </p>
               </>
             ) : null}
@@ -960,11 +1029,11 @@ export default function AccountingPage() {
             <div
               role="dialog"
               aria-modal="true"
-              aria-label={editingDeal.commissionToman == null ? "تعیین کمیسیون" : "ویرایش قیمت و کمیسیون"}
+              aria-label={!dealHasIncome(editingDeal) ? "تعیین کمیسیون" : "ویرایش قیمت و کمیسیون"}
               className="relative w-full max-w-lg rounded-[16px] border border-[var(--line)] bg-white p-5 shadow-xl"
             >
               <h3 className="text-[15px] font-extrabold">
-                {editingDeal.commissionToman == null ? "تعیین کمیسیون" : "ویرایش قیمت و کمیسیون"}
+                {!dealHasIncome(editingDeal) ? "تعیین کمیسیون" : "ویرایش قیمت و کمیسیون"}
               </h3>
               <p className="mt-1 text-[12px] text-[var(--ink-3)]">
                 {editingDeal.property.title} · {editingDeal.customer.name} · {DEAL_TYPE[editingDeal.property.dealType] ?? editingDeal.property.dealType}
@@ -1011,17 +1080,34 @@ export default function AccountingPage() {
                   placeholder="مثلا ۵۰۰۰۰۰۰۰"
                   hint="خالی بماند یعنی بدون کمیسیون"
                 />
+                <MoneyInput
+                  label="شیرینی فروشنده (تومان)"
+                  value={editSellerShirini}
+                  onChange={onEditSellerShirini}
+                  placeholder="مثلا ۱۰۰۰۰۰۰۰"
+                  hint="اختیاری — خالی یعنی صفر"
+                />
+                <MoneyInput
+                  label="شیرینی خریدار (تومان)"
+                  value={editBuyerShirini}
+                  onChange={onEditBuyerShirini}
+                  placeholder="مثلا ۱۰۰۰۰۰۰۰"
+                  hint="اختیاری — خالی یعنی صفر"
+                />
                 <p className="text-[11px] text-[var(--ink-3)]">
                   {editingDeal.property.dealType === "SALE"
                     ? "مبلغ از روی درصد × قیمت فروش حساب می‌شود؛ می‌توانید دستی هم عوضش کنید."
                     : "برای اجاره مبلغ کمیسیون دستی وارد می‌شود."}
                 </p>
-                {/* سهم‌بندی — فقط وقتی کمیسیون تعیین شده باشد؛ هر درصد دستی قابل تغییر است */}
-                {editAmount === "" ? (
+                <p className="text-[11px] text-[var(--ink-3)]">
+                  شیرینی با کمیسیون جمع می‌شود و با همان سهم‌بندی تقسیم می‌شود؛ درصد کمیسیون فقط مبلغ کمیسیون را از روی قیمت حساب می‌کند.
+                </p>
+                {/* سهم‌بندی — فقط وقتی کمیسیون یا شیرینی تعیین شده باشد؛ هر درصد دستی قابل تغییر است */}
+                {editSplitBase <= 0 ? (
                   editingDeal.shares.some((s) => !s.virtual) ? (
-                    <p className="text-[12px] text-amber-700">با خالی کردن مبلغ کمیسیون، سهم‌بندی این معامله هم پاک می‌شود.</p>
+                    <p className="text-[12px] text-amber-700">با خالی کردن مبلغ کمیسیون و شیرینی، سهم‌بندی این معامله هم پاک می‌شود.</p>
                   ) : (
-                    <p className="text-[12px] text-[var(--ink-3)]">برای سهم‌بندی اول مبلغ کمیسیون را وارد کنید.</p>
+                    <p className="text-[12px] text-[var(--ink-3)]">برای سهم‌بندی اول مبلغ کمیسیون یا شیرینی را وارد کنید.</p>
                   )
                 ) : editingDeal.shares.some((s) => !s.virtual && s.settled) ? (
                   <div className="rounded-[12px] border border-[var(--line)] bg-[var(--paper-2)] p-3">
@@ -1041,7 +1127,7 @@ export default function AccountingPage() {
                 ) : (
                   <div className="rounded-[12px] border border-[var(--line)] bg-[#fafcfe] p-3 space-y-3">
                     <div className="flex items-center justify-between gap-2">
-                      <b className="text-[13px]">👥 سهم‌بندی کمیسیون</b>
+                      <b className="text-[13px]">👥 سهم‌بندی کمیسیون و شیرینی</b>
                       <span className={Math.abs(sharesTotal() - 100) < 0.01 ? "text-[12px] text-emerald-600 font-bold" : "text-[12px] text-red-600 font-bold"}>
                         {Math.abs(sharesTotal() - 100) < 0.01
                           ? "✓ مجموع ۱۰۰٪ است"
@@ -1062,9 +1148,9 @@ export default function AccountingPage() {
                         مبلغ سهم دفتر
                         <div className="mt-1 rounded-[10px] border border-[var(--line)] bg-white px-3 py-2 text-[14px]">
                           {formatToman(
-                            editAmount === ""
+                            editSplitBase <= 0
                               ? null
-                              : String(Math.round((Number(editAmount) * (Number(toEnDigits(editOfficePct).replace(/[^0-9.]/g, "")) || 0)) / 100))
+                              : String(Math.round((editSplitBase * (Number(toEnDigits(editOfficePct).replace(/[^0-9.]/g, "")) || 0)) / 100))
                           )}
                         </div>
                       </div>
@@ -1112,9 +1198,9 @@ export default function AccountingPage() {
                           </label>
                           <span className="pb-2 text-[12px] text-[var(--ink-3)]">
                             {formatToman(
-                              editAmount === ""
+                              editSplitBase <= 0
                                 ? null
-                                : String(Math.round((Number(editAmount) * (Number(toEnDigits(s.pct).replace(/[^0-9.]/g, "")) || 0)) / 100))
+                                : String(Math.round((editSplitBase * (Number(toEnDigits(s.pct).replace(/[^0-9.]/g, "")) || 0)) / 100))
                             )}
                           </span>
                           <Button type="button" size="sm" variant="ghost" onClick={() => removeShareRow(s.key)} aria-label="حذف سهم">

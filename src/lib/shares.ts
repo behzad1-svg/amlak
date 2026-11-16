@@ -2,11 +2,12 @@ import type { Prisma } from "@prisma/client";
 import { toFaDigits } from "./utils";
 
 /**
- * سهم‌بندی کمیسیون معامله‌ها.
+ * سهم‌بندی کمیسیون و شیرینی معامله‌ها.
  *
  * هر معامله یک «سهم دفتر» (officePct) و چند «سهم» دارد؛ سهم یا مشاور داخلی
  * (userId) است یا همکار بیرونی «تعاون» (userId خالی + نام متنی).
- * مبنای تقسیم فقط commissionToman است — شیرینی و مالیات اینجا نیست.
+ * مبنای تقسیم = کمیسیون + شیرینی فروشنده + شیرینی خریدار؛ درصدها روی همین
+ * جمع اعمال می‌شوند و هر سهم جداگانه تسویه می‌شود. مالیات اینجا نیست.
  *
  * معامله‌های قدیمی که سهم واقعی ندارند، عددشان عوض نمی‌شود: همه‌جا با یک
  * سهم مجازی ۱۰۰٪ برای مشاور معامله دیده می‌شوند (سهم دفتر صفر، تسویه‌شده
@@ -29,7 +30,7 @@ export type ResolvedShare = {
   settled: boolean;
   settledAt: Date | string | null;
   isExternal: boolean;
-  /** مبلغ سهم = گرد شدهٔ commissionToman × pct / ۱۰۰ */
+  /** مبلغ سهم = گرد شدهٔ مبنای تقسیم × pct / ۱۰۰ */
   amount: bigint;
   virtual: boolean;
 };
@@ -44,9 +45,9 @@ export type ResolvedSplit = {
 /** تلرانس جمع درصدها موقع اعتبارسنجی (دقیقاً ۱۰۰٪، با ۰٫۰۱ تلرانس) */
 export const SHARE_TOTAL_TOLERANCE = 0.01;
 
-export function shareAmount(commissionToman: bigint | null | undefined, pct: number): bigint {
-  if (commissionToman == null) return BigInt(0);
-  return BigInt(Math.round((Number(commissionToman) * pct) / 100));
+export function shareAmount(base: bigint | null | undefined, pct: number): bigint {
+  if (base == null) return BigInt(0);
+  return BigInt(Math.round((Number(base) * pct) / 100));
 }
 
 /**
@@ -73,6 +74,8 @@ type DealShareLike = {
 
 type DealLike = {
   commissionToman: bigint | null;
+  sellerShiriniToman?: bigint | null;
+  buyerShiriniToman?: bigint | null;
   commissionPaid: boolean;
   officePct: unknown;
   agentId: string;
@@ -80,14 +83,27 @@ type DealLike = {
   shares: DealShareLike[];
 };
 
+/** مبنای تقسیم: کمیسیون + شیرینی فروشنده + شیرینی خریدار (هر کدام خالی یعنی صفر). */
+export function dealSplittable(deal: {
+  commissionToman: bigint | null;
+  sellerShiriniToman?: bigint | null;
+  buyerShiriniToman?: bigint | null;
+}): bigint {
+  return (
+    (deal.commissionToman ?? BigInt(0)) +
+    (deal.sellerShiriniToman ?? BigInt(0)) +
+    (deal.buyerShiriniToman ?? BigInt(0))
+  );
+}
+
 /** سهم‌بندی حل‌شدهٔ یک معامله — واقعی اگر سهم دارد، وگرنه مجازی ۱۰۰٪ برای مشاور معامله. */
 export function resolveSplit(deal: DealLike): ResolvedSplit {
-  const commission = deal.commissionToman;
+  const base = dealSplittable(deal);
   if (deal.shares.length > 0) {
     const officePct = Number(deal.officePct ?? 0);
     return {
       officePct,
-      officeAmount: shareAmount(commission, officePct),
+      officeAmount: shareAmount(base, officePct),
       shares: deal.shares.map((s) => ({
         id: s.id,
         userId: s.userId,
@@ -96,12 +112,12 @@ export function resolveSplit(deal: DealLike): ResolvedSplit {
         settled: s.settled,
         settledAt: s.settledAt,
         isExternal: s.userId == null,
-        amount: shareAmount(commission, Number(s.pct)),
+        amount: shareAmount(base, Number(s.pct)),
         virtual: false,
       })),
     };
   }
-  if (commission == null) return { officePct: 0, officeAmount: BigInt(0), shares: [] };
+  if (base <= BigInt(0)) return { officePct: 0, officeAmount: BigInt(0), shares: [] };
   return {
     officePct: 0,
     officeAmount: BigInt(0),
@@ -114,7 +130,7 @@ export function resolveSplit(deal: DealLike): ResolvedSplit {
         settled: deal.commissionPaid,
         settledAt: null,
         isExternal: false,
-        amount: commission,
+        amount: base,
         virtual: true,
       },
     ],
