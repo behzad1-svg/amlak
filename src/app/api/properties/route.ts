@@ -75,6 +75,15 @@ export async function GET(req: NextRequest) {
   if (source && !["INSTAGRAM", "DIVAR", "DIRECT_CALL", "REFERRAL", "SIGN_BOARD", "WEBSITE", "IN_PERSON", "ADVERTISEMENT", "OTHER", "FILE_FINDING"].includes(source)) {
     return NextResponse.json({ error: "مقدار «source» معتبر نیست" }, { status: 400 });
   }
+  if (type && !["APARTMENT", "VILLA", "OFFICE", "LAND", "SHOP", "KOLANGI", "COMMERCIAL"].includes(type)) {
+    return NextResponse.json({ error: "مقدار «type» معتبر نیست" }, { status: 400 });
+  }
+  if (dealType && !["SALE", "RENT"].includes(dealType)) {
+    return NextResponse.json({ error: "مقدار «dealType» معتبر نیست" }, { status: 400 });
+  }
+  if (status && !["ACTIVE", "RESERVED", "SOLD", "RENTED", "ARCHIVED"].includes(status)) {
+    return NextResponse.json({ error: "مقدار «status» معتبر نیست" }, { status: 400 });
+  }
 
   const and: Record<string, unknown>[] = [{ deletedAt: null }];
   if (region) and.push({ region });

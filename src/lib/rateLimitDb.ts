@@ -10,7 +10,7 @@ const MAX_ATTEMPTS_IP = 20;
 const MAX_ATTEMPTS_PHONE = 5;
 
 /** سقف هر کلید: کلیدهای IP (login:ip:...) بیست تلاش، بقیه (شماره تماس) پنج تلاش. */
-function limitForKey(key: string): number {
+export function rateLimitForKey(key: string): number {
   return key.startsWith("login:ip:") ? MAX_ATTEMPTS_IP : MAX_ATTEMPTS_PHONE;
 }
 
@@ -21,17 +21,19 @@ function memCheck(key: string): boolean {
   const now = Date.now();
   const cur = mem.get(key);
   if (!cur || now > cur.resetAt) return true;
-  return cur.count < limitForKey(key);
+  return cur.count < rateLimitForKey(key);
 }
 
-function memRecord(key: string): void {
+/** ثبت در حافظه و برگرداندن تعداد تازه. */
+function memRecord(key: string): number {
   const now = Date.now();
   const cur = mem.get(key);
   if (!cur || now > cur.resetAt) {
     mem.set(key, { count: 1, resetAt: now + WINDOW_MS });
-    return;
+    return 1;
   }
   cur.count += 1;
+  return cur.count;
 }
 
 /** چک بدون ثبت: آیا این کلید هنوز زیر سقف است؟ */
@@ -40,29 +42,37 @@ export async function checkRateLimitDb(key: string): Promise<boolean> {
     const rec = await prisma.rateLimitHit.findUnique({ where: { key } });
     if (!rec) return true;
     if (Date.now() - rec.windowStart.getTime() > WINDOW_MS) return true;
-    return rec.count < limitForKey(key);
+    return rec.count < rateLimitForKey(key);
   } catch (e) {
     console.error("[rate-limit] DB check fallback to memory:", e instanceof Error ? e.message : "");
     return memCheck(key);
   }
 }
 
-/** ثبت یک تلاش ناموفق (فقط در صورت شکست احراز هویت صدا می‌شود). */
-export async function recordRateLimitDb(key: string): Promise<void> {
+/** ثبت یک تلاش ناموفق (فقط در صورت شکست احراز هویت صدا می‌شود) و برگرداندن تعداد تازه. */
+export async function recordRateLimitDb(key: string): Promise<number> {
   const now = new Date();
   try {
-    const rec = await prisma.rateLimitHit.findUnique({ where: { key } });
-    if (!rec || now.getTime() - rec.windowStart.getTime() > WINDOW_MS) {
-      await prisma.rateLimitHit.upsert({
-        where: { key },
-        update: { windowStart: now, count: 1 },
-        create: { key, windowStart: now, count: 1 },
-      });
-      return;
+    // افزایش اتمیک در پنجرهٔ زنده: دو درخواست هم‌زمان دیگر نمی‌توانند هر دو
+    // تعداد را ۴ بخوانند و هر دو ۵ بنویسند.
+    const threshold = new Date(now.getTime() - WINDOW_MS);
+    const updated = await prisma.rateLimitHit.updateMany({
+      where: { key, windowStart: { gte: threshold } },
+      data: { count: { increment: 1 } },
+    });
+    if (updated.count > 0) {
+      const rec = await prisma.rateLimitHit.findUnique({ where: { key } });
+      return rec ? rec.count : rateLimitForKey(key) + 1;
     }
-    await prisma.rateLimitHit.update({ where: { key }, data: { count: rec.count + 1 } });
+    // ردیفی نیست یا پنجره منقضی شده: پنجرهٔ تازه با تعداد ۱.
+    const rec = await prisma.rateLimitHit.upsert({
+      where: { key },
+      update: { windowStart: now, count: 1 },
+      create: { key, windowStart: now, count: 1 },
+    });
+    return rec.count;
   } catch (e) {
     console.error("[rate-limit] DB record fallback to memory:", e instanceof Error ? e.message : "");
-    memRecord(key);
+    return memRecord(key);
   }
 }

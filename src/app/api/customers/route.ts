@@ -64,6 +64,9 @@ export async function GET(req: NextRequest) {
   if (type && !["BUYER", "SELLER", "TENANT", "OWNER"].includes(type)) {
     return NextResponse.json({ error: "مقدار «type» معتبر نیست" }, { status: 400 });
   }
+  if (stage && !["NEW", "INITIAL_CONTACT", "QUALIFIED", "VIEWING", "CONTRACT", "WON", "FAILED", "LOST"].includes(stage)) {
+    return NextResponse.json({ error: "مقدار «stage» معتبر نیست" }, { status: 400 });
+  }
   if (category && !["owners", "customers"].includes(category)) {
     return NextResponse.json({ error: "مقدار «category» معتبر نیست" }, { status: 400 });
   }
@@ -255,39 +258,72 @@ export async function POST(req: NextRequest) {
     );
   }
 
-  const customer = await prisma.customer.create({
-    data: {
-      name: d.name,
-      phone: d.phone,
-      type: d.type as never,
-      stage: (d.stage as never) ?? "INITIAL_CONTACT",
-      temperature: (d.temperature as never) ?? "WARM",
-      source: d.source as never,
-      tags: d.tags ?? [],
-      notes: d.notes,
-      description: d.description,
-      preferredType: d.preferredType as never,
-      preferredDealType: d.preferredDealType as never,
-      preferredArea: d.preferredArea,
-      preferredAreas: d.preferredAreas ?? [],
-      preferredBeds: d.preferredBeds,
-      preferredSizeMin: d.preferredSizeMin,
-      preferredSizeMax: d.preferredSizeMax,
-      budgetMin: d.budgetMin ? BigInt(d.budgetMin) : null,
-      budgetMax: d.budgetMax ? BigInt(d.budgetMax) : null,
-      budgetMaxMonthly: (d as { budgetMaxMonthly?: string | null }).budgetMaxMonthly
-        ? BigInt((d as { budgetMaxMonthly: string }).budgetMaxMonthly)
-        : null,
-      nextFollowUpAt: d.nextFollowUpAt ? new Date(d.nextFollowUpAt) : null,
-      needsManagerReview: d.needsManagerReview ?? false,
-      managerReviewReason: d.managerReviewReason,
-      managerReviewRequestedAt: d.needsManagerReview ? new Date() : null,
-      lostReasonCategory: d.lostReasonCategory as never,
-      lostReasonDetail: d.lostReasonDetail,
-      lostAt: d.stage === "LOST" ? new Date() : null,
-      assignedAgentId,
-    },
-  });
+  // اگر همین شماره با همین دسته قبلاً حذف شده باشد، رکورد حذف‌شده را بازیابی
+  // می‌کنیم (deletedAt را پاک می‌کنیم) و با فیلدهای درخواست به‌روز می‌کنیم؛
+  // در غیر این صورت محدودیت یکتای [phone, type] در دیتابیس با خطای 500
+  // (P2002) شکست می‌خورد. اول رکورد هم‌نوع را ترجیح می‌دهیم.
+  const deletedMatch =
+    (await prisma.customer.findFirst({
+      where: { phone: d.phone, type: d.type as never, deletedAt: { not: null } },
+    })) ??
+    (await prisma.customer.findFirst({
+      where: { phone: d.phone, deletedAt: { not: null }, ...(isOwner ? { type: "OWNER" } : { type: { not: "OWNER" } }) },
+      orderBy: { deletedAt: "desc" },
+    }));
+
+  // دادهٔ مشترک ساخت و بازیابی — برای بازیابی، فیلدهای خالی صراحتاً null
+  // می‌شوند تا مقدارهای قدیمی رکورد حذف‌شده باقی نمانند.
+  const customerData = {
+    name: d.name,
+    phone: d.phone,
+    type: d.type as never,
+    stage: (d.stage as never) ?? "INITIAL_CONTACT",
+    temperature: (d.temperature as never) ?? "WARM",
+    source: (d.source as never) ?? null,
+    tags: d.tags ?? [],
+    notes: d.notes ?? null,
+    description: d.description ?? null,
+    preferredType: d.preferredType ?? null,
+    preferredDealType: (d.preferredDealType as never) ?? null,
+    preferredArea: d.preferredArea ?? null,
+    preferredAreas: d.preferredAreas ?? [],
+    preferredBeds: d.preferredBeds ?? null,
+    preferredSizeMin: d.preferredSizeMin ?? null,
+    preferredSizeMax: d.preferredSizeMax ?? null,
+    budgetMin: d.budgetMin ? BigInt(d.budgetMin) : null,
+    budgetMax: d.budgetMax ? BigInt(d.budgetMax) : null,
+    budgetMaxMonthly: (d as { budgetMaxMonthly?: string | null }).budgetMaxMonthly
+      ? BigInt((d as { budgetMaxMonthly: string }).budgetMaxMonthly)
+      : null,
+    nextFollowUpAt: d.nextFollowUpAt ? new Date(d.nextFollowUpAt) : null,
+    needsManagerReview: d.needsManagerReview ?? false,
+    managerReviewReason: d.managerReviewReason ?? null,
+    managerReviewRequestedAt: d.needsManagerReview ? new Date() : null,
+    lostReasonCategory: (d.lostReasonCategory as never) ?? null,
+    lostReasonDetail: d.lostReasonDetail ?? null,
+    lostAt: d.stage === "LOST" ? new Date() : null,
+    assignedAgentId,
+  };
+
+  let customer: Awaited<ReturnType<typeof prisma.customer.create>>;
+  try {
+    customer = deletedMatch
+      ? await prisma.customer.update({
+          where: { id: deletedMatch.id },
+          data: { ...customerData, deletedAt: null },
+        })
+      : await prisma.customer.create({ data: customerData });
+  } catch (e) {
+    // P2002: در حالت نادر چند رکورد حذف‌شدهٔ هم‌شماره (مثلاً BUYER و SELLER)
+    // بازیابی می‌تواند با یکتای [phone, type] برخورد کند.
+    if ((e as { code?: string }).code === "P2002") {
+      return NextResponse.json(
+        { error: isOwner ? "مالک با این شماره قبلا ثبت شده است" : "مشتری با این شماره قبلا ثبت شده است" },
+        { status: 409 }
+      );
+    }
+    throw e;
+  }
 
   // Notification for manager review
   if (d.needsManagerReview) {
@@ -310,7 +346,7 @@ export async function POST(req: NextRequest) {
     try { await prisma.followUp.create({ data: { customerId: customer.id, dueAt: new Date(d.nextFollowUpAt) } }); } catch {}
   }
 
-    await createAuditLog({ actorId: session.user.id, action: "CUSTOMER_CREATED", entityType: "Customer", entityId: customer.id, newValue: { name: d.name } as never });
+    await createAuditLog({ actorId: session.user.id, action: deletedMatch ? "CUSTOMER_RESTORED" : "CUSTOMER_CREATED", entityType: "Customer", entityId: customer.id, newValue: { name: d.name } as never });
 
   // Matching — شکست تطبیق نباید بی‌صدا رد شود
   try { await runMatchingForCustomer(customer.id, session.user.id); } catch (e) {
@@ -318,7 +354,7 @@ export async function POST(req: NextRequest) {
   }
 
   // Activity
-  await prisma.activity.create({ data: { type: "STAGE_CHANGE", agentId: session.user.id, customerId: customer.id, description: `مشتری جدید: ${d.name}`, newValue: d.stage ?? "INITIAL_CONTACT" } });
+  await prisma.activity.create({ data: { type: "STAGE_CHANGE", agentId: session.user.id, customerId: customer.id, description: deletedMatch ? `مشتری بازیابی شد: ${d.name}` : `مشتری جدید: ${d.name}`, newValue: d.stage ?? "INITIAL_CONTACT" } });
 
   return NextResponse.json(serializeBigInt(customer), { status: 201 });
 }
