@@ -355,16 +355,18 @@ export default function SessionCardsPage() {
                     {c.paymentTerms && <p>شرایط پرداخت: {c.paymentTerms}</p>}
                     {c.notes && <p className="whitespace-pre-wrap">توضیح شرایط جلسه: {c.notes}</p>}
                     {c.managerNote && <p className="rounded-lg bg-[var(--paper-2)] px-3 py-2">نظر مدیر: {c.managerNote}</p>}
-                    {c.status === "PENDING" && isOwner && (
+                    {(c.status === "PENDING" || c.status === "CONFIRMED") && isOwner && (
                       <div className="space-y-2 pt-1">
                         <Textarea value={managerNote} onChange={(e) => setManagerNote(e.target.value)} placeholder="نظر مدیر (اختیاری)..." />
                         <div className="flex gap-2">
-                          <Button size="sm" onClick={() => decide(c, "CONFIRMED")} disabled={actingId === c.id}>تأیید</Button>
+                          {c.status === "PENDING" && (
+                            <Button size="sm" onClick={() => decide(c, "CONFIRMED")} disabled={actingId === c.id}>تأیید</Button>
+                          )}
                           <Button size="sm" variant="outline" onClick={() => decide(c, "CANCELLED")} disabled={actingId === c.id}>لغو</Button>
                         </div>
                       </div>
                     )}
-                    {c.status === "PENDING" && !isOwner && myId === c.advisor.id && (
+                    {(c.status === "PENDING" || c.status === "CONFIRMED") && !isOwner && myId === c.advisor.id && (
                       <div className="pt-1">
                         <Button size="sm" variant="outline" onClick={() => cancelMine(c)} disabled={actingId === c.id}>لغو کارت</Button>
                       </div>

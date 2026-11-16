@@ -24,7 +24,9 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
   const parsed = sessionCardUpdateSchema.safeParse(body);
   if (!parsed.success) return NextResponse.json({ error: parsed.error.issues[0].message }, { status: 400 });
   const d = parsed.data;
-  if (existing.status !== "PENDING") return NextResponse.json({ error: "این کارت قبلاً بررسی شده است" }, { status: 400 });
+  // گذرهای مجاز: PENDING → CONFIRMED / CANCELLED و CONFIRMED → CANCELLED؛ لغوشده نهایی است
+  if (existing.status === "CANCELLED") return NextResponse.json({ error: "این کارت لغو شده است و دیگر قابل تغییر نیست" }, { status: 400 });
+  if (existing.status === "CONFIRMED" && d.status !== "CANCELLED") return NextResponse.json({ error: "این کارت قبلاً تأیید شده است؛ فقط می‌توان آن را لغو کرد" }, { status: 400 });
   // سازنده فقط می‌تواند کارت خودش را لغو کند؛ تأیید فقط با مدیر است
   if (!isOwner && d.status !== "CANCELLED") return NextResponse.json({ error: "فقط مدیر می‌تواند کارت جلسه را تأیید کند" }, { status: 403 });
   const data: Record<string, unknown> = {};
