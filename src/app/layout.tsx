@@ -12,6 +12,13 @@ const vazir = Vazirmatn({
 export const metadata: Metadata = {
   title: "املاک ساج — سامانه مدیریت",
   description: "سامانه مدیریت بنگاه املاک ساج بوشهر",
+  icons: {
+    icon: [
+      { url: "/icon.png", type: "image/png" },
+      { url: "/favicon.ico", type: "image/x-icon" },
+    ],
+    apple: "/apple-touch-icon.png",
+  },
   // سامانهٔ داخلی و خصوصی — هیچ صفحه‌ای در موتور جستجو ایندکس نشود (نقد ۱۳)
   robots: { index: false, follow: false },
 };
