@@ -65,6 +65,21 @@ export function formatTomanCompact(
   return formatToman(value);
 }
 
+export function formatBytes(value: bigint | string | number | null | undefined): string {
+  if (value == null) return "—";
+  const num = Number(value);
+  if (!Number.isFinite(num) || num < 0) return "—";
+  if (num < 1024) return `${toFaDigits(String(num))} بایت`;
+  const units = ["کیلوبایت", "مگابایت", "گیگابایت"];
+  let v = num / 1024;
+  let i = 0;
+  while (v >= 1024 && i < units.length - 1) {
+    v /= 1024;
+    i++;
+  }
+  return `${toFaDigits(v.toFixed(1))} ${units[i]}`;
+}
+
 export { formatJalali, formatJalaliShort, formatJalaliDateTime } from "./jalali";
 
 export function formatDate(date: Date | string | null | undefined): string {

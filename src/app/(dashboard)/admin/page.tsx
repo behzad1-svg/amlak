@@ -9,7 +9,7 @@ import { Card, CardHeader, CardTitle } from "@/components/ui/Card";
 import { Button } from "@/components/ui/Button";
 import { PageError, PageSkeleton } from "@/components/ui/LoadState";
 import { apiFetch, apiJson, errorMessage } from "@/lib/api";
-import { formatDateTime } from "@/lib/utils";
+import { formatBytes, formatDateTime } from "@/lib/utils";
 import { ACTIVITY_TYPE_LABELS } from "@/lib/constants";
 
 type Breakdown = {
@@ -57,12 +57,26 @@ type ErrorLogRow = {
   createdAt: string;
 };
 
+type BackupLogRow = {
+  id: string;
+  userName: string;
+  kind: string;
+  destination: string;
+  fileName: string;
+  sizeBytes: string | null;
+  status: string;
+  note: string | null;
+  createdAt: string;
+};
+
 type DashboardData = { teamStats: TeamStat[] | null };
 
 export default function AdminPage() {
   const [data, setData] = useState<DashboardData | null>(null);
   const [errorLogs, setErrorLogs] = useState<ErrorLogRow[]>([]);
   const [errorLogsUnavailable, setErrorLogsUnavailable] = useState(false);
+  const [backupLogs, setBackupLogs] = useState<BackupLogRow[]>([]);
+  const [backupLogsUnavailable, setBackupLogsUnavailable] = useState(false);
   const [loading, setLoading] = useState(true);
   const [loadError, setLoadError] = useState<string | null>(null);
   const [msg, setMsg] = useState("");
@@ -81,13 +95,16 @@ export default function AdminPage() {
     setLoading(true);
     setLoadError(null);
     try {
-      const [dash, logsRes] = await Promise.all([
+      const [dash, logsRes, backupsRes] = await Promise.all([
         apiJson<DashboardData>("/api/dashboard"),
         apiJson<{ logs?: ErrorLogRow[]; unavailable?: boolean }>("/api/admin/error-logs?limit=50").catch(() => ({ logs: [], unavailable: true })),
+        apiJson<{ logs?: BackupLogRow[]; unavailable?: boolean }>("/api/admin/backup-log?limit=50").catch(() => ({ logs: [], unavailable: true })),
       ]);
       setData(dash);
       setErrorLogs(logsRes.logs ?? []);
       setErrorLogsUnavailable(Boolean(logsRes.unavailable));
+      setBackupLogs(backupsRes.logs ?? []);
+      setBackupLogsUnavailable(Boolean(backupsRes.unavailable));
     } catch (e) {
       setLoadError(errorMessage(e));
     } finally {
@@ -241,6 +258,35 @@ export default function AdminPage() {
               دانلود پشتیبان کامل دیتابیس
             </a>
           </div>
+        </Card>
+
+        <Card>
+          <CardHeader><CardTitle>سوابق پشتیبان</CardTitle></CardHeader>
+          {backupLogsUnavailable ? (
+            <p className="text-[13px] text-[var(--ink-3)]">جدول سوابق هنوز در دیتابیس ساخته نشده است؛ پشتیبان‌ها فعلاً فقط در لاگ سرور ثبت می‌شوند.</p>
+          ) : backupLogs.length === 0 ? (
+            <p className="text-[13px] text-[var(--ink-3)]">هنوز پشتیبانی ثبت نشده است.</p>
+          ) : (
+            <div className="max-h-80 space-y-2 overflow-y-auto">
+              {backupLogs.map((l) => (
+                <div key={l.id} className="rounded-[10px] border border-[var(--line)] px-3 py-2 text-[12.5px]">
+                  <div className="flex flex-wrap items-center gap-2">
+                    <span className={`rounded border px-1.5 py-0.5 text-[11px] font-bold ${l.status === "OK" ? "bg-emerald-50 border-emerald-200 text-emerald-700" : "bg-red-50 border-red-200 text-red-700"}`}>
+                      {l.status === "OK" ? "موفق" : "ناموفق"}
+                    </span>
+                    <span className="rounded bg-[var(--paper-2)] border border-[var(--line)] px-1.5 py-0.5 text-[11px]">
+                      {l.kind === "MANUAL" ? "دستی" : "شبانه"}
+                    </span>
+                    <span className="font-medium">{l.userName}</span>
+                    <span className="text-[var(--ink-3)]">{formatDateTime(l.createdAt)}</span>
+                    <span className="text-[var(--ink-3)]">{formatBytes(l.sizeBytes)}</span>
+                  </div>
+                  <div className="mt-1 text-[var(--ink-2)]">مقصد: {l.destination} · فایل: <span dir="ltr">{l.fileName}</span></div>
+                  {l.note && <div className="mt-1 break-words text-[var(--ink-3)]">{l.note}</div>}
+                </div>
+              ))}
+            </div>
+          )}
         </Card>
 
         <Card>

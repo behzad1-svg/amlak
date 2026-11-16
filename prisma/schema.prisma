@@ -602,3 +602,30 @@ model RateLimitHit {
 
   @@index([windowStart])
 }
+
+/// ثبت هر پشتیبان (دستی یا شبانه) — چه کسی، چه وقت، کجا.
+enum BackupKind {
+  MANUAL
+  NIGHTLY
+}
+
+enum BackupStatus {
+  OK
+  FAILED
+}
+
+model BackupLog {
+  id          String       @id @default(cuid())
+  userId      String?
+  userName    String
+  kind        BackupKind
+  destination String
+  fileName    String
+  sizeBytes   BigInt?
+  status      BackupStatus @default(OK)
+  note        String?
+  createdAt   DateTime     @default(now())
+
+  @@index([createdAt])
+  @@index([kind, createdAt])
+}
