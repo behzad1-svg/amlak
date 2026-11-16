@@ -2,7 +2,8 @@ import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { getSessionFromCookies } from "@/lib/auth";
 import { serializeBigInt } from "@/lib/utils";
-import { dealSplittable, resolveSplit } from "@/lib/shares";
+import { dealSplittable, dealTaxBase, resolveSplit } from "@/lib/shares";
+import { getTaxRatePct } from "@/lib/settings";
 
 /**
  * خلاصه حسابداری.
@@ -13,12 +14,15 @@ import { dealSplittable, resolveSplit } from "@/lib/shares";
  * از روی سهم‌بندی حساب می‌شوند (معامله بدون سهم واقعی = ۱۰۰٪ برای مشاور معامله).
  * مبنای سهم‌بندی کمیسیون + شیرینی فروشنده + شیرینی خریدار است؛ «مجموع شیرینی»
  * فقط برای مدیر حساب می‌شود (مشاور سهم خودش از شیرینی را داخل سهمش می‌بیند).
+ * مالیات ارزش افزوده فقط روی کمیسیون حساب می‌شود (شیرینی مالیات ندارد) و هرگز
+ * وارد تقسیم نمی‌شود؛ «مجموع مالیات» فقط برای مدیر است و پول جداگانه اداره مالیات است.
  */
 export async function GET() {
   const session = await getSessionFromCookies();
   if (!session) return NextResponse.json({ error: "وارد نشده‌اید" }, { status: 401 });
   const isOwner = session.user.role === "OWNER";
   const agentFilter = isOwner ? {} : { agentId: session.user.id };
+  const taxRatePct = await getTaxRatePct();
 
   // «معامله قطعی» روی همه معامله‌های غیرلغوشده شمرده می‌شود، نه فقط آن‌هایی که کمیسیون دارند؛
   // جمع‌های کمیسیون فقط از معامله‌های دارای کمیسیون می‌آیند؛ «مجموع شیرینی» جمع هر دو شیرینی است.
@@ -28,6 +32,7 @@ export async function GET() {
       commissionToman: true,
       sellerShiriniToman: true,
       buyerShiriniToman: true,
+      discountToman: true,
       commissionPaid: true,
       status: true,
       agentId: true,
@@ -41,6 +46,7 @@ export async function GET() {
   let commissionPaid = BigInt(0);
   let commissionUnpaid = BigInt(0);
   let shiriniTotal = BigInt(0);
+  let taxTotal = BigInt(0);
   let unpaidCount = 0;
   let dealsCompleted = 0;
   let dealsWithCommission = 0;
@@ -53,8 +59,12 @@ export async function GET() {
     if (isOwner) {
       shiriniTotal += (d.sellerShiriniToman ?? BigInt(0)) + (d.buyerShiriniToman ?? BigInt(0));
     }
-    // معامله بدون درآمد قابل‌تقسیم (کمیسیون و هر دو شیرینی خالی/صفر) سهم‌بندی ندارد
-    if (dealSplittable(d) <= BigInt(0)) continue;
+    // مالیات فقط روی کمیسیون است (شیرینی مالیات ندارد)؛ حتی معامله‌ای که کامل
+    // تخفیف خورده و مبنای خالصش صفر است، روی کمیسیون ناخالص مالیات دارد
+    if (isOwner) taxTotal += BigInt(Math.round((Number(dealTaxBase(d)) * taxRatePct) / 100));
+    // معامله بدون درآمد قابل‌تقسیم (کمیسیون + شیرینی‌ها منهای تخفیف) سهم‌بندی ندارد
+    const base = dealSplittable(d);
+    if (base <= BigInt(0)) continue;
     const split = resolveSplit(d);
     if (isOwner) {
       const amount = d.commissionToman ?? BigInt(0);
@@ -110,6 +120,9 @@ export async function GET() {
       commissionUnpaid,
       // فقط مدیر: مجموع شیرینی فروشنده و خریدار روی معامله‌های لغونشده
       shiriniTotal: isOwner ? shiriniTotal : null,
+      // نرخ مالیات ارزش افزوده (٪) و مجموع مالیات روی معامله‌های لغونشده دارای درآمد؛ فقط مدیر
+      taxRatePct,
+      taxTotal: isOwner ? taxTotal : null,
       unpaidCount,
       dealsCompleted,
       dealsWithCommission,

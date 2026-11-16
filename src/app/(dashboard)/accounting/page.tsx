@@ -10,6 +10,7 @@ import { useRole } from "@/hooks/useRole";
 import { apiFetch, apiJson, errorMessage } from "@/lib/api";
 import { formatDate, formatToman, toEnDigits, toFaDigits } from "@/lib/utils";
 import { isValidJalaliDate, jalaliToGregorian } from "@/lib/jalali";
+import { DEFAULT_TAX_RATE_PCT } from "@/lib/constants";
 
 type Summary = {
   isOwner: boolean;
@@ -21,6 +22,10 @@ type Summary = {
   commissionUnpaid: string;
   /** فقط مدیر؛ برای مشاور null است */
   shiriniTotal: string | null;
+  /** نرخ مالیات ارزش افزوده (٪) */
+  taxRatePct: number;
+  /** فقط مدیر؛ برای مشاور null است */
+  taxTotal: string | null;
   unpaidCount: number;
   dealsCompleted: number;
   dealsWithCommission: number;
@@ -49,6 +54,7 @@ type CommissionDeal = {
   commissionPercent: number | null;
   sellerShiriniToman: string | null;
   buyerShiriniToman: string | null;
+  discountToman: string | null;
   commissionPaid: boolean;
   commissionPaidAt: string | null;
   dealSalePriceToman: string | null;
@@ -188,6 +194,7 @@ export default function AccountingPage() {
   const [editAmount, setEditAmount] = useState("");
   const [editSellerShirini, setEditSellerShirini] = useState("");
   const [editBuyerShirini, setEditBuyerShirini] = useState("");
+  const [editDiscount, setEditDiscount] = useState("");
   const [editSaving, setEditSaving] = useState(false);
   const [editError, setEditError] = useState("");
 
@@ -328,6 +335,7 @@ export default function AccountingPage() {
     setEditAmount(amountSeed);
     setEditSellerShirini(deal.sellerShiriniToman ?? "");
     setEditBuyerShirini(deal.buyerShiriniToman ?? "");
+    setEditDiscount(deal.discountToman ?? "");
     setEditError("");
     // سهم‌بندی: اگر سهم واقعی دارد همان را بیاور؛ وگرنه پیش‌فرض دفتر ۵۰٪ + مشاور معامله ۵۰٪ —
     // چه کمیسیون داشته باشد چه هنوز «تعیین نشده» باشد؛ وگرنه با محاسبه خودکار مبلغ از روی
@@ -451,6 +459,12 @@ export default function AccountingPage() {
     }
   }
 
+  // تخفیف مثل شیرینی عدد تمیز می‌شود؛ از مبنای تقسیم کم می‌شود ولی از مالیات کم نمی‌شود
+  function onEditDiscount(v: string) {
+    const clean = toEnDigits(v).replace(/[^0-9]/g, "");
+    setEditDiscount(clean);
+  }
+
   // محاسبه خودکار مبلغ کمیسیون از درصد × قیمت فروش (فقط فروش؛ اجاره دستی است).
   // فقط موقع تایپ قیمت یا درصد حساب می‌شود، پس مبلغ دستیِ ذخیره‌شده با باز شدن فرم عوض نمی‌شود.
   function calcCommissionAmount(price: string, percent: string): string | null {
@@ -496,9 +510,16 @@ export default function AccountingPage() {
     // سهم‌بندی: هر درصد دستی قابل تغییر است؛ فقط مجموع باید دقیقاً ۱۰۰٪ شود
     const hasRealShares = editingDeal.shares.some((s) => !s.virtual);
     const sharesLocked = editingDeal.shares.some((s) => !s.virtual && s.settled);
-    // درآمد قابل‌تقسیم = کمیسیون + هر دو شیرینی؛ خالی یعنی صفر
+    // درآمد قابل‌تقسیم (خالص) = کمیسیون + هر دو شیرینی منهای تخفیف؛ خالی یعنی صفر
     const editHasIncome = editAmount !== "" || editSellerShirini !== "" || editBuyerShirini !== "";
     const editTotal = (Number(editAmount) || 0) + (Number(editSellerShirini) || 0) + (Number(editBuyerShirini) || 0);
+    const editDiscountNum = Number(editDiscount) || 0;
+    // تخفیف نمی‌تواند بیشتر از جمع ناخالص (کمیسیون + شیرینی‌ها) باشد — خالص منفی نشود
+    if (editDiscountNum > editTotal) {
+      setEditError("تخفیف نمی‌تواند بیشتر از جمع کمیسیون و شیرینی باشد");
+      return;
+    }
+    const editNet = editTotal - editDiscountNum;
     let shareBody: Record<string, unknown> = {};
     if (!editHasIncome && hasRealShares) {
       // خالی کردن کمیسیون و شیرینی، سهم‌بندی را هم پاک می‌کند (مگر سهمی تسویه شده باشد)
@@ -508,8 +529,8 @@ export default function AccountingPage() {
       }
       shareBody = { officePct: 100, shares: [] };
     } else if (editHasIncome && !sharesLocked) {
-      if (editTotal <= 0) {
-        setEditError("جمع کمیسیون و شیرینی باید بیشتر از صفر باشد");
+      if (editNet <= 0) {
+        setEditError("جمع خالص (کمیسیون و شیرینی منهای تخفیف) باید بیشتر از صفر باشد");
         return;
       }
       const office = Number(toEnDigits(editOfficePct).replace(/[^0-9.]/g, ""));
@@ -567,6 +588,8 @@ export default function AccountingPage() {
         commissionToman: editAmount === "" ? null : toEnDigits(editAmount).replace(/[^0-9]/g, ""),
         sellerShiriniToman: editSellerShirini === "" ? null : toEnDigits(editSellerShirini).replace(/[^0-9]/g, ""),
         buyerShiriniToman: editBuyerShirini === "" ? null : toEnDigits(editBuyerShirini).replace(/[^0-9]/g, ""),
+        // بدون درآمد، تخفیف هم معنا ندارد و پاک می‌شود (مثل سهم‌بندی)
+        discountToman: !editHasIncome ? null : editDiscount === "" ? null : toEnDigits(editDiscount).replace(/[^0-9]/g, ""),
         ...shareBody,
       };
       if (isSale) body.dealSalePriceToman = editPrice === "" ? null : toEnDigits(editPrice).replace(/[^0-9]/g, "");
@@ -630,8 +653,19 @@ export default function AccountingPage() {
     }
   }
 
-  // مبنای پیش‌نمایش سهم‌بندی در فرم ویرایش: کمیسیون + هر دو شیرینی (خالی یعنی صفر)
-  const editSplitBase = (Number(editAmount) || 0) + (Number(editSellerShirini) || 0) + (Number(editBuyerShirini) || 0);
+  // مبنای پیش‌نمایش سهم‌بندی در فرم ویرایش: کمیسیون + هر دو شیرینی منهای تخفیف (خالی یعنی صفر)
+  const editSplitBase = (Number(editAmount) || 0) + (Number(editSellerShirini) || 0) + (Number(editBuyerShirini) || 0) - (Number(editDiscount) || 0);
+
+  // نرخ مالیات ارزش افزوده از خلاصه می‌آید؛ تا پیش از بارگذاری، پیش‌فرض
+  const taxRate = summary?.taxRatePct ?? DEFAULT_TAX_RATE_PCT;
+
+  /** مالیات ارزش افزوده یک معامله = نرخ × کمیسیون (ناخالص) — شیرینی و تخفیف در آن نیستند. */
+  const taxOf = (d: Pick<CommissionDeal, "commissionToman">): number => {
+    return Math.round((Number(bigNum(d.commissionToman)) * taxRate) / 100);
+  };
+
+  /** مالیات فرم ویرایش روی مبلغ کمیسیون فعلی حساب می‌شود (نه روی مبنای خالص). */
+  const editTax = Math.round(((Number(editAmount) || 0) * taxRate) / 100);
 
   if (roleLoading) return <PageSkeleton rows={4} />;
   if (loading) return <PageSkeleton rows={4} />;
@@ -684,6 +718,12 @@ export default function AccountingPage() {
               <div className="rounded-[12px] border border-[var(--line)] bg-white px-3 py-2">
                 <div className="text-[11px] text-[var(--ink-3)]">مجموع شیرینی</div>
                 <div className="text-[20px] font-extrabold">{formatToman(summary.shiriniTotal)}</div>
+              </div>
+            )}
+            {isOwner && summary.taxTotal != null && (
+              <div className="rounded-[12px] border border-[var(--line)] bg-white px-3 py-2">
+                <div className="text-[11px] text-[var(--ink-3)]">مالیات ارزش افزوده</div>
+                <div className="text-[20px] font-extrabold">{formatToman(summary.taxTotal)}</div>
               </div>
             )}
             <div className="rounded-[12px] border border-[var(--line)] bg-white px-3 py-2">
@@ -740,7 +780,7 @@ export default function AccountingPage() {
               </div>
             )}
             {tab === "followups" && unpaid.length === 0 && (
-              <p className="text-sm text-[var(--ink-3)]">کمیسیون پرداخت‌نشده‌ای نیست؛ همه تسویه شده‌اند.</p>
+              <p className="text-sm text-[var(--ink-3)]">کمیسیون پرداخت‌نشده‌ای نیست؛ همه دریافت شده‌اند.</p>
             )}
             {(tab === "commissions" ? commissions : unpaid).length > 0 && (
               <div className="overflow-x-auto">
@@ -793,6 +833,12 @@ export default function AccountingPage() {
                               )}
                               {shiriniParts(d).length > 0 && (
                                 <span className="block text-[12px] font-normal text-[var(--ink-3)]">{shiriniParts(d).join(" · ")}</span>
+                              )}
+                              {bigNum(d.discountToman) > BigInt(0) && (
+                                <span className="block text-[12px] font-normal text-[var(--ink-3)]">تخفیف {formatToman(d.discountToman)}</span>
+                              )}
+                              {taxOf(d) > 0 && (
+                                <span className="block text-[12px] font-normal text-[var(--ink-3)]">مالیات ({toFaDigits(String(taxRate))}٪) {formatToman(taxOf(d))}</span>
                               )}
                               {!isOwner &&
                                 d.shares.map((s) => (
@@ -1042,7 +1088,7 @@ export default function AccountingPage() {
               </div>
               <p className="mt-3 text-[12px] text-[var(--ink-3)]">
                 سهم دفتر: {formatToman(agents.totals.officeTotal)} · تعاون (بیرونی): {formatToman(agents.totals.externalTotal)} · جمع کل درآمد (کمیسیون +{" "}
-                شیرینی): {formatToman(agents.totals.commissionGrandTotal)}
+                شیرینی − تخفیف): {formatToman(agents.totals.commissionGrandTotal)}
               </p>
               </>
             ) : null}
@@ -1120,6 +1166,13 @@ export default function AccountingPage() {
                   placeholder="مثلا ۱۰۰۰۰۰۰۰"
                   hint="اختیاری — خالی یعنی صفر"
                 />
+                <MoneyInput
+                  label="تخفیف (تومان)"
+                  value={editDiscount}
+                  onChange={onEditDiscount}
+                  placeholder="مثلا ۲۰۰۰۰۰۰"
+                  hint="اختیاری — خالی یعنی صفر؛ از مبنای تقسیم کم می‌شود ولی از مالیات کم نمی‌شود"
+                />
                 <p className="text-[11px] text-[var(--ink-3)]">
                   {editingDeal.property.dealType === "SALE"
                     ? "مبلغ از روی درصد × قیمت فروش حساب می‌شود؛ می‌توانید دستی هم عوضش کنید."
@@ -1128,6 +1181,13 @@ export default function AccountingPage() {
                 <p className="text-[11px] text-[var(--ink-3)]">
                   شیرینی با کمیسیون جمع می‌شود و با همان سهم‌بندی تقسیم می‌شود؛ درصد کمیسیون فقط مبلغ کمیسیون را از روی قیمت حساب می‌کند.
                 </p>
+                {(editSplitBase > 0 || editTax > 0) && (
+                  <div className="rounded-[12px] border border-[var(--line)] bg-[var(--paper-2)] p-3 text-[13px] space-y-1">
+                    <div>مالیات ارزش افزوده ({toFaDigits(String(taxRate))}٪): {formatToman(editTax)}</div>
+                    <div className="font-bold">جمع دریافتی از مشتری: {formatToman(editSplitBase + editTax)}</div>
+                    <div className="text-[11px] text-[var(--ink-3)]">مالیات فقط روی کمیسیون حساب می‌شود و جزو تقسیم درآمد نیست.</div>
+                  </div>
+                )}
                 {/* سهم‌بندی — فقط وقتی کمیسیون یا شیرینی تعیین شده باشد؛ هر درصد دستی قابل تغییر است */}
                 {editSplitBase <= 0 ? (
                   editingDeal.shares.some((s) => !s.virtual) ? (

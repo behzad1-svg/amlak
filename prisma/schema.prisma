@@ -399,6 +399,7 @@ model Deal {
   commissionPercent Float?
   sellerShiriniToman BigInt?
   buyerShiriniToman  BigInt?
+  discountToman      BigInt?
   commissionPaid    Boolean  @default(false)
   commissionPaidAt  DateTime?
   officePct         Decimal  @default(50) @db.Decimal(5, 2)

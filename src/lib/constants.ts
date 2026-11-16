@@ -25,6 +25,9 @@ export const DEFAULT_BUSHEHR_REGIONS = [
 // برای سازگاری با کدهای موجود
 export const BUSHEHR_REGIONS = DEFAULT_BUSHEHR_REGIONS;
 
+/** نرخ پیش‌فرض مالیات ارزش افزوده (٪) — از تنظیمات قابل تغییر است (DB: AppSetting key=taxRate) */
+export const DEFAULT_TAX_RATE_PCT = 10;
+
 // نوع ملک — قابل توسعه از تنظیمات
 export const DEFAULT_PROPERTY_TYPES: { value: string; label: string }[] = [
   { value: "APARTMENT", label: "آپارتمان" },

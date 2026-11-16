@@ -75,6 +75,7 @@ type DealLike = {
   commissionToman: bigint | null;
   sellerShiriniToman?: bigint | null;
   buyerShiriniToman?: bigint | null;
+  discountToman?: bigint | null;
   commissionPaid: boolean;
   officePct: unknown;
   agentId: string;
@@ -82,17 +83,24 @@ type DealLike = {
   shares: DealShareLike[];
 };
 
-/** مبنای تقسیم: کمیسیون + شیرینی فروشنده + شیرینی خریدار (هر کدام خالی یعنی صفر). */
+/** مبنای تقسیم (خالص): کمیسیون + شیرینی فروشنده + شیرینی خریدار منهای تخفیف (هر کدام خالی یعنی صفر). */
 export function dealSplittable(deal: {
   commissionToman: bigint | null;
   sellerShiriniToman?: bigint | null;
   buyerShiriniToman?: bigint | null;
+  discountToman?: bigint | null;
 }): bigint {
   return (
     (deal.commissionToman ?? BigInt(0)) +
     (deal.sellerShiriniToman ?? BigInt(0)) +
-    (deal.buyerShiriniToman ?? BigInt(0))
+    (deal.buyerShiriniToman ?? BigInt(0)) -
+    (deal.discountToman ?? BigInt(0))
   );
+}
+
+/** مبنای مالیات: فقط کمیسیون (ناخالص، بدون تخفیف) — شیرینی مالیات ندارد. */
+export function dealTaxBase(deal: { commissionToman: bigint | null }): bigint {
+  return deal.commissionToman ?? BigInt(0);
 }
 
 /** سهم‌بندی حل‌شدهٔ یک معامله — واقعی اگر سهم دارد، وگرنه مجازی ۱۰۰٪ برای مشاور معامله. */

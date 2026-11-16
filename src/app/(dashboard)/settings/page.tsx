@@ -6,7 +6,7 @@ import { useRouter } from "next/navigation";
 import { Header } from "@/components/layout/Header";
 import { Card } from "@/components/ui/Card";
 import { Button } from "@/components/ui/Button";
-import { Input, Label, PasswordInput, Select } from "@/components/ui/Input";
+import { Input, Label, NumberInput, PasswordInput, Select } from "@/components/ui/Input";
 import { PageError, PageSkeleton } from "@/components/ui/LoadState";
 import { useRole } from "@/hooks/useRole";
 import { apiFetch, apiJson, errorMessage } from "@/lib/api";
@@ -17,6 +17,7 @@ export default function SettingsPage() {
   const [regions, setRegions] = useState<string[]>([]);
   const [types, setTypes] = useState<{ value: string; label: string }[]>([]);
   const [tags, setTags] = useState<string[]>([]);
+  const [taxRate, setTaxRate] = useState("");
   const [newTag, setNewTag] = useState("");
   const [newRegion, setNewRegion] = useState("");
   const [newTypeValue, setNewTypeValue] = useState("");
@@ -41,10 +42,11 @@ export default function SettingsPage() {
     setLoading(true);
     setLoadError(null);
     try {
-      const d = await apiJson<{ regions?: string[]; propertyTypes?: { value: string; label: string }[]; customerTags?: string[] }>("/api/settings");
+      const d = await apiJson<{ regions?: string[]; propertyTypes?: { value: string; label: string }[]; customerTags?: string[]; taxRate?: number }>("/api/settings");
       if (d.regions) setRegions(d.regions);
       if (d.propertyTypes) setTypes(d.propertyTypes);
       if (d.customerTags) setTags(d.customerTags);
+      if (d.taxRate != null) setTaxRate(String(d.taxRate));
     } catch (e) {
       setLoadError(errorMessage(e));
     } finally {
@@ -57,7 +59,7 @@ export default function SettingsPage() {
     load();
   }, []);
 
-  async function save(nextRegions?: string[], nextTypes?: typeof types, nextTags?: string[]) {
+  async function save(nextRegions?: string[], nextTypes?: typeof types, nextTags?: string[], nextTaxRate?: string) {
     setSaving(true);
     setMsg("");
     setErr("");
@@ -65,7 +67,7 @@ export default function SettingsPage() {
       await apiFetch("/api/settings", {
         method: "PATCH",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ regions: nextRegions ?? regions, propertyTypes: nextTypes ?? types, customerTags: nextTags ?? tags }),
+        body: JSON.stringify({ regions: nextRegions ?? regions, propertyTypes: nextTypes ?? types, customerTags: nextTags ?? tags, ...(Number.isFinite(Number(nextTaxRate ?? taxRate)) && Number(nextTaxRate ?? taxRate) >= 0 && Number(nextTaxRate ?? taxRate) <= 100 ? { taxRate: Number(nextTaxRate ?? taxRate) } : {}) }),
       });
       flash("ذخیره شد");
     } catch (e) {
@@ -105,7 +107,7 @@ export default function SettingsPage() {
     <div>
       <Header
         title="تنظیمات"
-        subtitle={role === "OWNER" ? "مناطق، انواع ملک، برچسب‌های مشتری و امنیت حساب" : "امنیت حساب"}
+        subtitle={role === "OWNER" ? "مناطق، انواع ملک، برچسب‌های مشتری، مالیات ارزش افزوده و امنیت حساب" : "امنیت حساب"}
       />
       <div className="p-4 sm:p-6 max-w-2xl space-y-6">
         {msg && <div className="rounded-lg bg-emerald-50 px-3 py-2 text-sm text-emerald-700">{msg}</div>}
@@ -162,6 +164,18 @@ export default function SettingsPage() {
                 <Input value={newTypeLabel} onChange={(e) => setNewTypeLabel(e.target.value)} placeholder="نام فارسی (مثلا کلنگی)" className="flex-1" />
                 <Input value={newTypeValue} onChange={(e) => setNewTypeValue(e.target.value.toUpperCase().replace(/[^A-Z_]/g, ""))} placeholder="CODE (مثلا KOLANGI)" dir="ltr" className="flex-1 text-left" />
                 <Button onClick={() => { if (!newTypeValue.trim() || !newTypeLabel.trim()) return; const n = [...types, { value: newTypeValue.trim(), label: newTypeLabel.trim() }]; setTypes(n); setNewTypeValue(""); setNewTypeLabel(""); save(undefined, n); }} disabled={saving} className="w-full sm:w-auto">افزودن</Button>
+              </div>
+            </Card>
+
+            <Card>
+              <h3 className="font-semibold mb-3">مالیات ارزش افزوده</h3>
+              <p className="text-[12px] text-[var(--ink-3)] mb-3">نرخ مالیات روی جمع کمیسیون و شیرینی حساب می‌شود؛ مالیات جزو تقسیم درآمد نیست و به مشاور پرداخت نمی‌شود.</p>
+              <div className="flex flex-col gap-2 sm:flex-row">
+                <div className="flex-1">
+                  <Label htmlFor="f-taxRate">مالیات ارزش افزوده (٪)</Label>
+                  <NumberInput id="f-taxRate" className="mt-1" value={taxRate} onChange={(e) => setTaxRate(e.target.value)} placeholder="۱۰" allowDecimal />
+                </div>
+                <Button onClick={() => { const n = Number(taxRate); if (!Number.isFinite(n) || n < 0 || n > 100) { flash("", "نرخ مالیات باید عددی بین ۰ تا ۱۰۰ باشد"); return; } save(undefined, undefined, undefined, String(n)); }} disabled={saving} className="w-full sm:w-auto self-end">ذخیره</Button>
               </div>
             </Card>
 

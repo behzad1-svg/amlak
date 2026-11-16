@@ -62,6 +62,7 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
     Boolean(d.commissionToman) ||
     Boolean(d.sellerShiriniToman) ||
     Boolean(d.buyerShiriniToman) ||
+    Boolean(d.discountToman) ||
     (d.commissionPercent !== undefined && d.commissionPercent !== null);
   if (session.user.role !== "OWNER" && wantsCommission) {
     return NextResponse.json({ error: "کمیسیون را فقط مدیر تعیین می‌کند" }, { status: 403 });
@@ -79,13 +80,15 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
     if (d.officePct === undefined || d.shares === undefined) {
       return NextResponse.json({ error: "سهم دفتر و سهم‌ها را با هم بفرستید" }, { status: 400 });
     }
-    // درآمد قابل‌تقسیم بعد از این ویرایش: مقدار تازه اگر فرستاده شده، وگرنه مقدار فعلی
+    // درآمد قابل‌تقسیم (خالص) بعد از این ویرایش: مقدار تازه اگر فرستاده شده، وگرنه مقدار فعلی؛
+    // خالص = کمیسیون + شیرینی‌ها منهای تخفیف
     const eff = (next: string | null | undefined, prev: bigint | null) =>
       next === undefined ? prev : next === null || next === "" ? null : BigInt(next);
     const effectiveIncome =
       (eff(d.commissionToman, existing.commissionToman) ?? BigInt(0)) +
       (eff(d.sellerShiriniToman, existing.sellerShiriniToman) ?? BigInt(0)) +
-      (eff(d.buyerShiriniToman, existing.buyerShiriniToman) ?? BigInt(0));
+      (eff(d.buyerShiriniToman, existing.buyerShiriniToman) ?? BigInt(0)) -
+      (eff(d.discountToman, existing.discountToman) ?? BigInt(0));
     // خالی کردن درآمد یعنی پاک شدن سهم‌بندی (سهم دفتر ۱۰۰٪ و بدون سهم)؛
     // در این حالت چک «درآمد تعیین شده» اعمال نمی‌شود
     if (effectiveIncome <= BigInt(0)) {
@@ -132,11 +135,24 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
   const effAfter = (next: string | null | undefined, prev: bigint | null) =>
     next === undefined ? prev : next === null || next === "" ? null : BigInt(next);
   const incomeTouched =
-    d.commissionToman !== undefined || d.sellerShiriniToman !== undefined || d.buyerShiriniToman !== undefined;
+    d.commissionToman !== undefined || d.sellerShiriniToman !== undefined || d.buyerShiriniToman !== undefined || d.discountToman !== undefined;
   const incomeAfter =
     (effAfter(d.commissionToman, existing.commissionToman) ?? BigInt(0)) +
     (effAfter(d.sellerShiriniToman, existing.sellerShiriniToman) ?? BigInt(0)) +
+    (effAfter(d.buyerShiriniToman, existing.buyerShiriniToman) ?? BigInt(0)) -
+    (effAfter(d.discountToman, existing.discountToman) ?? BigInt(0));
+  // تخفیف نمی‌تواند بیشتر از جمع ناخالص (کمیسیون + شیرینی‌ها) باشد — خالص منفی نشود
+  const grossAfter =
+    (effAfter(d.commissionToman, existing.commissionToman) ?? BigInt(0)) +
+    (effAfter(d.sellerShiriniToman, existing.sellerShiriniToman) ?? BigInt(0)) +
     (effAfter(d.buyerShiriniToman, existing.buyerShiriniToman) ?? BigInt(0));
+  const discountAfter = effAfter(d.discountToman, existing.discountToman) ?? BigInt(0);
+  if (discountAfter > grossAfter) {
+    return NextResponse.json(
+      { error: "تخفیف نمی‌تواند بیشتر از جمع کمیسیون و شیرینی باشد" },
+      { status: 400 }
+    );
+  }
   const clearingIncome = incomeTouched && incomeAfter <= BigInt(0);
   if (clearingIncome && existing.shares.some((s) => s.settled)) {
     return NextResponse.json(
@@ -154,6 +170,7 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
     d.commissionPercent !== undefined ||
     d.sellerShiriniToman !== undefined ||
     d.buyerShiriniToman !== undefined ||
+    d.discountToman !== undefined ||
     d.officePct !== undefined ||
     d.shares !== undefined;
   // سوراخ قفل تسویه: تسویه یک سهم به‌تنهایی commissionPaid را true نمی‌کند، پس قفل
@@ -182,7 +199,8 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
       d.dealDepositToman === undefined &&
       d.dealMonthlyRentToman === undefined &&
       d.sellerShiriniToman === undefined &&
-      d.buyerShiriniToman === undefined;
+      d.buyerShiriniToman === undefined &&
+      d.discountToman === undefined;
     if (!onlyCancel) {
       return NextResponse.json(
         { error: "معامله تکمیل‌شده فقط توسط مدیر قابل ویرایش است؛ مشاور فقط می‌تواند آن را لغو کند" },
@@ -231,6 +249,8 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
       data.sellerShiriniToman = d.sellerShiriniToman ? BigInt(d.sellerShiriniToman) : null;
     if (d.buyerShiriniToman !== undefined)
       data.buyerShiriniToman = d.buyerShiriniToman ? BigInt(d.buyerShiriniToman) : null;
+    if (d.discountToman !== undefined)
+      data.discountToman = d.discountToman ? BigInt(d.discountToman) : null;
     if (d.officePct !== undefined) data.officePct = d.officePct;
   }
   if (d.dealSalePriceToman !== undefined)

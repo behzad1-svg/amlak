@@ -3,6 +3,7 @@ import { cookies } from "next/headers";
 import { prisma } from "@/lib/prisma";
 import { validateSession } from "@/lib/auth";
 import { DEFAULT_BUSHEHR_REGIONS, DEFAULT_PROPERTY_TYPES, DEFAULT_CUSTOMER_TAGS } from "@/lib/constants";
+import { getTaxRatePct } from "@/lib/settings";
 import { serializeBigInt } from "@/lib/utils";
 
 async function getSession() {
@@ -20,7 +21,8 @@ export async function GET() {
   const regions = regionsRow ? JSON.parse(regionsRow.value) : DEFAULT_BUSHEHR_REGIONS;
   const propertyTypes = typesRow ? JSON.parse(typesRow.value) : DEFAULT_PROPERTY_TYPES;
   const customerTags = tagsRow ? JSON.parse(tagsRow.value) : DEFAULT_CUSTOMER_TAGS;
-  return NextResponse.json(serializeBigInt({ regions, propertyTypes, customerTags }));
+  const taxRate = await getTaxRatePct();
+  return NextResponse.json(serializeBigInt({ regions, propertyTypes, customerTags, taxRate }));
 }
 
 export async function PATCH(req: NextRequest) {
@@ -35,6 +37,11 @@ export async function PATCH(req: NextRequest) {
   if (body.propertyTypes) {
     if (!Array.isArray(body.propertyTypes)) return NextResponse.json({ error: "propertyTypes باید آرایه باشد" }, { status: 400 });
     await prisma.appSetting.upsert({ where: { key: "propertyTypes" }, update: { value: JSON.stringify(body.propertyTypes) }, create: { key: "propertyTypes", value: JSON.stringify(body.propertyTypes) } });
+  }
+  if (body.taxRate !== undefined) {
+    const n = Number(body.taxRate);
+    if (!Number.isFinite(n) || n < 0 || n > 100) return NextResponse.json({ error: "taxRate باید عددی بین ۰ تا ۱۰۰ باشد" }, { status: 400 });
+    await prisma.appSetting.upsert({ where: { key: "taxRate" }, update: { value: JSON.stringify(n) }, create: { key: "taxRate", value: JSON.stringify(n) } });
   }
   if (body.customerTags !== undefined) {
     if (!Array.isArray(body.customerTags) || body.customerTags.length > 20 || body.customerTags.some((t: unknown) => typeof t !== "string" || !t.trim() || t.length > 30)) {

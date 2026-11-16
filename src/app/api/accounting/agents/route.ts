@@ -32,6 +32,7 @@ export async function GET() {
         commissionToman: true,
         sellerShiriniToman: true,
         buyerShiriniToman: true,
+        discountToman: true,
         commissionPaid: true,
         dealSalePriceToman: true,
         officePct: true,
@@ -44,7 +45,7 @@ export async function GET() {
   // سهم‌بندی حل‌شدهٔ هر معامله را یک بار حساب کن — برای جمع دفتر/تعاون و جمع هر مشاور
   const splits = deals.map((d) => resolveSplit(d));
 
-  // سهم دفتر و تعاون روی همه معامله‌های دارای درآمد؛ جمع کل مبنای تقسیم (کمیسیون + هر دو شیرینی) می‌ماند
+  // سهم دفتر و تعاون روی همه معامله‌های دارای درآمد؛ جمع کل مبنای تقسیم (کمیسیون + هر دو شیرینی منهای تخفیف) می‌ماند
   let officeTotal = BigInt(0);
   let externalTotal = BigInt(0);
   let commissionGrandTotal = BigInt(0);

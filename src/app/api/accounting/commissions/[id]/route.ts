@@ -11,7 +11,7 @@ import { dealSplittable, resolveSplit } from "@/lib/shares";
  * PATCH /api/accounting/commissions/[id] { commissionPaid: boolean }
  * دکمه «دریافت شد» یعنی کمیسیون از مشتری دریافت شد: فقط پرچم commissionPaid
  * عوض می‌شود و به سهم‌ها دست نمی‌زند؛ با دریافت، مبلغ مبنای تقسیم (کمیسیون +
- * هر دو شیرینی) به‌عنوان ورودی خودکار در صندوق دفتر ثبت می‌شود و با برگرداندن
+ * هر دو شیرینی منهای تخفیف) به‌عنوان ورودی خودکار در صندوق دفتر ثبت می‌شود و با برگرداندن
  * دریافت، آن ورودی حذف می‌شود. برگرداندن دریافت فقط وقتی مجاز است که هیچ
  * سهمی تسویه نشده باشد.
  */
@@ -56,7 +56,7 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
             type: "IN",
             amount: dealIncome,
             title: `دریافت کمیسیون معامله ${deal.property.code ?? deal.property.title}`,
-            note: `کمیسیون ${formatToman(deal.commissionToman ?? BigInt(0))} · شیرینی فروشنده ${formatToman(deal.sellerShiriniToman ?? BigInt(0))} · شیرینی خریدار ${formatToman(deal.buyerShiriniToman ?? BigInt(0))}`,
+            note: `کمیسیون ${formatToman(deal.commissionToman ?? BigInt(0))} · شیرینی فروشنده ${formatToman(deal.sellerShiriniToman ?? BigInt(0))} · شیرینی خریدار ${formatToman(deal.buyerShiriniToman ?? BigInt(0))}${(deal.discountToman ?? BigInt(0)) > BigInt(0) ? ` · تخفیف ${formatToman(deal.discountToman)}` : ""}`,
             occurredAt: now,
             dealId: id,
             createdById: session.user.id,
