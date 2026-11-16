@@ -14,10 +14,11 @@ export default async function DashboardLayout({ children }: { children: React.Re
   const session = await validateSession(token);
   if (!session) redirect("/login");
   const role = session.user.role;
+  const userName = session.user.name;
   const userId = session.user.id;
   const unreadCount = await prisma.notification.count({ where: { userId, read: false } });
   return (
-    <DashboardShell role={role} unreadCount={unreadCount}>
+    <DashboardShell role={role} userName={userName} unreadCount={unreadCount}>
       {children}
     </DashboardShell>
   );

@@ -9,10 +9,12 @@ export const RoleContext = createContext<string | null>(null);
 
 export function DashboardShell({
   role,
+  userName,
   unreadCount,
   children,
 }: {
   role?: string;
+  userName?: string;
   unreadCount?: number;
   children: React.ReactNode;
 }) {
@@ -58,7 +60,7 @@ export function DashboardShell({
       {/* Desktop: inline sidebar — full or mini */}
       <div className="hidden lg:flex lg:shrink-0 lg:flex-col overflow-hidden border-l border-[var(--line)] bg-white transition-all duration-200" style={{ width: isDesktop ? (mode === "mini" ? 64 : mode === "full" ? 272 : 0) : 0 }}>
         <div className="shrink-0 flex h-screen flex-col sticky top-0" style={{ width: isDesktop ? (mode === "mini" ? 64 : 272) : 272 }}>
-          {showMini ? <SidebarMini role={role} unreadCount={unreadCount} onExpand={toggleDesktop} /> : <Sidebar role={role} unreadCount={unreadCount} />}
+          {showMini ? <SidebarMini role={role} userName={userName} unreadCount={unreadCount} onExpand={toggleDesktop} /> : <Sidebar role={role} userName={userName} unreadCount={unreadCount} />}
         </div>
       </div>
 
@@ -73,7 +75,7 @@ export function DashboardShell({
           drawerOpen ? "translate-x-0" : "translate-x-full"
         }`}
       >
-        <Sidebar role={role} unreadCount={unreadCount} onClose={() => setMode("hidden")} />
+        <Sidebar role={role} userName={userName} unreadCount={unreadCount} onClose={() => setMode("hidden")} />
       </div>
 
       {/* Main */}

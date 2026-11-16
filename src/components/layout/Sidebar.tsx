@@ -13,7 +13,7 @@ const nav = [
   { href: "/accounting", label: "حسابداری", icon: Wallet },
 ];
 
-export function Sidebar({ role, unreadCount, onClose }: { role?: string; unreadCount?: number; onClose?: () => void }) {
+export function Sidebar({ role, userName, unreadCount, onClose }: { role?: string; userName?: string; unreadCount?: number; onClose?: () => void }) {
   const pathname = usePathname();
   const router = useRouter();
   async function logout() {
@@ -115,6 +115,15 @@ export function Sidebar({ role, unreadCount, onClose }: { role?: string; unreadC
       </nav>
 
       <div className="border-t border-[var(--line)] p-3 shrink-0">
+        {userName && (
+          <div className="mb-2 flex items-center gap-3 rounded-[12px] bg-[var(--paper-2)] px-3 py-2.5">
+            <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-[var(--ink)] text-[13px] font-bold text-white">{userName.trim().charAt(0)}</span>
+            <span className="min-w-0">
+              <span className="block truncate text-[13px] font-bold text-[var(--ink)]">{userName}</span>
+              <span className="block text-[11px] text-[var(--ink-3)]">{role === "OWNER" ? "مدیر" : "مشاور"}</span>
+            </span>
+          </div>
+        )}
         <button onClick={logout} className="flex w-full items-center gap-3 rounded-[12px] px-3 py-2.5 text-[13.5px] font-medium text-[var(--ink-2)] hover:bg-[var(--paper-2)]">
           <LogOut className="h-[18px] w-[18px] text-[var(--ink-3)]" /> خروج
         </button>

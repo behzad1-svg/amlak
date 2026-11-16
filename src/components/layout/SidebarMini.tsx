@@ -13,7 +13,7 @@ const nav = [
   { href: "/accounting", icon: Wallet },
 ];
 
-export function SidebarMini({ role, unreadCount, onExpand }: { role?: string; unreadCount?: number; onExpand?: () => void }) {
+export function SidebarMini({ role, userName, unreadCount, onExpand }: { role?: string; userName?: string; unreadCount?: number; onExpand?: () => void }) {
   const pathname = usePathname();
   return (
     <div className="flex flex-1 flex-col items-center bg-white py-3">
@@ -42,6 +42,9 @@ export function SidebarMini({ role, unreadCount, onExpand }: { role?: string; un
         <div className="my-1 h-px w-6 bg-[var(--line)] mx-auto" />
         <Link href="/settings" className={cn("flex h-9 w-9 items-center justify-center rounded-[12px] border", pathname?.startsWith("/settings") ? "bg-[var(--ink)] text-white border-[var(--ink)]" : "bg-white border-[var(--line)] text-[var(--ink-3)] hover:bg-[var(--paper-2)]")}><Settings className="h-[18px] w-[18px]" /></Link>
       </nav>
+      {userName && (
+        <span title={userName} className="mt-2 flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-[var(--ink)] text-[13px] font-bold text-white">{userName.trim().charAt(0)}</span>
+      )}
     </div>
   );
 }

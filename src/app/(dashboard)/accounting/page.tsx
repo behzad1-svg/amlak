@@ -308,14 +308,19 @@ export default function AccountingPage() {
     setEditPrice(deal.dealSalePriceToman ?? "");
     setEditDeposit(deal.dealDepositToman ?? "");
     setEditRent(deal.dealMonthlyRentToman ?? "");
-    // پیش‌فرض فروش ۰٫۲۵٪ است؛ اگر درصد از قبل تعیین شده همان می‌ماند؛ برای اجاره پیش‌فرضی نیست
+    // پیش‌فرض فروش ۰٫۲۵٪ فقط برای معامله‌ای است که هنوز هیچ درآمدی (کمیسیون یا شیرینی) ندارد؛
+    // وگرنه باز کردن فرم برای ویرایش شیرینی، کمیسیونِ ازپیش‌پرشده را ناخواسته ذخیره می‌کرد.
+    const hasIncome =
+      (deal.commissionToman != null && deal.commissionToman !== "") ||
+      (deal.sellerShiriniToman != null && deal.sellerShiriniToman !== "") ||
+      (deal.buyerShiriniToman != null && deal.buyerShiriniToman !== "");
     const defaultPercent =
-      deal.commissionPercent != null ? String(deal.commissionPercent) : deal.property.dealType === "SALE" ? "0.25" : "";
+      deal.commissionPercent != null ? String(deal.commissionPercent) : !hasIncome && deal.property.dealType === "SALE" ? "0.25" : "";
     setEditPercent(defaultPercent);
     const amountSeed =
       deal.commissionToman != null && deal.commissionToman !== ""
         ? deal.commissionToman
-        : deal.property.dealType === "SALE" && deal.commissionPercent == null && deal.dealSalePriceToman
+        : !hasIncome && deal.property.dealType === "SALE" && deal.commissionPercent == null && deal.dealSalePriceToman
           ? (calcCommissionAmount(deal.dealSalePriceToman, "0.25") ?? "")
           : "";
     setEditAmount(amountSeed);

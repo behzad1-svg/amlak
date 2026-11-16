@@ -27,7 +27,7 @@ export async function validateSession(token: string | undefined | null) {
   // فقط فیلدهای لازم برای بررسی جلسه — هرگز passwordHash خوانده نمی‌شود
   const user = await prisma.user.findUnique({
     where: { id: payload.userId },
-    select: { id: true, role: true, active: true, tokenVersion: true, permissions: true },
+    select: { id: true, name: true, role: true, active: true, tokenVersion: true, permissions: true },
   });
   if (!user || !user.active) return null;
   if (user.tokenVersion !== payload.tokenVersion) return null;
