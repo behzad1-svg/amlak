@@ -1,7 +1,7 @@
 "use client";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { LayoutDashboard, Users, Building2, Bell, GitMerge, BarChart3, Settings, PanelLeftOpen, UserCog, TrendingUp, Wallet } from "lucide-react";
+import { LayoutDashboard, Users, Building2, Bell, GitMerge, CalendarClock, BarChart3, Settings, PanelLeftOpen, UserCog, TrendingUp, Wallet } from "lucide-react";
 import { cn } from "@/lib/utils";
 import Image from "next/image";
 
@@ -11,10 +11,11 @@ const nav = [
   { href: "/properties", icon: Building2 },
   { href: "/notifications", icon: Bell },
   { href: "/matching", icon: GitMerge },
+  { href: "/session-cards", icon: CalendarClock },
   { href: "/accounting", icon: Wallet },
 ];
 
-export function SidebarMini({ role, userName, unreadCount, unreadMatchCount, onExpand }: { role?: string; userName?: string; unreadCount?: number; unreadMatchCount?: number; onExpand?: () => void }) {
+export function SidebarMini({ role, userName, unreadCount, unreadMatchCount, pendingSessionCardCount, onExpand }: { role?: string; userName?: string; unreadCount?: number; unreadMatchCount?: number; pendingSessionCardCount?: number; onExpand?: () => void }) {
   const pathname = usePathname();
   return (
     <div className="flex flex-1 flex-col items-center bg-white py-3">
@@ -30,6 +31,7 @@ export function SidebarMini({ role, userName, unreadCount, unreadMatchCount, onE
               <item.icon className="h-[18px] w-[18px]" />
               {item.href === "/notifications" && unreadCount ? <span className="absolute -top-1 -left-1 flex h-4 min-w-4 items-center justify-center rounded-full bg-[var(--pomegranate)] px-1 text-[10px] font-bold text-white">{unreadCount > 9 ? "9+" : unreadCount}</span> : null}
               {item.href === "/matching" && unreadMatchCount ? <span className="absolute -top-1 -left-1 flex h-4 min-w-4 items-center justify-center rounded-full bg-[var(--pomegranate)] px-1 text-[10px] font-bold text-white">{unreadMatchCount > 9 ? "9+" : unreadMatchCount}</span> : null}
+              {item.href === "/session-cards" && pendingSessionCardCount ? <span className="absolute -top-1 -left-1 flex h-4 min-w-4 items-center justify-center rounded-full bg-[var(--pomegranate)] px-1 text-[10px] font-bold text-white">{pendingSessionCardCount > 9 ? "9+" : pendingSessionCardCount}</span> : null}
             </Link>
           );
         })}

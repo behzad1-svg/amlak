@@ -17,6 +17,7 @@ const TYPE_LABELS: Record<string, string> = {
   VIEWING_REMINDER: "بازدید",
   ACCESS_GRANTED: "دسترسی",
   CUSTOMER_TRANSFERRED: "انتقال",
+  SESSION_CARD: "کارت جلسه",
 };
 
 const PRIORITY_LABELS: Record<string, string> = {
@@ -31,6 +32,7 @@ const TYPE_FILTERS = [
   { key: "VIEWING_REMINDER", label: "بازدید" },
   { key: "ACCESS_GRANTED", label: "دسترسی" },
   { key: "CUSTOMER_TRANSFERRED", label: "انتقال" },
+  { key: "SESSION_CARD", label: "کارت جلسه" },
 ] as const;
 
 type NotificationRow = {
@@ -169,10 +171,10 @@ export default function NotificationsPage() {
                 <p className="text-xs text-zinc-400 mt-1">{formatDate(n.createdAt)}</p>
                 {n.relatedId && n.relatedType && (
                   <Link
-                    href={n.relatedType === "Property" ? `/properties/${n.relatedId}` : n.relatedType === "Customer" ? `/customers/${n.relatedId}` : "/viewings"}
+                    href={n.relatedType === "Property" ? `/properties/${n.relatedId}` : n.relatedType === "Customer" ? `/customers/${n.relatedId}` : n.relatedType === "SessionCard" ? "/session-cards" : "/viewings"}
                     className="mt-2 inline-block rounded-md border border-amber-300 bg-white px-2 py-1 text-xs font-medium text-amber-800 hover:bg-amber-50"
                   >
-                    {n.relatedType === "Property" ? "مشاهده فایل" : n.relatedType === "Customer" ? "مشاهده مشتری" : "مشاهده بازدیدها"}
+                    {n.relatedType === "Property" ? "مشاهده فایل" : n.relatedType === "Customer" ? "مشاهده مشتری" : n.relatedType === "SessionCard" ? "مشاهده کارت جلسه" : "مشاهده بازدیدها"}
                   </Link>
                 )}
               </div>

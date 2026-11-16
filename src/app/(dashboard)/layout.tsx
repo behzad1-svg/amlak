@@ -17,12 +17,14 @@ export default async function DashboardLayout({ children }: { children: React.Re
   const userName = session.user.name;
   const userId = session.user.id;
   // نشان اعلان‌ها تطبیق‌ها را نمی‌شمارد؛ تطبیق نشان جداگانه خودش را دارد.
-  const [unreadCount, unreadMatchCount] = await Promise.all([
+  // نشان کارت جلسه: تعداد کارت‌های در انتظار بررسی — فقط برای مدیر.
+  const [unreadCount, unreadMatchCount, pendingSessionCardCount] = await Promise.all([
     prisma.notification.count({ where: { userId, read: false, type: { not: "MATCH_SUGGESTION" } } }),
     prisma.notification.count({ where: { userId, read: false, type: "MATCH_SUGGESTION" } }),
+    role === "OWNER" ? prisma.sessionCard.count({ where: { status: "PENDING" } }) : Promise.resolve(0),
   ]);
   return (
-    <DashboardShell role={role} userName={userName} unreadCount={unreadCount} unreadMatchCount={unreadMatchCount}>
+    <DashboardShell role={role} userName={userName} unreadCount={unreadCount} unreadMatchCount={unreadMatchCount} pendingSessionCardCount={pendingSessionCardCount}>
       {children}
     </DashboardShell>
   );

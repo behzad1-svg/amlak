@@ -65,6 +65,12 @@ enum ViewingStatus {
   CANCELED
 }
 
+enum SessionCardStatus {
+  PENDING
+  CONFIRMED
+  CANCELLED
+}
+
 enum CustomerPipelineStage {
   NEW
   INITIAL_CONTACT
@@ -109,6 +115,7 @@ enum NotificationType {
   VIEWING_REMINDER
   ACCESS_GRANTED
   CUSTOMER_TRANSFERRED
+  SESSION_CARD
 }
 
 enum ActivityType {
@@ -151,6 +158,7 @@ model User {
   transfersFrom  CustomerTransfer[] @relation("TransferFrom")
   transfersTo    CustomerTransfer[] @relation("TransferTo")
   transfersBy    CustomerTransfer[] @relation("TransferBy")
+  sessionCards   SessionCard[]      @relation("SessionCardAdvisor")
 }
 
 model Customer {
@@ -201,6 +209,7 @@ model Customer {
   activities      Activity[]
   followUps       FollowUp[]
   transfers       CustomerTransfer[] @relation("CustomerTransfers")
+  sessionCards    SessionCard[]
 
   @@index([assignedAgentId])
   @@index([stage])
@@ -307,6 +316,7 @@ model Property {
   viewings Viewing[]
   deals    Deal[]
   activities Activity[]
+  sessionCards SessionCard[]
 
   @@index([listedById])
   @@index([region])
@@ -369,6 +379,33 @@ model Viewing {
 
   @@index([agentId])
   @@index([propertyId])
+}
+
+/// کارت جلسه — هماهنگی پیش از قرارداد بین مشاور و مدیر؛
+/// پیش‌تر روی کاغذ پر می‌شد، حالا داخل سایت با اعلان فوری برای مدیر.
+model SessionCard {
+  id                 String            @id @default(cuid())
+  customerId         String
+  customer           Customer          @relation(fields: [customerId], references: [id])
+  propertyId         String?
+  property           Property?         @relation(fields: [propertyId], references: [id])
+  advisorId          String
+  advisor            User              @relation("SessionCardAdvisor", fields: [advisorId], references: [id])
+  scheduledAt        DateTime
+  cashAmountToman    BigInt?
+  intent             String?
+  sellerShiriniToman BigInt?
+  commissionToman    BigInt?
+  paymentTerms       String?
+  notes              String?
+  status             SessionCardStatus @default(PENDING)
+  managerNote        String?
+  createdAt          DateTime          @default(now())
+  updatedAt          DateTime          @updatedAt
+
+  @@index([advisorId])
+  @@index([status, scheduledAt])
+  @@index([customerId])
 }
 
 enum DealStatus {

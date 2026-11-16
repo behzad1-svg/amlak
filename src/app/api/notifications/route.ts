@@ -11,7 +11,7 @@ async function getSession() {
   return validateSession(token);
 }
 
-const NOTIFICATION_TYPES = ["MATCH_SUGGESTION", "FOLLOW_UP_OVERDUE", "VIEWING_REMINDER", "ACCESS_GRANTED", "CUSTOMER_TRANSFERRED"] as const;
+const NOTIFICATION_TYPES = ["MATCH_SUGGESTION", "FOLLOW_UP_OVERDUE", "VIEWING_REMINDER", "ACCESS_GRANTED", "CUSTOMER_TRANSFERRED", "SESSION_CARD"] as const;
 type NotificationTypeName = (typeof NOTIFICATION_TYPES)[number];
 
 function invalidType(value: string | null): value is string {

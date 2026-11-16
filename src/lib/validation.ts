@@ -149,6 +149,25 @@ export const viewingCreateSchema = z.object({
   feedback: z.string().max(2000).optional().nullable(),
 });
 
+/// کارت جلسه — هماهنگی پیش از قرارداد بین مشاور و مدیر
+export const sessionCardCreateSchema = z.object({
+  customerId: z.string().min(1, "مشتری الزامی است"),
+  propertyId: z.string().optional().nullable(),
+  scheduledAt: z.string().min(1, "تاریخ و ساعت جلسه الزامی است"),
+  cashAmountToman: z.string().regex(/^[0-9]*$/, "پول نقد فقط عدد").optional().nullable(),
+  intent: z.string().max(100).optional().nullable(),
+  sellerShiriniToman: z.string().regex(/^[0-9]*$/, "شیرینی فقط عدد").optional().nullable(),
+  commissionToman: z.string().regex(/^[0-9]*$/, "کمیسیون فقط عدد").optional().nullable(),
+  paymentTerms: z.string().max(2000).optional().nullable(),
+  notes: z.string().max(5000).optional().nullable(),
+});
+
+/// مدیر: تغییر وضعیت + نظر؛ سازنده فقط لغو کارت خودش (status=CANCELLED)
+export const sessionCardUpdateSchema = z.object({
+  status: z.enum(["CONFIRMED", "CANCELLED"]).optional(),
+  managerNote: z.string().max(2000).optional().nullable(),
+});
+
 export const dealCreateSchema = z.object({
   customerId: z.string().min(1),
   propertyId: z.string().min(1),
