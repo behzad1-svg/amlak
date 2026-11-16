@@ -1082,7 +1082,7 @@ export default function CustomerDetailPage() {
                   <Input
                     inputMode="numeric"
                     dir="ltr"
-                    placeholder={visPropDealType === "RENT" ? "قیمت/ودیعه از" : "قیمت از"}
+                    placeholder={visPropDealType === "RENT" ? "ودیعه از" : visPropDealType === "SALE" ? "قیمت از" : "قیمت/ودیعه از"}
                     value={visPropPriceMin}
                     onChange={(e) => setVisPropPriceMin(e.target.value.replace(/[^0-9]/g, ""))}
                   />
@@ -1090,7 +1090,7 @@ export default function CustomerDetailPage() {
                   <Input
                     inputMode="numeric"
                     dir="ltr"
-                    placeholder={visPropDealType === "RENT" ? "قیمت/ودیعه تا" : "قیمت تا"}
+                    placeholder={visPropDealType === "RENT" ? "ودیعه تا" : visPropDealType === "SALE" ? "قیمت تا" : "قیمت/ودیعه تا"}
                     value={visPropPriceMax}
                     onChange={(e) => setVisPropPriceMax(e.target.value.replace(/[^0-9]/g, ""))}
                   />

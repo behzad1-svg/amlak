@@ -426,7 +426,7 @@ export default function SessionCardsPage() {
                   <Input
                     inputMode="numeric"
                     dir="ltr"
-                    placeholder={propDealType === "RENT" ? "قیمت/ودیعه از" : "قیمت از"}
+                    placeholder={propDealType === "RENT" ? "ودیعه از" : propDealType === "SALE" ? "قیمت از" : "قیمت/ودیعه از"}
                     value={propPriceMin}
                     onChange={(e) => setPropPriceMin(e.target.value.replace(/[^0-9]/g, ""))}
                   />
@@ -434,7 +434,7 @@ export default function SessionCardsPage() {
                   <Input
                     inputMode="numeric"
                     dir="ltr"
-                    placeholder={propDealType === "RENT" ? "قیمت/ودیعه تا" : "قیمت تا"}
+                    placeholder={propDealType === "RENT" ? "ودیعه تا" : propDealType === "SALE" ? "قیمت تا" : "قیمت/ودیعه تا"}
                     value={propPriceMax}
                     onChange={(e) => setPropPriceMax(e.target.value.replace(/[^0-9]/g, ""))}
                   />

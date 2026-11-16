@@ -210,7 +210,7 @@ export function StageOutcomeModal({
                     <Input
                       inputMode="numeric"
                       dir="ltr"
-                      placeholder={dealTypeFilter === "RENT" ? "قیمت/ودیعه از" : "قیمت از"}
+                      placeholder={dealTypeFilter === "RENT" ? "ودیعه از" : dealTypeFilter === "SALE" ? "قیمت از" : "قیمت/ودیعه از"}
                       value={priceMin}
                       onChange={(e) => setPriceMin(e.target.value.replace(/[^0-9]/g, ""))}
                     />
@@ -218,7 +218,7 @@ export function StageOutcomeModal({
                     <Input
                       inputMode="numeric"
                       dir="ltr"
-                      placeholder={dealTypeFilter === "RENT" ? "قیمت/ودیعه تا" : "قیمت تا"}
+                      placeholder={dealTypeFilter === "RENT" ? "ودیعه تا" : dealTypeFilter === "SALE" ? "قیمت تا" : "قیمت/ودیعه تا"}
                       value={priceMax}
                       onChange={(e) => setPriceMax(e.target.value.replace(/[^0-9]/g, ""))}
                     />
