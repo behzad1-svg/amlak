@@ -13,10 +13,14 @@ export function SearchSelect({
   emptyText = "موردی یافت نشد",
   disabled,
   id,
+  onSearchChange,
 }: {
   value: string;
   onChange: (id: string) => void;
   options: SearchOption[];
+  // وقتی داده شود، تایپ در جعبهٔ جستجوی داخلی، جستجوی سمت سرور را راه می‌اندازد
+  // (فیلتر سمت کاربر دیگر لازم نیست چون سرور فیلتر کرده است)
+  onSearchChange?: (q: string) => void;
   placeholder?: string;
   label?: string;
   required?: boolean;
@@ -37,6 +41,9 @@ export function SearchSelect({
   const selected = options.find((o) => o.id === value);
 
   const filtered = useMemo(() => {
+    // جستجوی سمت سرور: گزینه‌ها از قبل فیلترشده‌اند؛ فیلتر دوبارهٔ کاربر فقط
+    // موقع تأخیر واکشی، «موردی یافت نشد» اشتباه نشان می‌داد
+    if (onSearchChange) return options;
     const query = q.trim().toLowerCase();
     if (!query) return options;
     return options.filter(
@@ -45,7 +52,7 @@ export function SearchSelect({
         (o.sub && o.sub.toLowerCase().includes(query)) ||
         o.id.toLowerCase().includes(query)
     );
-  }, [options, q]);
+  }, [options, q, onSearchChange]);
 
   useEffect(() => {
     function onDoc(e: MouseEvent) {
@@ -128,6 +135,7 @@ export function SearchSelect({
               onChange={(e) => {
                 setQ(e.target.value);
                 setHighlight(0);
+                onSearchChange?.(e.target.value);
               }}
               placeholder="نام یا شماره را بنویسید..."
               aria-label="جستجو در گزینه‌ها"

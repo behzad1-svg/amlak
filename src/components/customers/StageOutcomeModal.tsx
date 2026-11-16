@@ -184,8 +184,7 @@ export function StageOutcomeModal({
           {isWon ? (
             <>
               <div>
-                <div className="mb-2 grid gap-2 sm:grid-cols-3">
-                  <Input placeholder="عنوان یا کد فایل را بنویسید..." value={titleSearch} onChange={(e) => setTitleSearch(e.target.value)} aria-label="جستجوی عنوان فایل" />
+                <div className="mb-2 grid gap-2 sm:grid-cols-2">
                   <Select value={dealTypeFilter} onChange={(e) => setDealTypeFilter(e.target.value)} aria-label="نوع معامله">
                     <option value="">همه معاملات</option>
                     <option value="SALE">فروش</option>
@@ -220,6 +219,7 @@ export function StageOutcomeModal({
                       .join(" · "),
                   }))}
                   placeholder="جستجوی فایل (کد یا عنوان)..."
+                  onSearchChange={setTitleSearch}
                   emptyText="فایل فعالی یافت نشد"
                 />
                 {propertiesError && (

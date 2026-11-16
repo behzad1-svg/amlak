@@ -331,8 +331,7 @@ export default function SessionCardsPage() {
                 به‌محض ثبت، اعلان کارت جلسه برای مدیر می‌رود؛ اگر مشاور همکار یا مدیر قرارداد انتخاب شده باشد، برای آن‌ها هم می‌رود.
               </p>
               <SearchSelect label="مشتری *" required value={customerId} onChange={setCustomerId} options={customerOptions} placeholder="مشتری را جستجو و انتخاب کنید..." />
-              <div className="grid grid-cols-1 gap-2 sm:grid-cols-3">
-                <Input placeholder="عنوان یا کد فایل را بنویسید..." value={propSearch} onChange={(e) => setPropSearch(e.target.value)} aria-label="جستجوی عنوان فایل" />
+              <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
                 <Select value={propDealType} onChange={(e) => setPropDealType(e.target.value)} aria-label="نوع معامله">
                   <option value="">همه معاملات</option>
                   <option value="SALE">فروش</option>
@@ -347,7 +346,7 @@ export default function SessionCardsPage() {
                   </Select>
                 )}
               </div>
-              <SearchSelect label="فایل / ملک" value={propertyId} onChange={setPropertyId} options={propertyOptions} placeholder="فایل را جستجو و انتخاب کنید..." />
+              <SearchSelect label="فایل / ملک" value={propertyId} onChange={setPropertyId} options={propertyOptions} placeholder="فایل را جستجو و انتخاب کنید..." onSearchChange={setPropSearch} />
               {propertyTotal !== null && propertyTotal > propertyOptions.length && (
                 <p className="text-[11px] text-[var(--ink-3)]">
                   نمایش {toFaDigits(String(propertyOptions.length))} از {toFaDigits(String(propertyTotal))} فایل — فیلترها را دقیق‌تر کنید.
