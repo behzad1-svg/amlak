@@ -175,19 +175,21 @@ export const CUSTOMER_TYPE_LABELS: Record<string, string> = {
   OWNER: "مالک",
 };
 
-/** رنگ پس‌زمینه کارت مشتری بر اساس نوع مشتری — برای پیدا کردن سریع نوع مشتری در کانبان */
+/** رنگ پس‌زمینه کارت مشتری بر اساس نوع مشتری — برای پیدا کردن سریع نوع مشتری در کانبان.
+ * بهزاد (۱۴۰۵/۰۸/۲۵): فروشنده همان مالک است و مستاجر همان مشتری (خریدار) — پس دو طرف بیشتر نیست:
+ * مالک/فروشنده (عرضه) یک رنگ، خریدار/مستاجر (تقاضا) یک رنگ. برچسب روی کارت همچنان نوع دقیق را نشان می‌دهد. */
 export const CUSTOMER_TYPE_CARD: Record<string, string> = {
   BUYER: "bg-[#EFF4FF] border-[#C7D8EE]",
-  SELLER: "bg-[#E9F7EF] border-[#B7E4C7]",
-  TENANT: "bg-[#FFF8E1] border-[#F1D9A8]",
+  SELLER: "bg-[#F3EEFB] border-[#D5C6F0]",
+  TENANT: "bg-[#EFF4FF] border-[#C7D8EE]",
   OWNER: "bg-[#F3EEFB] border-[#D5C6F0]",
 };
 
 /** رنگ برچسب نوع مشتری — هم‌خانواده با رنگ کارت */
 export const CUSTOMER_TYPE_BADGE: Record<string, string> = {
   BUYER: "bg-[#D8E5FA] border-[#A8C4EA] text-[#2F5D8A]",
-  SELLER: "bg-[#CDEEDB] border-[#9BD8B4] text-[#1E7A46]",
-  TENANT: "bg-[#FCEFC7] border-[#EBCB85] text-[#8A6D1B]",
+  SELLER: "bg-[#E4D8F7] border-[#C0A9E8] text-[#6B4FA1]",
+  TENANT: "bg-[#D8E5FA] border-[#A8C4EA] text-[#2F5D8A]",
   OWNER: "bg-[#E4D8F7] border-[#C0A9E8] text-[#6B4FA1]",
 };
 
