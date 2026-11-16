@@ -15,6 +15,8 @@ export type DashboardTeamStat = {
   appraisals: number;
   listedFiles: number;
   viewings: number;
+  /// آگهی‌های ۷ روز گذشتهٔ مشاور — «این هفته چند تا آگهی کرده»
+  advertisedWeekly: number;
   breakdown: {
     calls: number;
     notes: number;
@@ -108,7 +110,7 @@ export async function getDashboardData(userId: string, isOwner: boolean): Promis
 }
 
 async function getTeamStats(weekAgo: Date, monthAgo: Date): Promise<DashboardTeamStat[]> {
-  const [agents, overdueByAgent, weeklyActivity, monthlyActivity, typeGroups, dealsByAgent, appraisalsByAgent, listedByAgent, viewingsByAgent] =
+  const [agents, overdueByAgent, weeklyActivity, monthlyActivity, typeGroups, dealsByAgent, appraisalsByAgent, listedByAgent, viewingsByAgent, advertisedWeeklyByAgent] =
     await Promise.all([
       prisma.user.findMany({ where: { active: true }, select: { id: true, name: true, role: true } }),
       prisma.customer.groupBy({
@@ -131,6 +133,8 @@ async function getTeamStats(weekAgo: Date, monthAgo: Date): Promise<DashboardTea
       }),
       prisma.property.groupBy({ by: ["listedById"], where: { deletedAt: null }, _count: true }),
       prisma.viewing.groupBy({ by: ["agentId"], _count: true }),
+      // آگهی‌های ۷ روز گذشته — ستون «آگهی هفته» در وضعیت تیم
+      prisma.activity.groupBy({ by: ["agentId"], where: { type: "ADVERTISED", createdAt: { gte: weekAgo } }, _count: true }),
     ]);
 
   const overdueMap = new Map(overdueByAgent.map((r) => [r.assignedAgentId, r._count]));
@@ -143,6 +147,7 @@ async function getTeamStats(weekAgo: Date, monthAgo: Date): Promise<DashboardTea
   for (const a of appraisalsByAgent) if (a.appraisedById) appraisalMap.set(a.appraisedById, a._count);
   const listedMap = new Map(listedByAgent.map((r) => [r.listedById, r._count]));
   const viewingMap = new Map(viewingsByAgent.map((r) => [r.agentId, r._count]));
+  const advertisedWeeklyMap = new Map(advertisedWeeklyByAgent.map((r) => [r.agentId, r._count]));
 
   return agents.map((a) => ({
     id: a.id,
@@ -155,6 +160,7 @@ async function getTeamStats(weekAgo: Date, monthAgo: Date): Promise<DashboardTea
     appraisals: appraisalMap.get(a.id) ?? 0,
     listedFiles: listedMap.get(a.id) ?? 0,
     viewings: viewingMap.get(a.id) ?? 0,
+    advertisedWeekly: advertisedWeeklyMap.get(a.id) ?? 0,
     breakdown: {
       calls: typeMap.get(`${a.id}:CALL`) ?? 0,
       notes: typeMap.get(`${a.id}:NOTE`) ?? 0,

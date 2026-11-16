@@ -18,6 +18,7 @@ const TYPE_LABELS: Record<string, string> = {
   ACCESS_GRANTED: "دسترسی",
   CUSTOMER_TRANSFERRED: "انتقال",
   SESSION_CARD: "کارت جلسه",
+  ADVERTISED: "آگهی",
 };
 
 const PRIORITY_LABELS: Record<string, string> = {
@@ -33,6 +34,7 @@ const TYPE_FILTERS = [
   { key: "ACCESS_GRANTED", label: "دسترسی" },
   { key: "CUSTOMER_TRANSFERRED", label: "انتقال" },
   { key: "SESSION_CARD", label: "کارت جلسه" },
+  { key: "ADVERTISED", label: "آگهی" },
 ] as const;
 
 type NotificationRow = {

@@ -16,10 +16,11 @@ async function getSession() {
 
 async function canAccessPropertyForAction(
   user: { id: string; role: string },
-  property: { listedById: string; visibility: string; id: string }
+  property: { listedById: string; visibility: string; id: string; isOfficeFile?: boolean }
 ): Promise<boolean> {
   if (user.role === "OWNER") return true;
   if (property.listedById === user.id) return true;
+  if (property.isOfficeFile) return true;
   if (property.visibility === "TEAM_VISIBLE") return true;
   return hasRestrictedAccess(prisma as never, property.id, user.id);
 }

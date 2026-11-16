@@ -15,9 +15,10 @@ async function getSession() {
   return validateSession(token);
 }
 
-async function canViewProperty(user: { id: string; role: string }, property: { listedById: string; visibility: string; id: string }) {
+async function canViewProperty(user: { id: string; role: string }, property: { listedById: string; visibility: string; id: string; isOfficeFile?: boolean }) {
   if (user.role === "OWNER") return true;
   if (property.listedById === user.id) return true;
+  if (property.isOfficeFile) return true;
   if (property.visibility === "TEAM_VISIBLE") return true;
   const hasAccess = await hasRestrictedAccess(prisma as never, property.id, user.id);
   return hasAccess;
@@ -54,6 +55,7 @@ export async function GET(_req: NextRequest, { params }: { params: Promise<{ id:
     session.user.role !== "OWNER" &&
     property.listedById !== session.user.id &&
     property.visibility === "TEAM_VISIBLE" &&
+    !property.isOfficeFile &&
     !hasGrant
   ) {
     result = maskPropertyForTeam(property as unknown as Record<string, unknown>);
@@ -147,6 +149,7 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
     updateData.listedById = listedById;
   }
   if (d.visibility !== undefined) updateData.visibility = d.visibility;
+  if (d.isOfficeFile !== undefined) updateData.isOfficeFile = d.isOfficeFile;
   if (d.isAdvertised !== undefined) updateData.isAdvertised = d.isAdvertised;
   if (d.nextOwnerFollowUpAt !== undefined) updateData.nextOwnerFollowUpAt = d.nextOwnerFollowUpAt ? new Date(d.nextOwnerFollowUpAt as string) : null;
 

@@ -43,6 +43,7 @@ type Property = {
   hasRenovated?: boolean;
   isNewBuild?: boolean;
   isAppraised?: boolean;
+  isOfficeFile?: boolean;
   appraisedBy?: { id: string; name: string } | null;
   appraisedAt?: string | null;
   listedBy?: { id: string; name: string } | null;
@@ -514,6 +515,11 @@ export default function PropertiesPage() {
                           ) : (
                             <span className="rounded-md bg-amber-50 border border-amber-200 px-1.5 py-0.5 text-[10.5px] text-amber-700">
                               بدون کارشناسی
+                            </span>
+                          )}
+                          {p.isOfficeFile && (
+                            <span className="rounded-md bg-violet-100 border border-violet-200 px-1.5 py-0.5 text-[10.5px] text-violet-800 font-bold">
+                              فایل دفتر
                             </span>
                           )}
                         </div>

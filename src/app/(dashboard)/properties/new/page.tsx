@@ -93,6 +93,7 @@ export default function NewPropertyPage() {
   const [flags, setFlags] = useState<Flags>(emptyFlags);
   const [agents, setAgents] = useState<{ id: string; name: string }[]>([]);
   const [accessUserIds, setAccessUserIds] = useState<string[]>([]);
+  const [isOfficeFile, setIsOfficeFile] = useState(false);
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(false);
   // ثبت مالک درون‌خطی — بدون رفتن به صفحه مشتریان
@@ -259,6 +260,7 @@ export default function NewPropertyPage() {
         isAppraised: form.isAppraised === "true",
         source: form.source || null,
         accessUserIds,
+        isOfficeFile,
       };
 
       if (form.dealType === "SALE") body.salePriceToman = form.salePriceToman || null;
@@ -508,6 +510,13 @@ export default function NewPropertyPage() {
           <p className="text-[12px] text-[var(--ink-3)] mb-3">
             مشاورهای تیک‌خورده آدرس دقیق، نام و شماره مالک را می‌بینند. بقیه فقط اطلاعات جزئی فایل را می‌بینند.
           </p>
+          <label className="mb-3 flex items-start gap-2 text-[13px] cursor-pointer">
+            <input type="checkbox" checked={isOfficeFile} onChange={(e) => setIsOfficeFile(e.target.checked)} className="mt-0.5" />
+            <span>
+              <span className="font-bold">فایل دفتر</span>
+              <span className="block text-[12px] text-[var(--ink-3)]">همه مشاورها به اطلاعات کامل فایل دسترسی دارند؛ نیازی به تیک زدن تک‌تک مشاورها نیست.</span>
+            </span>
+          </label>
           {agents.length === 0 ? (
             <p className="text-[13px] text-[var(--ink-3)]">مشاور دیگری در سیستم نیست.</p>
           ) : (

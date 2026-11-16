@@ -125,6 +125,8 @@ export const propertyCreateSchema = z.object({
   description: z.string().max(2000).optional().nullable(),
   ownerId: z.string().min(1, "مالک الزامی است"),
   visibility: z.enum(["TEAM_VISIBLE", "RESTRICTED"]).optional(),
+  /// فایل دفتر — همه مشاورها به اطلاعات کامل فایل دسترسی دارند
+  isOfficeFile: z.boolean().optional(),
   /// مشاورهایی که به اطلاعات کامل فایل دسترسی دارند (تیک در فرم ثبت/ویرایش)
   accessUserIds: z.array(z.string()).optional(),
   isAdvertised: z.boolean().optional(),

@@ -14,6 +14,7 @@ type PerfRow = {
   role: string;
   files: number;
   appraisals: number;
+  advertised: number;
   fileFindings: number;
   viewings: number;
   deals: number;
@@ -24,12 +25,13 @@ type PerfData = {
   range: number;
   since: string;
   users: PerfRow[];
-  totals: { files: number; appraisals: number; fileFindings: number; viewings: number; deals: number; overdue: number };
+  totals: { files: number; appraisals: number; advertised: number; fileFindings: number; viewings: number; deals: number; overdue: number };
 };
 
 const METRICS = [
   { key: "files" as const, label: "فایل ثبت‌شده", color: "bg-[var(--sea)]" },
   { key: "appraisals" as const, label: "کارشناسی", color: "bg-emerald-500" },
+  { key: "advertised" as const, label: "آگهی", color: "bg-violet-500" },
   { key: "fileFindings" as const, label: "فایل‌یابی", color: "bg-amber-500" },
   { key: "viewings" as const, label: "بازدید", color: "bg-sky-500" },
   { key: "deals" as const, label: "قرارداد", color: "bg-[var(--pomegranate)]" },
@@ -111,6 +113,7 @@ export default function ReportsPage() {
           {([
             ["فایل ثبت‌شده", t.files],
             ["کارشناسی", t.appraisals],
+            ["آگهی", t.advertised],
             ["فایل‌یابی", t.fileFindings],
             ["بازدید", t.viewings],
             ["قرارداد", t.deals],
@@ -138,6 +141,7 @@ export default function ReportsPage() {
                   <th className="py-2 text-right">مشاور</th>
                   <th>فایل ثبت‌شده</th>
                   <th>کارشناسی</th>
+                  <th>آگهی</th>
                   <th>فایل‌یابی</th>
                   <th>بازدید</th>
                   <th>قرارداد</th>
@@ -150,6 +154,7 @@ export default function ReportsPage() {
                     <td className="py-2.5 pr-2 font-medium text-right">{u.name} {u.role === "OWNER" ? "(مدیر)" : ""}</td>
                     <td className="text-center">{toFaDigits(String(u.files))}</td>
                     <td className="text-center font-bold text-[var(--sea)]">{toFaDigits(String(u.appraisals))}</td>
+                    <td className="text-center font-bold text-violet-700">{toFaDigits(String(u.advertised))}</td>
                     <td className="text-center">{toFaDigits(String(u.fileFindings))}</td>
                     <td className="text-center">{toFaDigits(String(u.viewings))}</td>
                     <td className="text-center font-bold">{toFaDigits(String(u.deals))}</td>
@@ -162,6 +167,7 @@ export default function ReportsPage() {
                   <td className="py-2.5 pr-2 text-right">جمع کل</td>
                   <td className="text-center">{toFaDigits(String(t.files))}</td>
                   <td className="text-center">{toFaDigits(String(t.appraisals))}</td>
+                  <td className="text-center">{toFaDigits(String(t.advertised))}</td>
                   <td className="text-center">{toFaDigits(String(t.fileFindings))}</td>
                   <td className="text-center">{toFaDigits(String(t.viewings))}</td>
                   <td className="text-center">{toFaDigits(String(t.deals))}</td>
@@ -171,7 +177,7 @@ export default function ReportsPage() {
             </table>
           </div>
           <p className="mt-3 text-[12px] text-[var(--ink-3)]">
-            «قرارداد» یعنی معامله قطعی‌شده؛ «بازدید» بازدیدهای لغونشده در بازه است؛ «پیگیری عقب‌افتاده» وضعیت امروز است، نه مربوط به بازه.
+            «قرارداد» یعنی معامله قطعی‌شده؛ «بازدید» بازدیدهای لغونشده در بازه است؛ «پیگیری عقب‌افتاده» وضعیت امروز است، نه مربوط به بازه. «آگهی» تعداد دفعاتی است که مشاور در بازه فایلی را آگهی کرده است (هر فایل در هر روز یک بار).
           </p>
         </Card>
       </div>

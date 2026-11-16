@@ -11,6 +11,7 @@ import { Badge } from "@/components/ui/Badge";
 import { formatDate, formatDateTime } from "@/lib/utils";
 import { CUSTOMER_STAGE_LABELS } from "@/lib/constants";
 import { AlertTriangle, Clock, Users, ArrowUpLeft, Eye, CalendarCheck, ListChecks } from "lucide-react";
+import { AdvertiseTodayCard } from "@/components/dashboard/AdvertiseTodayCard";
 
 export default async function DashboardPage() {
   const session = await getSessionFromCookies();
@@ -137,6 +138,8 @@ export default async function DashboardPage() {
           </Card>
         </div>
 
+        <AdvertiseTodayCard />
+
         {tasks.length > 0 && (
           <Card className="p-0 overflow-hidden">
             <CardHeader className="px-4 pt-4">
@@ -181,7 +184,7 @@ export default async function DashboardPage() {
             <div className="px-4 py-3 border-b border-[var(--line)] flex items-center gap-2">
               <span className="flex h-7 w-7 items-center justify-center rounded-[10px] bg-[var(--ink)] text-white"><Users className="h-4 w-4" /></span>
               <span className="text-[13px] font-extrabold">وضعیت تیم</span>
-              <span className="mr-auto text-[11px] tracking-widest text-[var(--ink-3)]">هفتگی · ماهانه</span>
+              <span className="mr-auto text-[11px] tracking-widest text-[var(--ink-3)]">هفتگی · ماهانه · آگهی هفته</span>
             </div>
             <div className="overflow-x-auto">
               <table className="w-full text-[13px]">
@@ -191,6 +194,7 @@ export default async function DashboardPage() {
                     <th className="py-2.5 text-center font-medium">عقب‌افتاده</th>
                     <th className="py-2.5 text-center font-medium">هفتگی</th>
                     <th className="py-2.5 text-center font-medium">ماهانه</th>
+                    <th className="py-2.5 text-center font-medium">آگهی هفته</th>
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-[var(--line)]">
@@ -200,6 +204,7 @@ export default async function DashboardPage() {
                       <td className="text-center"><span className={s.overdue > 0 ? "inline-flex min-w-6 justify-center rounded-full bg-[var(--pomegranate-soft)] border border-[var(--pomegranate-line)] px-2 py-0.5 text-[var(--pomegranate)] font-bold" : "text-[var(--ink-3)]"}>{s.overdue}</span></td>
                       <td className="text-center text-[var(--ink-2)]">{s.weeklyActivity}</td>
                       <td className="text-center text-[var(--ink-2)]">{s.monthlyActivity}</td>
+                      <td className="text-center font-bold text-violet-700">{s.advertisedWeekly}</td>
                     </tr>
                   ))}
                 </tbody>

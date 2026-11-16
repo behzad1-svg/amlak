@@ -12,10 +12,12 @@ export function canDeleteEntity(user: { role: string }): boolean {
 
 export function canAccessPropertyFull(
   user: { id: string; role: string },
-  property: { listedById: string; visibility: string }
+  property: { listedById: string; visibility: string; isOfficeFile?: boolean }
 ): boolean {
   if (user.role === "OWNER") return true;
   if (property.listedById === user.id) return true;
+  // فایل دفتر: همه مشاورها اطلاعات کامل را می‌بینند — حتی مشاورهای تازه‌اضافه‌شده
+  if (property.isOfficeFile) return true;
   if (property.visibility === "TEAM_VISIBLE") return true;
   return false;
 }

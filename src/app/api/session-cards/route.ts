@@ -69,6 +69,7 @@ export async function POST(req: NextRequest) {
       const canAccessProp =
         property.listedById === session.user.id ||
         property.visibility === "TEAM_VISIBLE" ||
+        property.isOfficeFile ||
         (await hasRestrictedAccess(prisma as never, property.id, session.user.id));
       if (!canAccessProp) return NextResponse.json({ error: "به این فایل دسترسی ندارید" }, { status: 403 });
     }

@@ -116,6 +116,7 @@ enum NotificationType {
   ACCESS_GRANTED
   CUSTOMER_TRANSFERRED
   SESSION_CARD
+  ADVERTISED
 }
 
 enum ActivityType {
@@ -310,6 +311,8 @@ model Property {
   listedBy    User               @relation("PropertyLister", fields: [listedById], references: [id])
 
   visibility  PropertyVisibility @default(TEAM_VISIBLE)
+  /// فایل دفتر — همه مشاورها به اطلاعات کامل فایل دسترسی دارند
+  isOfficeFile Boolean @default(false)
   accessList  PropertyAccess[]
 
   createdAt   DateTime           @default(now())

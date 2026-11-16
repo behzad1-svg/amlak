@@ -166,6 +166,7 @@ export async function GET(req: NextRequest) {
       OR: [
         { listedById: session.user.id },
         { visibility: "TEAM_VISIBLE" },
+        { isOfficeFile: true },
         ...(ids.length ? [{ id: { in: ids } }] : []),
       ],
     });
@@ -196,7 +197,7 @@ export async function GET(req: NextRequest) {
   if (session.user.role !== "OWNER") {
     const grantedIds = new Set(grantedPropertyIds);
     result = properties.map((p) => {
-      if (p.listedById !== session.user.id && p.visibility === "TEAM_VISIBLE" && !grantedIds.has(p.id)) {
+      if (p.listedById !== session.user.id && p.visibility === "TEAM_VISIBLE" && !grantedIds.has(p.id) && !p.isOfficeFile) {
         return maskPropertyForTeam(p as unknown as Record<string, unknown>);
       }
       return p;
@@ -295,6 +296,7 @@ export async function POST(req: NextRequest) {
       ownerId: d.ownerId,
       listedById: session.user.id,
       visibility: (d.visibility as never) ?? "TEAM_VISIBLE",
+      isOfficeFile: d.isOfficeFile ?? false,
       isAdvertised: d.isAdvertised ?? false,
       // تیک «از قبل کارشناسی شده» در فرم ثبت: ثبت‌کننده همان کارشناس است —
       // appraisedById ورودی مشتری نادیده گرفته می‌شود (فقط مدیر می‌تواند

@@ -10,6 +10,7 @@ import { Input, NumberInput, Select, Label, Textarea } from "@/components/ui/Inp
 import dynamic from "next/dynamic";
 import { SearchSelect } from "@/components/ui/SearchSelect";
 import { AppraisalCheck } from "@/components/properties/AppraisalCheck";
+import { AdvertiseButton } from "@/components/properties/AdvertiseButton";
 import { PageError, PageSkeleton } from "@/components/ui/LoadState";
 import { apiFetch, apiJson, errorMessage } from "@/lib/api";
 
@@ -65,6 +66,8 @@ type Prop = Record<string, unknown> & {
   isNewBuild?: boolean;
   isAppraised?: boolean;
   appraisedAt?: string | null;
+  isOfficeFile?: boolean;
+  isAdvertised?: boolean;
   listedBy?: { id: string; name: string } | null;
   owner?: { id: string; name: string; phone?: string } | null;
   appraisedBy?: { id: string; name: string } | null;
@@ -114,6 +117,7 @@ export default function PropertyDetailPage() {
   const [customers, setCustomers] = useState<{ id: string; name: string; phone?: string }[]>([]);
   const [agents, setAgents] = useState<{ id: string; name: string; role?: string; active?: boolean }[]>([]);
   const [accessUserIds, setAccessUserIds] = useState<string[]>([]);
+  const [isOfficeFile, setIsOfficeFile] = useState(false);
   const [meId, setMeId] = useState("");
   const [mePermissions, setMePermissions] = useState<Record<string, boolean>>({});
   const [editing, setEditing] = useState(false);
@@ -161,6 +165,7 @@ export default function PropertyDetailPage() {
       if (propRes?.id) {
         setP(propRes);
         setAccessUserIds((propRes.accessList ?? []).map((a) => a.userId));
+        setIsOfficeFile(!!propRes.isOfficeFile);
         setForm({
           title: propRes.title ?? "",
           region: propRes.region ?? "",
@@ -214,6 +219,7 @@ export default function PropertyDetailPage() {
     body.source = form.source || null;
     if (isOwner && form.listedById) body.listedById = form.listedById;
     if (canManageAccess) body.accessUserIds = accessUserIds;
+    if (canManageAccess) body.isOfficeFile = isOfficeFile;
     try {
       await apiFetch(`/api/properties/${id}`, {
         method: "PATCH",
@@ -382,6 +388,12 @@ export default function PropertyDetailPage() {
             ) : (
               <Badge className="bg-amber-50 text-amber-700 border-amber-200">کارشناسی نشده</Badge>
             )}
+            {p.isOfficeFile && (
+              <Badge className="bg-violet-100 text-violet-800 border-violet-200">فایل دفتر</Badge>
+            )}
+            {p.isAdvertised && (
+              <Badge className="bg-sky-50 text-sky-700 border-sky-200">آگهی‌شده</Badge>
+            )}
           </div>
           <dl className="text-sm">
             <Row label="مشاور فایل" value={p.listedBy?.name ?? "—"} />
@@ -466,6 +478,12 @@ export default function PropertyDetailPage() {
                 />
               </dd>
             </div>
+            <div className="flex items-center justify-between gap-3 py-2 border-b border-[var(--line)] last:border-0">
+              <dt className="shrink-0 text-[12.5px] text-[var(--ink-3)]">آگهی</dt>
+              <dd>
+                <AdvertiseButton propertyId={p.id} onChanged={load} />
+              </dd>
+            </div>
           </dl>
         </Card>
 
@@ -523,6 +541,13 @@ export default function PropertyDetailPage() {
                   <p className="text-[12px] text-[var(--ink-3)] mb-2">
                     مشاورهای تیک‌خورده آدرس دقیق، نام و شماره مالک را می‌بینند. بقیه فقط اطلاعات جزئی فایل را می‌بینند.
                   </p>
+                  <label className="mb-2 flex items-start gap-2 text-[13px] cursor-pointer">
+                    <input type="checkbox" checked={isOfficeFile} onChange={(e) => setIsOfficeFile(e.target.checked)} className="mt-0.5" />
+                    <span>
+                      <span className="font-bold">فایل دفتر</span>
+                      <span className="block text-[12px] text-[var(--ink-3)]">همه مشاورها به اطلاعات کامل فایل دسترسی دارند؛ نیازی به تیک زدن تک‌تک مشاورها نیست.</span>
+                    </span>
+                  </label>
                   {accessCandidates.length === 0 ? (
                     <p className="text-[13px] text-[var(--ink-3)]">مشاور دیگری در سیستم نیست.</p>
                   ) : (

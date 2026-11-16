@@ -75,7 +75,7 @@ export async function POST(req: NextRequest) {
     if (d.propertyId) {
       const property = await prisma.property.findUnique({ where: { id: d.propertyId } });
       if (!property || property.deletedAt) return NextResponse.json({ error: "فایل یافت نشد" }, { status: 404 });
-      const canAccessProp = property.listedById === session.user.id || property.visibility === "TEAM_VISIBLE" || await hasRestrictedAccess(prisma as never, property.id, session.user.id);
+      const canAccessProp = property.listedById === session.user.id || property.visibility === "TEAM_VISIBLE" || property.isOfficeFile || await hasRestrictedAccess(prisma as never, property.id, session.user.id);
       if (!canAccessProp) return NextResponse.json({ error: "به این فایل دسترسی ندارید" }, { status: 403 });
     }
   }
