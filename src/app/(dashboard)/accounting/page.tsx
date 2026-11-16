@@ -279,8 +279,17 @@ export default function AccountingPage() {
     setEditPrice(deal.dealSalePriceToman ?? "");
     setEditDeposit(deal.dealDepositToman ?? "");
     setEditRent(deal.dealMonthlyRentToman ?? "");
-    setEditPercent(deal.commissionPercent != null ? String(deal.commissionPercent) : "");
-    setEditAmount(deal.commissionToman ?? "");
+    // پیش‌فرض فروش ۰٫۲۵٪ است؛ اگر درصد از قبل تعیین شده همان می‌ماند؛ برای اجاره پیش‌فرضی نیست
+    const defaultPercent =
+      deal.commissionPercent != null ? String(deal.commissionPercent) : deal.property.dealType === "SALE" ? "0.25" : "";
+    setEditPercent(defaultPercent);
+    const amountSeed =
+      deal.commissionToman != null && deal.commissionToman !== ""
+        ? deal.commissionToman
+        : deal.property.dealType === "SALE" && deal.commissionPercent == null && deal.dealSalePriceToman
+          ? (calcCommissionAmount(deal.dealSalePriceToman, "0.25") ?? "")
+          : "";
+    setEditAmount(amountSeed);
     setEditError("");
     // سهم‌بندی: اگر سهم واقعی دارد همان را بیاور؛ وگرنه پیش‌فرض دفتر ۵۰٪ + مشاور معامله ۵۰٪ —
     // چه کمیسیون داشته باشد چه هنوز «تعیین نشده» باشد؛ وگرنه با محاسبه خودکار مبلغ از روی
@@ -407,7 +416,10 @@ export default function AccountingPage() {
   }
 
   function onEditPercent(v: string) {
-    const clean = toEnDigits(v).replace(/[^0-9]/g, "");
+    // اعشار قبول می‌کند (۰٫۲۵)؛ ممیز فارسی ٫ هم به نقطه تبدیل می‌شود؛ حداکثر ۲ رقم اعشار
+    let clean = toEnDigits(v).replace(/٫/g, ".").replace(/[^0-9.]/g, "");
+    const dot = clean.indexOf(".");
+    if (dot !== -1) clean = clean.slice(0, dot + 1) + clean.slice(dot + 1).replace(/\./g, "").slice(0, 2);
     setEditPercent(clean);
     if (editingDeal?.property.dealType === "SALE") {
       const next = calcCommissionAmount(editPrice, clean);
@@ -988,7 +1000,8 @@ export default function AccountingPage() {
                     className="mt-1"
                     value={editPercent}
                     onChange={(e) => onEditPercent(e.target.value)}
-                    placeholder="مثلا ۱"
+                    placeholder="مثلا ۰٫۲۵"
+                    allowDecimal
                   />
                 </div>
                 <MoneyInput

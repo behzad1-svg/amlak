@@ -63,18 +63,27 @@ export function PhoneInput({ className, onChange, ...props }: React.InputHTMLAtt
   );
 }
 
-export function NumberInput({ className, onChange, ...props }: React.InputHTMLAttributes<HTMLInputElement>) {
+export function NumberInput({ className, onChange, allowDecimal, ...props }: React.InputHTMLAttributes<HTMLInputElement> & { allowDecimal?: boolean }) {
   return (
     <input
       className={cn(fieldBase, className)}
-      inputMode="numeric"
+      inputMode={allowDecimal ? "decimal" : "numeric"}
       dir="ltr"
       onBeforeInput={(e: React.FormEvent<HTMLInputElement> & { data?: string }) => {
         const data = (e.nativeEvent as InputEvent).data;
-        if (data && /[^0-9]/.test(data)) e.preventDefault();
+        if (!data) return;
+        if (allowDecimal ? /[^0-9.٫]/.test(data) : /[^0-9]/.test(data)) e.preventDefault();
       }}
       onChange={(e) => {
-        const filtered = e.target.value.replace(/[^0-9]/g, "");
+        let filtered = e.target.value;
+        if (allowDecimal) {
+          // اعشار قبول می‌کند (۰٫۲۵)؛ ممیز فارسی ٫ به نقطه تبدیل می‌شود؛ حداکثر ۲ رقم اعشار
+          filtered = filtered.replace(/٫/g, ".").replace(/[^0-9.]/g, "");
+          const dot = filtered.indexOf(".");
+          if (dot !== -1) filtered = filtered.slice(0, dot + 1) + filtered.slice(dot + 1).replace(/\./g, "").slice(0, 2);
+        } else {
+          filtered = filtered.replace(/[^0-9]/g, "");
+        }
         if (filtered !== e.target.value) e.target.value = filtered;
         onChange?.(e);
       }}

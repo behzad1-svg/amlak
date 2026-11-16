@@ -13,7 +13,7 @@ import { verifyToken, COOKIE_NAME } from "./lib/jwt";
 // مسیرهای عمومی — تطبیق دقیق یا بر اساس سگمنت، نه startsWith
 // /api/cron/reminders اینجا عمومی است چون خودش با CRON_SECRET احراز هویت می‌کند.
 // (با startsWith، مسیر /loginXYZ هم عمومی محسوب می‌شد).
-const PUBLIC_EXACT = new Set(["/login", "/api/health", "/robots.txt", "/api/cron/reminders", "/saj-logo.png", "/saj-logo-mark.png"]);
+const PUBLIC_EXACT = new Set(["/login", "/api/health", "/robots.txt", "/api/cron/reminders", "/saj-logo.png", "/saj-logo-mark.png", "/icon.png", "/apple-touch-icon.png"]);
 const PUBLIC_API_PREFIXES = ["/api/auth/login"];
 
 function isPublic(pathname: string): boolean {
