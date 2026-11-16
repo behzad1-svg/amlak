@@ -34,14 +34,19 @@ function budgetScore(customerMax: bigint | null, propertyPrice: bigint | null, c
     // بدون سقف، فقط کف را چک کردیم
     return customerMin != null ? 90 : null;
   }
-  if (propertyPrice <= customerMax) {
-    // نزدیک سقف بهتر از خیلی پایین‌تر نیست ولی قابل قبول است
-    const fill = Number((propertyPrice * BigInt(100)) / customerMax);
-    return Math.min(100, 70 + Math.round(fill * 0.3));
+  // بودجه بیشترین وزن را دارد (بهزاد، ۲۵ آبان): اوج ۱۰۰ دقیقاً روی سقف؛
+  // بازه [۰٫۹۵ سقف، سقف] ۹۵ تا ۱۰۰؛ بالای سقف تا ۱۰٪ بالاتر از ۹۰ تا ۷۰
+  // نزولی؛ زیر ۰٫۹۵ سقف با فاصله از سقف کم می‌شود (درجه دو) تا ملک نصف
+  // سقف امتیاز بودجه‌اش حدود ۲۶ بگیرد. بالای ۱۰٪ سقف مثل قبل رد می‌شود.
+  const fill = Number((propertyPrice * BigInt(1000)) / customerMax) / 10;
+  if (fill > 110) return null;
+  if (fill > 100) {
+    return Math.round(90 - ((fill - 100) / 10) * 20);
   }
-  const overPercent = Number(((propertyPrice - customerMax) * BigInt(100)) / customerMax);
-  if (overPercent <= 10) return 70;
-  return null;
+  if (fill >= 95) {
+    return Math.round(95 + ((fill - 95) / 5) * 5);
+  }
+  return Math.round(95 * Math.pow(fill / 95, 2));
 }
 
 /** امتیاز اجاره: مقایسه ودیعه و اجاره با سقف‌های جدا + معادل ماهانه بازار ایران */

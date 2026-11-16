@@ -1,7 +1,7 @@
 "use client";
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
-import { LayoutDashboard, Users, Building2, Bell, LogOut, BarChart3, Settings, UserCog, TrendingUp, Wallet } from "lucide-react";
+import { LayoutDashboard, Users, Building2, Bell, GitMerge, LogOut, BarChart3, Settings, UserCog, TrendingUp, Wallet } from "lucide-react";
 import { cn } from "@/lib/utils";
 import Image from "next/image";
 
@@ -10,10 +10,11 @@ const nav = [
   { href: "/customers", label: "مشتریان", icon: Users },
   { href: "/properties", label: "فایل‌ها", icon: Building2 },
   { href: "/notifications", label: "اعلان‌ها", icon: Bell },
+  { href: "/matching", label: "تطبیق", icon: GitMerge },
   { href: "/accounting", label: "حسابداری", icon: Wallet },
 ];
 
-export function Sidebar({ role, userName, unreadCount, onClose }: { role?: string; userName?: string; unreadCount?: number; onClose?: () => void }) {
+export function Sidebar({ role, userName, unreadCount, unreadMatchCount, onClose }: { role?: string; userName?: string; unreadCount?: number; unreadMatchCount?: number; onClose?: () => void }) {
   const pathname = usePathname();
   const router = useRouter();
   async function logout() {
@@ -61,6 +62,8 @@ export function Sidebar({ role, userName, unreadCount, onClose }: { role?: strin
               {item.label}
               {item.href === "/notifications" && unreadCount ? (
                 <span className={cn("mr-auto rounded-full px-2 py-0.5 text-[11px] font-bold", active ? "bg-white text-[var(--ink)]" : "bg-[var(--pomegranate)] text-white")}>{unreadCount}</span>
+              ) : item.href === "/matching" && unreadMatchCount ? (
+                <span className={cn("mr-auto rounded-full px-2 py-0.5 text-[11px] font-bold", active ? "bg-white text-[var(--ink)]" : "bg-[var(--pomegranate)] text-white")}>{unreadMatchCount}</span>
               ) : null}
             </Link>
           );

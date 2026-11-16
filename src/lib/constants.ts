@@ -233,9 +233,10 @@ export function getStaleInfo(
 }
 
 export const MATCHING_CONFIG = {
-  budgetWeight: 0.5,
-  sizeWeight: 0.3,
-  bedsWeight: 0.2,
+  // بودجه بیشترین وزن را دارد (بهزاد، ۲۵ آبان)
+  budgetWeight: 0.6,
+  sizeWeight: 0.25,
+  bedsWeight: 0.15,
   threshold: 70,
   /** بازار ایران: هر ۳۰ میلیون ودیعه ≈ ۱ میلیون اجاره ماهانه */
   depositToMonthlyDivisor: BigInt("30000000"),

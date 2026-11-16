@@ -13,7 +13,6 @@ import { apiFetch, apiJson, errorMessage } from "@/lib/api";
 import { formatDate, toFaDigits } from "@/lib/utils";
 
 const TYPE_LABELS: Record<string, string> = {
-  MATCH_SUGGESTION: "تطبیق",
   FOLLOW_UP_OVERDUE: "پیگیری",
   VIEWING_REMINDER: "بازدید",
   ACCESS_GRANTED: "دسترسی",
@@ -28,7 +27,6 @@ const PRIORITY_LABELS: Record<string, string> = {
 
 const TYPE_FILTERS = [
   { key: "all", label: "همه" },
-  { key: "MATCH_SUGGESTION", label: "تطبیق" },
   { key: "FOLLOW_UP_OVERDUE", label: "پیگیری" },
   { key: "VIEWING_REMINDER", label: "بازدید" },
   { key: "ACCESS_GRANTED", label: "دسترسی" },
@@ -60,7 +58,8 @@ export default function NotificationsPage() {
     setLoading(true);
     setLoadError(null);
     try {
-      const d = await apiJson<{ notifications?: NotificationRow[] }>("/api/notifications?limit=100");
+      // تطبیق‌ها بخش جداگانه خودشان را دارند (صفحه «تطبیق») و اینجا نشان داده نمی‌شوند.
+      const d = await apiJson<{ notifications?: NotificationRow[] }>("/api/notifications?limit=100&excludeType=MATCH_SUGGESTION");
       setList(d.notifications ?? []);
     } catch (e) {
       setLoadError(errorMessage(e));
@@ -81,7 +80,7 @@ export default function NotificationsPage() {
       await apiFetch("/api/notifications", {
         method: "PATCH",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ markAllRead: true }),
+        body: JSON.stringify({ markAllRead: true, excludeType: "MATCH_SUGGESTION" }),
       });
       load();
       // بج اعلان‌ها در سایدبار از لی‌اوت سروری می‌آید؛ بدون رفرش، عددش کهنه می‌ماند.

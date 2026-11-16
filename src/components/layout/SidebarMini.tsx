@@ -1,7 +1,7 @@
 "use client";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { LayoutDashboard, Users, Building2, Bell, BarChart3, Settings, PanelLeftOpen, UserCog, TrendingUp, Wallet } from "lucide-react";
+import { LayoutDashboard, Users, Building2, Bell, GitMerge, BarChart3, Settings, PanelLeftOpen, UserCog, TrendingUp, Wallet } from "lucide-react";
 import { cn } from "@/lib/utils";
 import Image from "next/image";
 
@@ -10,10 +10,11 @@ const nav = [
   { href: "/customers", icon: Users },
   { href: "/properties", icon: Building2 },
   { href: "/notifications", icon: Bell },
+  { href: "/matching", icon: GitMerge },
   { href: "/accounting", icon: Wallet },
 ];
 
-export function SidebarMini({ role, userName, unreadCount, onExpand }: { role?: string; userName?: string; unreadCount?: number; onExpand?: () => void }) {
+export function SidebarMini({ role, userName, unreadCount, unreadMatchCount, onExpand }: { role?: string; userName?: string; unreadCount?: number; unreadMatchCount?: number; onExpand?: () => void }) {
   const pathname = usePathname();
   return (
     <div className="flex flex-1 flex-col items-center bg-white py-3">
@@ -28,6 +29,7 @@ export function SidebarMini({ role, userName, unreadCount, onExpand }: { role?: 
             <Link key={item.href} href={item.href} className={cn("relative flex h-9 w-9 items-center justify-center rounded-[12px] border", active ? "bg-[var(--ink)] text-white border-[var(--ink)]" : "bg-white border-[var(--line)] text-[var(--ink-3)] hover:bg-[var(--paper-2)]")}>
               <item.icon className="h-[18px] w-[18px]" />
               {item.href === "/notifications" && unreadCount ? <span className="absolute -top-1 -left-1 flex h-4 min-w-4 items-center justify-center rounded-full bg-[var(--pomegranate)] px-1 text-[10px] font-bold text-white">{unreadCount > 9 ? "9+" : unreadCount}</span> : null}
+              {item.href === "/matching" && unreadMatchCount ? <span className="absolute -top-1 -left-1 flex h-4 min-w-4 items-center justify-center rounded-full bg-[var(--pomegranate)] px-1 text-[10px] font-bold text-white">{unreadMatchCount > 9 ? "9+" : unreadMatchCount}</span> : null}
             </Link>
           );
         })}

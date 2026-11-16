@@ -16,9 +16,13 @@ export default async function DashboardLayout({ children }: { children: React.Re
   const role = session.user.role;
   const userName = session.user.name;
   const userId = session.user.id;
-  const unreadCount = await prisma.notification.count({ where: { userId, read: false } });
+  // نشان اعلان‌ها تطبیق‌ها را نمی‌شمارد؛ تطبیق نشان جداگانه خودش را دارد.
+  const [unreadCount, unreadMatchCount] = await Promise.all([
+    prisma.notification.count({ where: { userId, read: false, type: { not: "MATCH_SUGGESTION" } } }),
+    prisma.notification.count({ where: { userId, read: false, type: "MATCH_SUGGESTION" } }),
+  ]);
   return (
-    <DashboardShell role={role} userName={userName} unreadCount={unreadCount}>
+    <DashboardShell role={role} userName={userName} unreadCount={unreadCount} unreadMatchCount={unreadMatchCount}>
       {children}
     </DashboardShell>
   );

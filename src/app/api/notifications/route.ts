@@ -11,11 +11,29 @@ async function getSession() {
   return validateSession(token);
 }
 
+const NOTIFICATION_TYPES = ["MATCH_SUGGESTION", "FOLLOW_UP_OVERDUE", "VIEWING_REMINDER", "ACCESS_GRANTED", "CUSTOMER_TRANSFERRED"] as const;
+type NotificationTypeName = (typeof NOTIFICATION_TYPES)[number];
+
+function invalidType(value: string | null): value is string {
+  return !!value && !(NOTIFICATION_TYPES as readonly string[]).includes(value);
+}
+
 export async function GET(req: NextRequest) {
   const session = await getSession();
   if (!session) return NextResponse.json({ error: "وارد نشده‌اید" }, { status: 401 });
   const { searchParams } = new URL(req.url);
   const unreadOnly = searchParams.get("unreadOnly") === "true";
+  const type = searchParams.get("type");
+  const excludeType = searchParams.get("excludeType");
+  if (invalidType(type)) {
+    return NextResponse.json({ error: "مقدار «type» معتبر نیست" }, { status: 400 });
+  }
+  if (invalidType(excludeType)) {
+    return NextResponse.json({ error: "مقدار «excludeType» معتبر نیست" }, { status: 400 });
+  }
+  if (type && excludeType) {
+    return NextResponse.json({ error: "«type» و «excludeType» را با هم نفرستید" }, { status: 400 });
+  }
   const invalidParam = findInvalidQueryParam([
     { name: "page", value: searchParams.get("page") },
     { name: "limit", value: searchParams.get("limit") },
@@ -27,6 +45,8 @@ export async function GET(req: NextRequest) {
   const limit = Math.min(100, Math.max(1, parseInt(searchParams.get("limit") ?? "50")));
   const where: Record<string, unknown> = { userId: session.user.id };
   if (unreadOnly) where.read = false;
+  if (type) where.type = type as NotificationTypeName;
+  if (excludeType) where.type = { not: excludeType as NotificationTypeName };
   const [notifications, total] = await Promise.all([
     prisma.notification.findMany({ where, orderBy: { createdAt: "desc" }, skip: (page - 1) * limit, take: limit }),
     prisma.notification.count({ where }),
@@ -40,7 +60,26 @@ export async function PATCH(req: NextRequest) {
   if (!session) return NextResponse.json({ error: "وارد نشده‌اید" }, { status: 401 });
   const body = await req.json();
   if (body.markAllRead) {
-    await prisma.notification.updateMany({ where: { userId: session.user.id, read: false }, data: { read: true, readAt: new Date() } });
+    const type = typeof body.type === "string" ? body.type : null;
+    const excludeType = typeof body.excludeType === "string" ? body.excludeType : null;
+    if (invalidType(type)) {
+      return NextResponse.json({ error: "مقدار «type» معتبر نیست" }, { status: 400 });
+    }
+    if (invalidType(excludeType)) {
+      return NextResponse.json({ error: "مقدار «excludeType» معتبر نیست" }, { status: 400 });
+    }
+    if (type && excludeType) {
+      return NextResponse.json({ error: "«type» و «excludeType» را با هم نفرستید" }, { status: 400 });
+    }
+    await prisma.notification.updateMany({
+      where: {
+        userId: session.user.id,
+        read: false,
+        ...(type ? { type: type as NotificationTypeName } : {}),
+        ...(excludeType ? { type: { not: excludeType as NotificationTypeName } } : {}),
+      },
+      data: { read: true, readAt: new Date() },
+    });
     return NextResponse.json({ ok: true });
   }
   if (body.id) {
