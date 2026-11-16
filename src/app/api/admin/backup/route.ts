@@ -4,6 +4,7 @@ import { NextResponse } from "next/server";
 import { spawn } from "node:child_process";
 import { prisma } from "@/lib/prisma";
 import { getSessionFromCookies } from "@/lib/auth";
+import { databaseUrlToPgEnv } from "@/lib/backup";
 
 export const dynamic = "force-dynamic";
 
@@ -19,8 +20,10 @@ export async function GET() {
   const chunks: Buffer[] = [];
   let stderr = "";
   const code: number | null = await new Promise((resolve) => {
-    // آدرس دیتابیس (با رمز) از متغیر محیطی خوانده می‌شود تا در فهرست پروسه‌ها دیده نشود
-    const child = spawn("pg_dump", ["-Fc"], { stdio: ["ignore", "pipe", "pipe"], env: { ...process.env, DATABASE_URL: dbUrl } });
+    // آدرس دیتابیس به متغیرهای PG* تبدیل می‌شود: pg_dump متغیر DATABASE_URL را
+    // نمی‌خواند (قرارداد Prisma/Node است، نه libpq) و رمز هرگز در آرگومان‌های
+    // پروسه قرار نمی‌گیرد تا در فهرست پروسه‌ها دیده نشود
+    const child = spawn("pg_dump", ["-Fc"], { stdio: ["ignore", "pipe", "pipe"], env: { ...process.env, ...databaseUrlToPgEnv(dbUrl) } });
     child.stdout.on("data", (d: Buffer) => chunks.push(d));
     child.stderr.on("data", (d: Buffer) => {
       stderr += d.toString();

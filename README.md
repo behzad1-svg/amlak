@@ -27,11 +27,11 @@ POSTGRES_PASSWORD=<db password>
 docker compose up -d db
 ```
 
-3. Install, migrate, seed (CLI):
+3. Install, apply schema, seed (CLI):
 
 ```bash
 npm install
-npx prisma migrate deploy   # or migrate dev
+npx prisma db push   # no migrations folder — the schema is applied with db push
 node prisma/seed.mjs        # requires SEED_PASSWORD
 npm run dev
 ```

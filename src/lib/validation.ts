@@ -53,6 +53,23 @@ export const changePasswordSchema = z.object({
   newPassword: passwordSchema,
 });
 
+/// رشتهٔ بودجه: خالی یا null یعنی بدون بودجه؛ در غیر این صورت باید عدد صحیح مثبت باشد.
+/// «0» قبول نیست — در تطبیق، سقف صفر باعث تقسیم بر صفر می‌شود.
+const positiveBudgetString = z
+  .string()
+  .regex(/^[0-9]*$/, "بودجه فقط عدد")
+  .refine((v) => v === "" || (/^[0-9]+$/.test(v) && BigInt(v) > BigInt(0)), "بودجه باید بیشتر از صفر باشد");
+
+/**
+ * تبدیل رشتهٔ بودجه به BigInt؛ "0" (و خالی/null) یعنی بدون بودجه.
+ * دفاع دوم بعد از اعتبارسنجی zod — رکوردهای قدیمی با بودجهٔ صفر هم این‌طور نرمال می‌شوند.
+ */
+export function budgetStringToBigInt(value: string | null | undefined): bigint | null {
+  if (!value) return null;
+  const n = BigInt(value);
+  return n > BigInt(0) ? n : null;
+}
+
 export const customerCreateSchema = z.object({
   name: z.string().min(1, "نام و نام خانوادگی الزامی است").max(200),
   phone: z.string().regex(/^[0-9]{10,15}$/, "شماره تماس فقط عدد و ۱۰ تا ۱۵ رقم"),
@@ -70,9 +87,9 @@ export const customerCreateSchema = z.object({
   preferredBeds: z.number().int().min(0).max(20).optional().nullable(),
   preferredSizeMin: z.number().min(0).optional().nullable(),
   preferredSizeMax: z.number().min(0).optional().nullable(),
-  budgetMin: z.string().regex(/^[0-9]*$/, "بودجه فقط عدد").optional().nullable(),
-  budgetMax: z.string().regex(/^[0-9]*$/, "بودجه فقط عدد").optional().nullable(),
-  budgetMaxMonthly: z.string().regex(/^[0-9]*$/, "بودجه فقط عدد").optional().nullable(),
+  budgetMin: positiveBudgetString.optional().nullable(),
+  budgetMax: positiveBudgetString.optional().nullable(),
+  budgetMaxMonthly: positiveBudgetString.optional().nullable(),
   nextFollowUpAt: z.string().optional().nullable(),
   needsManagerReview: z.boolean().optional(),
   managerReviewReason: z.string().max(1000).optional().nullable(),

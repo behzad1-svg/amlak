@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import {
+  budgetStringToBigInt,
   cashboxEntrySchema,
   changePasswordSchema,
   customerCreateSchema,
@@ -116,6 +117,25 @@ describe("customerCreateSchema", () => {
         .success,
     ).toBe(false);
     expect(customerCreateSchema.safeParse({ ...valid, budgetMin: "12a" }).success).toBe(false);
+  });
+
+  it("rejects a zero budget but allows an empty one", () => {
+    expect(customerCreateSchema.safeParse({ ...valid, budgetMax: "0" }).success).toBe(false);
+    expect(customerCreateSchema.safeParse({ ...valid, budgetMax: "00" }).success).toBe(false);
+    expect(customerCreateSchema.safeParse({ ...valid, budgetMaxMonthly: "0" }).success).toBe(false);
+    expect(customerCreateSchema.safeParse({ ...valid, budgetMax: "" }).success).toBe(true);
+    expect(customerCreateSchema.safeParse({ ...valid, budgetMax: null }).success).toBe(true);
+    expect(customerCreateSchema.safeParse({ ...valid, budgetMax: "100" }).success).toBe(true);
+  });
+});
+
+describe("budgetStringToBigInt", () => {
+  it("normalizes zero and empty to null (no budget)", () => {
+    expect(budgetStringToBigInt("0")).toBeNull();
+    expect(budgetStringToBigInt("")).toBeNull();
+    expect(budgetStringToBigInt(null)).toBeNull();
+    expect(budgetStringToBigInt(undefined)).toBeNull();
+    expect(budgetStringToBigInt("100")).toBe(BigInt(100));
   });
 });
 

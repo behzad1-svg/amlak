@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { cookies } from "next/headers";
 import { prisma } from "@/lib/prisma";
 import { validateSession } from "@/lib/auth";
-import { customerCreateSchema, findInvalidQueryParam } from "@/lib/validation";
+import { budgetStringToBigInt, customerCreateSchema, findInvalidQueryParam } from "@/lib/validation";
 import { serializeBigInt } from "@/lib/utils";
 import { getStaleInfo } from "@/lib/constants";
 import { runMatchingForCustomer } from "@/lib/matching";
@@ -290,11 +290,9 @@ export async function POST(req: NextRequest) {
     preferredBeds: d.preferredBeds ?? null,
     preferredSizeMin: d.preferredSizeMin ?? null,
     preferredSizeMax: d.preferredSizeMax ?? null,
-    budgetMin: d.budgetMin ? BigInt(d.budgetMin) : null,
-    budgetMax: d.budgetMax ? BigInt(d.budgetMax) : null,
-    budgetMaxMonthly: (d as { budgetMaxMonthly?: string | null }).budgetMaxMonthly
-      ? BigInt((d as { budgetMaxMonthly: string }).budgetMaxMonthly)
-      : null,
+    budgetMin: budgetStringToBigInt(d.budgetMin),
+    budgetMax: budgetStringToBigInt(d.budgetMax),
+    budgetMaxMonthly: budgetStringToBigInt((d as { budgetMaxMonthly?: string | null }).budgetMaxMonthly),
     nextFollowUpAt: d.nextFollowUpAt ? new Date(d.nextFollowUpAt) : null,
     needsManagerReview: d.needsManagerReview ?? false,
     managerReviewReason: d.managerReviewReason ?? null,

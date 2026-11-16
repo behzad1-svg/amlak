@@ -22,23 +22,26 @@ function inRangeScore(value: number | bigint | null, min: number | bigint | null
   return Math.round(Math.max(0, 100 - (dist / range) * 50));
 }
 
-function budgetScore(customerMax: bigint | null, propertyPrice: bigint | null, customerMin?: bigint | null): number | null {
+export function budgetScore(customerMax: bigint | null, propertyPrice: bigint | null, customerMin?: bigint | null): number | null {
   if (propertyPrice == null) return null;
+  // بودجهٔ صفر یعنی بدون سقف/کف — مثل null رفتار می‌شود تا تقسیم بر صفر رخ ندهد
+  const effMin = customerMin != null && customerMin > BigInt(0) ? customerMin : null;
+  const effMax = customerMax != null && customerMax > BigInt(0) ? customerMax : null;
   // کف بودجه: اگر ملک خیلی ارزان‌تر از حداقل باشد، امتیاز کمی کم می‌شود (نه رد)
-  if (customerMin != null && propertyPrice < customerMin) {
-    const under = Number(((customerMin - propertyPrice) * BigInt(100)) / customerMin);
+  if (effMin != null && propertyPrice < effMin) {
+    const under = Number(((effMin - propertyPrice) * BigInt(100)) / effMin);
     if (under > 40) return null;
     return Math.max(40, 80 - under);
   }
-  if (customerMax == null) {
+  if (effMax == null) {
     // بدون سقف، فقط کف را چک کردیم
-    return customerMin != null ? 90 : null;
+    return effMin != null ? 90 : null;
   }
   // بودجه بیشترین وزن را دارد (بهزاد، ۲۵ آبان): اوج ۱۰۰ دقیقاً روی سقف؛
   // بازه [۰٫۹۵ سقف، سقف] ۹۵ تا ۱۰۰؛ بالای سقف تا ۱۰٪ بالاتر از ۹۰ تا ۷۰
   // نزولی؛ زیر ۰٫۹۵ سقف با فاصله از سقف کم می‌شود (درجه دو) تا ملک نصف
   // سقف امتیاز بودجه‌اش حدود ۲۶ بگیرد. بالای ۱۰٪ سقف مثل قبل رد می‌شود.
-  const fill = Number((propertyPrice * BigInt(1000)) / customerMax) / 10;
+  const fill = Number((propertyPrice * BigInt(1000)) / effMax) / 10;
   if (fill > 110) return null;
   if (fill > 100) {
     return Math.round(90 - ((fill - 100) / 10) * 20);
@@ -50,30 +53,34 @@ function budgetScore(customerMax: bigint | null, propertyPrice: bigint | null, c
 }
 
 /** امتیاز اجاره: مقایسه ودیعه و اجاره با سقف‌های جدا + معادل ماهانه بازار ایران */
-function rentBudgetScore(
+export function rentBudgetScore(
   customerMaxDeposit: bigint | null,
   customerMaxMonthly: bigint | null,
   deposit: bigint | null,
   monthlyRent: bigint | null,
   customerMinDeposit?: bigint | null
 ): number | null {
+  // سقف صفر یعنی بدون سقف — مثل null رفتار می‌شود تا تقسیم بر صفر رخ ندهد
+  const effMaxDeposit = customerMaxDeposit != null && customerMaxDeposit > BigInt(0) ? customerMaxDeposit : null;
+  const effMaxMonthly = customerMaxMonthly != null && customerMaxMonthly > BigInt(0) ? customerMaxMonthly : null;
+  const effMinDeposit = customerMinDeposit != null && customerMinDeposit > BigInt(0) ? customerMinDeposit : null;
   const scores: number[] = [];
 
-  if (deposit != null && customerMaxDeposit != null) {
-    const s = budgetScore(customerMaxDeposit, deposit, customerMinDeposit ?? null);
-    if (s === null && customerMaxMonthly == null) return null;
+  if (deposit != null && effMaxDeposit != null) {
+    const s = budgetScore(effMaxDeposit, deposit, effMinDeposit);
+    if (s === null && effMaxMonthly == null) return null;
     if (s !== null) scores.push(s);
-  } else if (deposit != null && customerMinDeposit != null && deposit < customerMinDeposit) {
-    const under = Number(((customerMinDeposit - deposit) * BigInt(100)) / customerMinDeposit);
+  } else if (deposit != null && effMinDeposit != null && deposit < effMinDeposit) {
+    const under = Number(((effMinDeposit - deposit) * BigInt(100)) / effMinDeposit);
     if (under > 40) return null;
     scores.push(Math.max(40, 80 - under));
   }
 
-  if (monthlyRent != null && customerMaxMonthly != null) {
-    const s = inRangeScore(monthlyRent, null, customerMaxMonthly);
+  if (monthlyRent != null && effMaxMonthly != null) {
+    const s = inRangeScore(monthlyRent, null, effMaxMonthly);
     if (s === null) return null;
-    if (monthlyRent > customerMaxMonthly) {
-      const over = Number(((monthlyRent - customerMaxMonthly) * BigInt(100)) / customerMaxMonthly);
+    if (monthlyRent > effMaxMonthly) {
+      const over = Number(((monthlyRent - effMaxMonthly) * BigInt(100)) / effMaxMonthly);
       if (over > 10) return null;
       scores.push(70);
     } else {
@@ -82,11 +89,11 @@ function rentBudgetScore(
   }
 
   // معادل ماهانه: اجاره + ودیعه/۳۰ — اگر فقط سقف ودیعه داریم
-  if (deposit != null && monthlyRent != null && customerMaxDeposit != null && customerMaxMonthly == null) {
+  if (deposit != null && monthlyRent != null && effMaxDeposit != null && effMaxMonthly == null) {
     const equivMonthly = monthlyRent + deposit / MATCHING_CONFIG.depositToMonthlyDivisor;
-    const capFromDeposit = customerMaxDeposit / MATCHING_CONFIG.depositToMonthlyDivisor;
+    const capFromDeposit = effMaxDeposit / MATCHING_CONFIG.depositToMonthlyDivisor;
     const softCap = (capFromDeposit * BigInt(120)) / BigInt(100);
-    if (equivMonthly > softCap && deposit > customerMaxDeposit) return null;
+    if (equivMonthly > softCap && deposit > effMaxDeposit) return null;
   }
 
   if (scores.length === 0) return null;
@@ -156,23 +163,27 @@ function effectiveAreas(cust: CustLike): string[] {
   return cust.preferredArea ? [cust.preferredArea] : [];
 }
 
-function scorePair(cust: CustLike, prop: PropLike): { score: number; reasons: string[] } | null {
+export function scorePair(cust: CustLike, prop: PropLike): { score: number; reasons: string[] } | null {
   if (cust.preferredDealType && cust.preferredDealType !== prop.dealType) return null;
   if (cust.preferredType && cust.preferredType !== prop.type) return null;
   const areas = effectiveAreas(cust);
   if (areas.length > 0 && !areas.includes(prop.region)) return null;
 
   const budgetMaxMonthly = (cust as { budgetMaxMonthly?: bigint | null }).budgetMaxMonthly ?? null;
+  // بودجهٔ صفر یعنی بدون سقف — مثل null رفتار می‌شود (دفاع سوم، بعد از zod و نرمال‌سازی در روت)
+  const effBudgetMax = cust.budgetMax != null && cust.budgetMax > BigInt(0) ? cust.budgetMax : null;
+  const effBudgetMaxMonthly = budgetMaxMonthly != null && budgetMaxMonthly > BigInt(0) ? budgetMaxMonthly : null;
+  const effBudgetMin = cust.budgetMin != null && cust.budgetMin > BigInt(0) ? cust.budgetMin : null;
 
   let bScore: number | null = null;
   if (prop.dealType === "RENT" || cust.preferredDealType === "RENT") {
-    bScore = rentBudgetScore(cust.budgetMax, budgetMaxMonthly, prop.depositToman, prop.monthlyRentToman, cust.budgetMin);
+    bScore = rentBudgetScore(effBudgetMax, effBudgetMaxMonthly, prop.depositToman, prop.monthlyRentToman, effBudgetMin);
   } else {
-    bScore = budgetScore(cust.budgetMax, prop.salePriceToman, cust.budgetMin);
+    bScore = budgetScore(effBudgetMax, prop.salePriceToman, effBudgetMin);
   }
 
   // سقف بودجه رد صریح
-  if (cust.budgetMax != null || budgetMaxMonthly != null) {
+  if (effBudgetMax != null || effBudgetMaxMonthly != null) {
     if (bScore === null) return null;
   }
 

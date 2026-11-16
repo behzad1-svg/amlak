@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { cookies } from "next/headers";
 import { prisma } from "@/lib/prisma";
 import { validateSession } from "@/lib/auth";
-import { customerUpdateSchema } from "@/lib/validation";
+import { budgetStringToBigInt, customerUpdateSchema } from "@/lib/validation";
 import { serializeBigInt } from "@/lib/utils";
 import { canAccessCustomer } from "@/lib/access";
 import { runMatchingForCustomer } from "@/lib/matching";
@@ -114,11 +114,11 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
   if (d.preferredBeds !== undefined) updateData.preferredBeds = d.preferredBeds;
   if (d.preferredSizeMin !== undefined) updateData.preferredSizeMin = d.preferredSizeMin;
   if (d.preferredSizeMax !== undefined) updateData.preferredSizeMax = d.preferredSizeMax;
-  if (d.budgetMin !== undefined) updateData.budgetMin = d.budgetMin ? BigInt(d.budgetMin as string) : null;
-  if (d.budgetMax !== undefined) updateData.budgetMax = d.budgetMax ? BigInt(d.budgetMax as string) : null;
+  if (d.budgetMin !== undefined) updateData.budgetMin = budgetStringToBigInt(d.budgetMin as string);
+  if (d.budgetMax !== undefined) updateData.budgetMax = budgetStringToBigInt(d.budgetMax as string);
   if ((d as { budgetMaxMonthly?: string | null }).budgetMaxMonthly !== undefined) {
     const m = (d as { budgetMaxMonthly?: string | null }).budgetMaxMonthly;
-    updateData.budgetMaxMonthly = m ? BigInt(m) : null;
+    updateData.budgetMaxMonthly = budgetStringToBigInt(m);
   }
   if (d.nextFollowUpAt !== undefined) updateData.nextFollowUpAt = d.nextFollowUpAt ? new Date(d.nextFollowUpAt as string) : null;
   const didSetFollowUp = d.nextFollowUpAt !== undefined;
