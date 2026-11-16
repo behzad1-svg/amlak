@@ -76,6 +76,11 @@ type CashboxEntry = {
   note: string | null;
   occurredAt: string;
   createdBy: { id: string; name: string };
+  // ساخت‌یافته از سرور (از dealId/shareId حل می‌شود) — دستی‌ها null/عنوان‌اند
+  dealCode: string | null;
+  dealTitle: string | null;
+  personName: string | null;
+  purpose: string;
 };
 
 type AgentRow = {
@@ -1015,7 +1020,9 @@ export default function AccountingPage() {
                   <table className="w-full text-sm">
                     <thead>
                       <tr className="border-b text-zinc-500 text-[12px]">
-                        <th className="py-2 text-right">عنوان</th>
+                        <th className="py-2 text-right">بابت</th>
+                        <th className="py-2 text-right">معامله</th>
+                        <th className="py-2 text-right">مبدا / مقصد</th>
                         <th className="py-2">نوع</th>
                         <th className="py-2">مبلغ</th>
                         <th className="py-2">تاریخ</th>
@@ -1026,8 +1033,18 @@ export default function AccountingPage() {
                       {cashbox.entries.map((e) => (
                         <tr key={e.id} className="border-b last:border-0">
                           <td className="py-2.5 pl-2 text-right">
-                            <div className="font-medium">{e.title}</div>
+                            <div className="font-medium">{e.purpose}</div>
                             {e.note && <div className="text-[12px] text-[var(--ink-3)]">{e.note}</div>}
+                          </td>
+                          <td className="py-2.5 pl-2 text-right">
+                            {e.dealTitle ? (
+                              <div>{e.dealCode ? `${e.dealCode} — ` : ""}{e.dealTitle}</div>
+                            ) : (
+                              <span className="text-zinc-400">—</span>
+                            )}
+                          </td>
+                          <td className="py-2.5 pl-2 text-right">
+                            {e.personName ?? <span className="text-zinc-400">—</span>}
                           </td>
                           <td className="py-2.5 text-center">
                             <span className={e.type === "IN" ? "text-emerald-600 font-bold" : "text-red-600 font-bold"}>
