@@ -166,6 +166,10 @@ export default function CustomerDetailPage() {
   const [visPropSearch, setVisPropSearch] = useState("");
   const [visPropDealType, setVisPropDealType] = useState("");
   const [visPropAdvisorId, setVisPropAdvisorId] = useState("");
+  const [visPropPriceMin, setVisPropPriceMin] = useState("");
+  const [visPropPriceMax, setVisPropPriceMax] = useState("");
+  const [visPropRentMin, setVisPropRentMin] = useState("");
+  const [visPropRentMax, setVisPropRentMax] = useState("");
   const visPropertyIdRef = useRef("");
 
   // نقد ۱ — بارگذاری با کمک‌کنندهٔ مرکزی؛ خطا پیام + تلاش دوباره دارد
@@ -216,6 +220,10 @@ export default function CustomerDetailPage() {
     if (visPropSearch.trim()) params.set("search", visPropSearch.trim());
     if (visPropDealType) params.set("dealType", visPropDealType);
     if (visPropAdvisorId) params.set("listedById", visPropAdvisorId);
+    if (visPropPriceMin) params.set("priceMin", visPropPriceMin);
+    if (visPropPriceMax) params.set("priceMax", visPropPriceMax);
+    if (visPropRentMin) params.set("rentMin", visPropRentMin);
+    if (visPropRentMax) params.set("rentMax", visPropRentMax);
     try {
       const d = await apiJson<{ properties?: { id: string; title: string; code?: string | null }[]; total?: number } | { id: string; title: string; code?: string | null }[]>(`/api/properties?${params.toString()}`);
       const list = (Array.isArray(d) ? d : d.properties ?? []) as { id: string; title: string; code?: string | null }[];
@@ -232,7 +240,7 @@ export default function CustomerDetailPage() {
     } catch (e) {
       setError(errorMessage(e));
     }
-  }, [visPropSearch, visPropDealType, visPropAdvisorId]);
+  }, [visPropSearch, visPropDealType, visPropAdvisorId, visPropPriceMin, visPropPriceMax, visPropRentMin, visPropRentMax]);
 
   useEffect(() => {
     visPropertyIdRef.current = visProperty;
@@ -241,9 +249,9 @@ export default function CustomerDetailPage() {
   useEffect(() => {
     const t = setTimeout(() => {
       loadPropertyOptions();
-    }, visPropSearch.trim() ? 280 : 0);
+    }, visPropSearch.trim() || visPropPriceMin || visPropPriceMax || visPropRentMin || visPropRentMax ? 280 : 0);
     return () => clearTimeout(t);
-  }, [visPropSearch, visPropDealType, visPropAdvisorId, loadPropertyOptions]);
+  }, [visPropSearch, visPropDealType, visPropAdvisorId, visPropPriceMin, visPropPriceMax, visPropRentMin, visPropRentMax, loadPropertyOptions]);
 
   async function refreshFollowUps() {
     const r = await apiJson<FollowUp[]>(`/api/customers/${id}/follow-ups`);
@@ -1068,6 +1076,44 @@ export default function CustomerDetailPage() {
                     <option key={a.id} value={a.id}>{a.name}</option>
                   ))}
                 </Select>
+              </div>
+              <div className="md:col-span-2 grid grid-cols-1 gap-2 sm:grid-cols-2">
+                <div className="flex items-center gap-1.5">
+                  <Input
+                    inputMode="numeric"
+                    dir="ltr"
+                    placeholder={visPropDealType === "RENT" ? "قیمت/ودیعه از" : "قیمت از"}
+                    value={visPropPriceMin}
+                    onChange={(e) => setVisPropPriceMin(e.target.value.replace(/[^0-9]/g, ""))}
+                  />
+                  <span className="text-[var(--ink-3)]">تا</span>
+                  <Input
+                    inputMode="numeric"
+                    dir="ltr"
+                    placeholder={visPropDealType === "RENT" ? "قیمت/ودیعه تا" : "قیمت تا"}
+                    value={visPropPriceMax}
+                    onChange={(e) => setVisPropPriceMax(e.target.value.replace(/[^0-9]/g, ""))}
+                  />
+                </div>
+                {visPropDealType === "RENT" && (
+                  <div className="flex items-center gap-1.5">
+                    <Input
+                      inputMode="numeric"
+                      dir="ltr"
+                      placeholder="اجاره ماهانه از"
+                      value={visPropRentMin}
+                      onChange={(e) => setVisPropRentMin(e.target.value.replace(/[^0-9]/g, ""))}
+                    />
+                    <span className="text-[var(--ink-3)]">تا</span>
+                    <Input
+                      inputMode="numeric"
+                      dir="ltr"
+                      placeholder="اجاره ماهانه تا"
+                      value={visPropRentMax}
+                      onChange={(e) => setVisPropRentMax(e.target.value.replace(/[^0-9]/g, ""))}
+                    />
+                  </div>
+                )}
               </div>
               <div className="md:col-span-2">
                 <SearchSelect label="فایل / ملک" required value={visProperty} onChange={setVisProperty} options={visPropertyOptions} placeholder="فایل را جستجو و انتخاب کنید..." onSearchChange={setVisPropSearch} />

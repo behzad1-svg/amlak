@@ -49,6 +49,10 @@ export function StageOutcomeModal({
   const [agentFilter, setAgentFilter] = useState("");
   const [dealTypeFilter, setDealTypeFilter] = useState(preferredDealType ?? "");
   const [titleSearch, setTitleSearch] = useState("");
+  const [priceMin, setPriceMin] = useState("");
+  const [priceMax, setPriceMax] = useState("");
+  const [rentMin, setRentMin] = useState("");
+  const [rentMax, setRentMax] = useState("");
   const [agents, setAgents] = useState<{ id: string; name: string }[]>([]);
   const propertyIdRef = useRef("");
   const { isOwner } = useRole();
@@ -108,6 +112,10 @@ export function StageOutcomeModal({
     if (dealTypeFilter) params.set("dealType", dealTypeFilter);
     if (agentFilter && isOwner) params.set("listedById", agentFilter);
     if (titleSearch.trim()) params.set("search", titleSearch.trim());
+    if (priceMin) params.set("priceMin", priceMin);
+    if (priceMax) params.set("priceMax", priceMax);
+    if (rentMin) params.set("rentMin", rentMin);
+    if (rentMax) params.set("rentMax", rentMax);
     if (preferredType) params.set("type", preferredType);
     const t = setTimeout(() => {
       apiJson<{ properties?: PropertyOption[]; total?: number } | PropertyOption[]>(`/api/properties?${params.toString()}`)
@@ -129,9 +137,9 @@ export function StageOutcomeModal({
           setPropertiesTotal(null);
           setPropertiesError("لیست فایل‌ها بارگذاری نشد — مودال را ببندید و دوباره باز کنید.");
         });
-    }, titleSearch.trim() ? 280 : 0);
+    }, titleSearch.trim() || priceMin || priceMax || rentMin || rentMax ? 280 : 0);
     return () => clearTimeout(t);
-  }, [isWon, dealTypeFilter, agentFilter, titleSearch, preferredType, isOwner]);
+  }, [isWon, dealTypeFilter, agentFilter, titleSearch, priceMin, priceMax, rentMin, rentMax, preferredType, isOwner]);
 
   async function submit(e: React.FormEvent) {
     e.preventDefault();
@@ -195,6 +203,44 @@ export function StageOutcomeModal({
                       <option value="">همه مشاورها</option>
                       {agents.map((a) => <option key={a.id} value={a.id}>{a.name}</option>)}
                     </Select>
+                  )}
+                </div>
+                <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
+                  <div className="flex items-center gap-1.5">
+                    <Input
+                      inputMode="numeric"
+                      dir="ltr"
+                      placeholder={dealTypeFilter === "RENT" ? "قیمت/ودیعه از" : "قیمت از"}
+                      value={priceMin}
+                      onChange={(e) => setPriceMin(e.target.value.replace(/[^0-9]/g, ""))}
+                    />
+                    <span className="text-[var(--ink-3)]">تا</span>
+                    <Input
+                      inputMode="numeric"
+                      dir="ltr"
+                      placeholder={dealTypeFilter === "RENT" ? "قیمت/ودیعه تا" : "قیمت تا"}
+                      value={priceMax}
+                      onChange={(e) => setPriceMax(e.target.value.replace(/[^0-9]/g, ""))}
+                    />
+                  </div>
+                  {dealTypeFilter === "RENT" && (
+                    <div className="flex items-center gap-1.5">
+                      <Input
+                        inputMode="numeric"
+                        dir="ltr"
+                        placeholder="اجاره ماهانه از"
+                        value={rentMin}
+                        onChange={(e) => setRentMin(e.target.value.replace(/[^0-9]/g, ""))}
+                      />
+                      <span className="text-[var(--ink-3)]">تا</span>
+                      <Input
+                        inputMode="numeric"
+                        dir="ltr"
+                        placeholder="اجاره ماهانه تا"
+                        value={rentMax}
+                        onChange={(e) => setRentMax(e.target.value.replace(/[^0-9]/g, ""))}
+                      />
+                    </div>
                   )}
                 </div>
                 <SearchSelect

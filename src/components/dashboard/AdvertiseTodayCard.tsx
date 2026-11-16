@@ -4,7 +4,7 @@ import Link from "next/link";
 import { Megaphone } from "lucide-react";
 import { Card, CardHeader, CardTitle } from "@/components/ui/Card";
 import { Button } from "@/components/ui/Button";
-import { Select } from "@/components/ui/Input";
+import { Input, Select } from "@/components/ui/Input";
 import { SearchSelect, type SearchOption } from "@/components/ui/SearchSelect";
 import { apiFetch, apiJson, errorMessage } from "@/lib/api";
 import { toFaDigits } from "@/lib/utils";
@@ -20,6 +20,10 @@ export function AdvertiseTodayCard() {
   const [propSearch, setPropSearch] = useState("");
   const [propDealType, setPropDealType] = useState("");
   const [propAdvisorId, setPropAdvisorId] = useState("");
+  const [propPriceMin, setPropPriceMin] = useState("");
+  const [propPriceMax, setPropPriceMax] = useState("");
+  const [propRentMin, setPropRentMin] = useState("");
+  const [propRentMax, setPropRentMax] = useState("");
   const [fileAdvisorOptions, setFileAdvisorOptions] = useState<SearchOption[]>([]);
   const [propertyId, setPropertyId] = useState("");
   const propertyIdRef = useRef("");
@@ -33,6 +37,10 @@ export function AdvertiseTodayCard() {
     if (propSearch.trim()) params.set("search", propSearch.trim());
     if (propDealType) params.set("dealType", propDealType);
     if (propAdvisorId && isOwner) params.set("listedById", propAdvisorId);
+    if (propPriceMin) params.set("priceMin", propPriceMin);
+    if (propPriceMax) params.set("priceMax", propPriceMax);
+    if (propRentMin) params.set("rentMin", propRentMin);
+    if (propRentMax) params.set("rentMax", propRentMax);
     try {
       const d = await apiJson<{ properties?: { id: string; title: string; code?: string | null }[]; total?: number } | { id: string; title: string; code?: string | null }[]>(`/api/properties?${params.toString()}`);
       const list = (Array.isArray(d) ? d : d.properties ?? []) as { id: string; title: string; code?: string | null }[];
@@ -49,7 +57,7 @@ export function AdvertiseTodayCard() {
     } catch {
       // خطای بارگذاری لیست فایل بی‌صدا رد می‌شود — مثل قبل
     }
-  }, [propSearch, propDealType, propAdvisorId, isOwner]);
+  }, [propSearch, propDealType, propAdvisorId, propPriceMin, propPriceMax, propRentMin, propRentMax, isOwner]);
 
   useEffect(() => {
     propertyIdRef.current = propertyId;
@@ -58,9 +66,9 @@ export function AdvertiseTodayCard() {
   useEffect(() => {
     const t = setTimeout(() => {
       loadPropertyOptions();
-    }, propSearch.trim() ? 280 : 0);
+    }, propSearch.trim() || propPriceMin || propPriceMax || propRentMin || propRentMax ? 280 : 0);
     return () => clearTimeout(t);
-  }, [propSearch, propDealType, propAdvisorId, loadPropertyOptions]);
+  }, [propSearch, propDealType, propAdvisorId, propPriceMin, propPriceMax, propRentMin, propRentMax, loadPropertyOptions]);
 
   useEffect(() => {
     apiJson<unknown>("/api/users")
@@ -118,6 +126,44 @@ export function AdvertiseTodayCard() {
                 <option key={o.id} value={o.id}>{o.label}</option>
               ))}
             </Select>
+          )}
+        </div>
+        <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
+          <div className="flex items-center gap-1.5">
+            <Input
+              inputMode="numeric"
+              dir="ltr"
+              placeholder={propDealType === "RENT" ? "قیمت/ودیعه از" : "قیمت از"}
+              value={propPriceMin}
+              onChange={(e) => setPropPriceMin(e.target.value.replace(/[^0-9]/g, ""))}
+            />
+            <span className="text-[var(--ink-3)]">تا</span>
+            <Input
+              inputMode="numeric"
+              dir="ltr"
+              placeholder={propDealType === "RENT" ? "قیمت/ودیعه تا" : "قیمت تا"}
+              value={propPriceMax}
+              onChange={(e) => setPropPriceMax(e.target.value.replace(/[^0-9]/g, ""))}
+            />
+          </div>
+          {propDealType === "RENT" && (
+            <div className="flex items-center gap-1.5">
+              <Input
+                inputMode="numeric"
+                dir="ltr"
+                placeholder="اجاره ماهانه از"
+                value={propRentMin}
+                onChange={(e) => setPropRentMin(e.target.value.replace(/[^0-9]/g, ""))}
+              />
+              <span className="text-[var(--ink-3)]">تا</span>
+              <Input
+                inputMode="numeric"
+                dir="ltr"
+                placeholder="اجاره ماهانه تا"
+                value={propRentMax}
+                onChange={(e) => setPropRentMax(e.target.value.replace(/[^0-9]/g, ""))}
+              />
+            </div>
           )}
         </div>
         <SearchSelect
