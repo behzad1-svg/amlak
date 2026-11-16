@@ -8,6 +8,7 @@ import { getStaleInfo } from "@/lib/constants";
 import { runMatchingForCustomer } from "@/lib/matching";
 import { createAuditLog } from "@/lib/audit";
 import { hasPermission } from "@/lib/permissions";
+import { persianSearchOr } from "@/lib/search";
 
 async function getSession() {
   const cookieStore = await cookies();
@@ -86,9 +87,10 @@ export async function GET(req: NextRequest) {
     and.push({ stage });
   }
   if (search) {
+    // جستجوی فارسی با نیم‌فاصله برای نام؛ شماره تلفن بدون تغییر
     and.push({
       OR: [
-        { name: { contains: search, mode: "insensitive" } },
+        ...persianSearchOr(["name"], search),
         { phone: { contains: search } },
       ],
     });

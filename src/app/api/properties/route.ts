@@ -9,6 +9,7 @@ import { runMatchingForProperty } from "@/lib/matching";
 import { createAuditLog } from "@/lib/audit";
 import { hasPermission } from "@/lib/permissions";
 import { nextPropertyCode } from "@/lib/propertyCode";
+import { persianSearchOr } from "@/lib/search";
 
 async function getSession() {
   const cookieStore = await cookies();
@@ -85,14 +86,8 @@ export async function GET(req: NextRequest) {
   if (source) and.push({ source });
 
   if (search) {
-    and.push({
-      OR: [
-        { title: { contains: search, mode: "insensitive" } },
-        { code: { contains: search, mode: "insensitive" } },
-        { address: { contains: search, mode: "insensitive" } },
-        { region: { contains: search, mode: "insensitive" } },
-      ],
-    });
+    // جستجوی فارسی با نیم‌فاصله: «سهمبندی» باید «سهم‌بندی» را هم پیدا کند
+    and.push({ OR: persianSearchOr(["title", "code", "address", "region"], search) });
   }
 
   // قیمت: فروش = salePrice؛ رهن = deposit (+ اجاره ماهانه اختیاری)؛ بدون نوع معامله = هر دو
