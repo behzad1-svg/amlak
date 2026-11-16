@@ -1035,7 +1035,7 @@ export default function AccountingPage() {
               role="dialog"
               aria-modal="true"
               aria-label={!dealHasIncome(editingDeal) ? "تعیین کمیسیون" : "ویرایش قیمت و کمیسیون"}
-              className="relative w-full max-w-lg rounded-[16px] border border-[var(--line)] bg-white p-5 shadow-xl"
+              className="relative max-h-[calc(100dvh-2rem)] w-full max-w-lg overflow-y-auto rounded-[16px] border border-[var(--line)] bg-white p-5 shadow-xl"
             >
               <h3 className="text-[15px] font-extrabold">
                 {!dealHasIncome(editingDeal) ? "تعیین کمیسیون" : "ویرایش قیمت و کمیسیون"}

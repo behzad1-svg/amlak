@@ -135,7 +135,7 @@ export function StageOutcomeModal({
         role="dialog"
         aria-modal="true"
         aria-label={isWon ? "ثبت موفقیت مشتری" : "ثبت ناموفقی مشتری"}
-        className="relative w-full max-w-lg rounded-[16px] border border-[var(--line)] bg-white p-5 shadow-xl"
+        className="relative max-h-[calc(100dvh-2rem)] w-full max-w-lg overflow-y-auto rounded-[16px] border border-[var(--line)] bg-white p-5 shadow-xl"
       >
         <h3 className={`text-[15px] font-extrabold ${isWon ? "text-emerald-700" : "text-red-700"}`}>
           {isWon ? "ثبت موفقیت مشتری" : "ثبت ناموفقی مشتری"}
