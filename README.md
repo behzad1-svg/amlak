@@ -48,7 +48,7 @@ npm run dev
 
 ## Data integrity
 
-- `Customer.phone` is **unique** — API returns 409 with `existingId` on clash.
+- `Customer.phone` is unique **per category** (`@@unique([phone, type])`, OWNER separate from other customers) — API returns 409 with `existingId` on clash.
 - `PropertyAccess` is unique per `(propertyId, userId)` — re-grant upserts the same row.
 - `Property.type` / `preferredType` stay **strings** so owners can add types in Settings (DB enum would freeze them).
 - Before unique constraints, run `prisma/dedupe-before-unique.sql` if migrating an old database.

@@ -79,11 +79,16 @@ async function handleSeed(req: NextRequest) {
     }
 
     if (wipe) {
-      await prisma.customer.deleteMany({});
+      // حذف نرم به‌جای حذف فیزیکی: حذف فیزیکی با رابطه‌های بدون onDelete
+      // (مالک فایل، معامله، بازدید) خطای FK می‌دهد و seed با ۵۰۰ می‌میرد.
+      await prisma.customer.updateMany({
+        where: { deletedAt: null },
+        data: { deletedAt: new Date() },
+      });
     }
 
     // Only insert demo customers if table is empty or wipe was requested
-    const existingCount = await prisma.customer.count();
+    const existingCount = await prisma.customer.count({ where: { deletedAt: null } });
     if (existingCount > 0 && !wipe) {
       return NextResponse.json({
         message: "Seed skipped: customers already exist. Pass wipe=true to replace them.",

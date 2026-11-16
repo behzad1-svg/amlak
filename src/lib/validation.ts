@@ -5,16 +5,39 @@ import { z } from "zod";
  * اگر پارامتری نامعتبر باشد نام آن را برمی‌گرداند، وگرنه null.
  * (جلوگیری از ۵۰۰ به‌جای ۴۰۰ موقع BigInt/parseInt/parseFloat روی ورودی نامعتبر)
  * number=true یعنی عدد با اعشار اختیاری هم قبول است (برای parseFloat).
+ * bigint=true یعنی مقدار باید در bigint پستگرس جا شود (برای BigInt).
  */
 export function findInvalidQueryParam(
-  entries: { name: string; value: string | null; number?: boolean }[],
+  entries: { name: string; value: string | null; number?: boolean; bigint?: boolean }[],
 ): string | null {
-  for (const { name, value, number } of entries) {
+  for (const { name, value, number, bigint } of entries) {
     if (!value) continue;
     const ok = number ? /^\d+(\.\d+)?$/.test(value) : /^\d+$/.test(value);
     if (!ok) return name;
+    // bigint=true: مقدار باید در bigint پستگرس جا شود؛ وگرنه BigInt() در
+    // جاوااسکریپت می‌گذرد ولی Prisma موقع ارسال به دیتابیس ۵۰۰ می‌دهد.
+    if (bigint) {
+      try {
+        if (BigInt(value) > PG_BIGINT_MAX) return name;
+      } catch {
+        return name;
+      }
+    }
   }
   return null;
+}
+
+/** سقف bigint در PostgreSQL. */
+export const PG_BIGINT_MAX = BigInt("9223372036854775807");
+
+/**
+ * پارس امن رشته به BigInt برای فیلترهای کوئری؛
+ * خالی، غیرعددی یا بزرگ‌تر از سقف bigint پستگرس → null (به‌جای ۵۰۰).
+ */
+export function safeBigInt(value: string | null | undefined): bigint | null {
+  if (!value || !/^\d+$/.test(value)) return null;
+  const n = BigInt(value);
+  return n <= PG_BIGINT_MAX ? n : null;
 }
 
 

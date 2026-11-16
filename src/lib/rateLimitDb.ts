@@ -17,6 +17,16 @@ export function rateLimitForKey(key: string): number {
 // Fallback درون‌حافظه‌ای — فقط وقتی جدول در دسترس نیست
 const mem = new Map<string, { count: number; resetAt: number }>();
 
+// جاروکنندهٔ دوره‌ای ورودی‌های منقضی — تا fallback در غیاب جدول بی‌مرز رشد نکند.
+const memSweeper = setInterval(() => {
+  const now = Date.now();
+  for (const [k, v] of mem) if (now > v.resetAt) mem.delete(k);
+}, 60_000);
+// unref تا تایمر پروسه را باز نگه ندارد
+if (typeof (memSweeper as unknown as { unref?: unknown }).unref === "function") {
+  (memSweeper as unknown as { unref: () => void }).unref();
+}
+
 function memCheck(key: string): boolean {
   const now = Date.now();
   const cur = mem.get(key);
@@ -53,24 +63,22 @@ export async function checkRateLimitDb(key: string): Promise<boolean> {
 export async function recordRateLimitDb(key: string): Promise<number> {
   const now = new Date();
   try {
-    // افزایش اتمیک در پنجرهٔ زنده: دو درخواست هم‌زمان دیگر نمی‌توانند هر دو
-    // تعداد را ۴ بخوانند و هر دو ۵ بنویسند.
+    // یک دستور اتمیک INSERT ... ON CONFLICT: در پنجرهٔ زنده +۱،
+    // در پنجرهٔ منقضی شمارش از ۱ شروع می‌شود — دو درخواست هم‌زمان دیگر
+    // نمی‌توانند هر دو پنجرهٔ تازه با تعداد ۱ بسازند و یک ضربه گم شود.
     const threshold = new Date(now.getTime() - WINDOW_MS);
-    const updated = await prisma.rateLimitHit.updateMany({
-      where: { key, windowStart: { gte: threshold } },
-      data: { count: { increment: 1 } },
-    });
-    if (updated.count > 0) {
-      const rec = await prisma.rateLimitHit.findUnique({ where: { key } });
-      return rec ? rec.count : rateLimitForKey(key) + 1;
-    }
-    // ردیفی نیست یا پنجره منقضی شده: پنجرهٔ تازه با تعداد ۱.
-    const rec = await prisma.rateLimitHit.upsert({
-      where: { key },
-      update: { windowStart: now, count: 1 },
-      create: { key, windowStart: now, count: 1 },
-    });
-    return rec.count;
+    const rows = await prisma.$queryRaw<{ count: number }[]>`
+      INSERT INTO "RateLimitHit" ("key", "windowStart", "count", "updatedAt")
+      VALUES (${key}, ${now}, 1, ${now})
+      ON CONFLICT ("key") DO UPDATE SET
+        "count" = CASE WHEN "RateLimitHit"."windowStart" >= ${threshold}
+          THEN "RateLimitHit"."count" + 1 ELSE 1 END,
+        "windowStart" = CASE WHEN "RateLimitHit"."windowStart" >= ${threshold}
+          THEN "RateLimitHit"."windowStart" ELSE ${now} END,
+        "updatedAt" = ${now}
+      RETURNING "count"
+    `;
+    return rows[0]?.count ?? rateLimitForKey(key) + 1;
   } catch (e) {
     console.error("[rate-limit] DB record fallback to memory:", e instanceof Error ? e.message : "");
     return memRecord(key);

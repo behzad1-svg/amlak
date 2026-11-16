@@ -14,6 +14,7 @@ import {
   loginSchema,
   propertyCreateSchema,
   propertyUpdateSchema,
+  safeBigInt,
   sessionCardCreateSchema,
   userCreateSchema,
   viewingCreateSchema,
@@ -43,6 +44,45 @@ describe("findInvalidQueryParam", () => {
     expect(findInvalidQueryParam([{ name: "pct", value: "12.5" }])).toBe("pct");
     expect(findInvalidQueryParam([{ name: "pct", value: "12.5.3", number: true }])).toBe("pct");
     expect(findInvalidQueryParam([{ name: "pct", value: "12a", number: true }])).toBe("pct");
+  });
+});
+
+describe("findInvalidQueryParam with bigint", () => {
+  it("rejects values above the PostgreSQL bigint max", () => {
+    expect(
+      findInvalidQueryParam([{ name: "budgetMax", value: "99999999999999999999999", bigint: true }]),
+    ).toBe("budgetMax");
+    expect(
+      findInvalidQueryParam([{ name: "budgetMax", value: "9223372036854775807", bigint: true }]),
+    ).toBeNull();
+    expect(
+      findInvalidQueryParam([{ name: "budgetMax", value: "9223372036854775808", bigint: true }]),
+    ).toBe("budgetMax");
+  });
+
+  it("still rejects non-digits with bigint", () => {
+    expect(findInvalidQueryParam([{ name: "budgetMax", value: "abc", bigint: true }])).toBe("budgetMax");
+  });
+
+  it("does not cap plain number params", () => {
+    expect(
+      findInvalidQueryParam([{ name: "sizeMax", value: "99999999999999999999999", number: true }]),
+    ).toBeNull();
+  });
+});
+
+describe("safeBigInt", () => {
+  it("returns null for empty, non-numeric or out-of-range values", () => {
+    expect(safeBigInt(null)).toBeNull();
+    expect(safeBigInt("")).toBeNull();
+    expect(safeBigInt("abc")).toBeNull();
+    expect(safeBigInt("99999999999999999999999")).toBeNull();
+  });
+
+  it("parses in-range values", () => {
+    expect(safeBigInt("0")).toBe(BigInt(0));
+    expect(safeBigInt("3000000000")).toBe(BigInt(3000000000));
+    expect(safeBigInt("9223372036854775807")).toBe(BigInt("9223372036854775807"));
   });
 });
 

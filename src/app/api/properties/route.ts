@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { cookies } from "next/headers";
 import { prisma } from "@/lib/prisma";
 import { validateSession } from "@/lib/auth";
-import { propertyCreateSchema, findInvalidQueryParam } from "@/lib/validation";
+import { propertyCreateSchema, findInvalidQueryParam, safeBigInt } from "@/lib/validation";
 import { serializeBigInt } from "@/lib/utils";
 import { maskPropertyForTeam, syncPropertyAccess } from "@/lib/access";
 import { runMatchingForProperty } from "@/lib/matching";
@@ -54,10 +54,10 @@ export async function GET(req: NextRequest) {
   const invalidParam = findInvalidQueryParam([
     { name: "page", value: searchParams.get("page") },
     { name: "limit", value: searchParams.get("limit") },
-    { name: "priceMin", value: priceMin },
-    { name: "priceMax", value: priceMax },
-    { name: "rentMin", value: rentMin },
-    { name: "rentMax", value: rentMax },
+    { name: "priceMin", value: priceMin, bigint: true },
+    { name: "priceMax", value: priceMax, bigint: true },
+    { name: "rentMin", value: rentMin, bigint: true },
+    { name: "rentMax", value: rentMax, bigint: true },
     { name: "sizeMin", value: sizeMin, number: true },
     { name: "sizeMax", value: sizeMax, number: true },
     { name: "bedsMin", value: bedsMin },
@@ -101,14 +101,18 @@ export async function GET(req: NextRequest) {
 
   // قیمت: فروش = salePrice؛ رهن = deposit (+ اجاره ماهانه اختیاری)؛ بدون نوع معامله = هر دو
   const salePrice: Record<string, unknown> = {};
-  if (priceMin) salePrice.gte = BigInt(priceMin);
-  if (priceMax) salePrice.lte = BigInt(priceMax);
+  const priceMinValue = safeBigInt(priceMin);
+  const priceMaxValue = safeBigInt(priceMax);
+  if (priceMinValue !== null) salePrice.gte = priceMinValue;
+  if (priceMaxValue !== null) salePrice.lte = priceMaxValue;
   const depositPrice: Record<string, unknown> = {};
-  if (priceMin) depositPrice.gte = BigInt(priceMin);
-  if (priceMax) depositPrice.lte = BigInt(priceMax);
+  if (priceMinValue !== null) depositPrice.gte = priceMinValue;
+  if (priceMaxValue !== null) depositPrice.lte = priceMaxValue;
   const monthlyPrice: Record<string, unknown> = {};
-  if (rentMin) monthlyPrice.gte = BigInt(rentMin);
-  if (rentMax) monthlyPrice.lte = BigInt(rentMax);
+  const rentMinValue = safeBigInt(rentMin);
+  const rentMaxValue = safeBigInt(rentMax);
+  if (rentMinValue !== null) monthlyPrice.gte = rentMinValue;
+  if (rentMaxValue !== null) monthlyPrice.lte = rentMaxValue;
 
   if (priceMin || priceMax) {
     if (dealType === "SALE") {

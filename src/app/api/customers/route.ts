@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { cookies } from "next/headers";
 import { prisma } from "@/lib/prisma";
 import { validateSession } from "@/lib/auth";
-import { budgetStringToBigInt, customerCreateSchema, findInvalidQueryParam } from "@/lib/validation";
+import { budgetStringToBigInt, customerCreateSchema, findInvalidQueryParam, safeBigInt } from "@/lib/validation";
 import { serializeBigInt } from "@/lib/utils";
 import { getStaleInfo } from "@/lib/constants";
 import { runMatchingForCustomer } from "@/lib/matching";
@@ -35,8 +35,8 @@ export async function GET(req: NextRequest) {
   const invalidParam = findInvalidQueryParam([
     { name: "page", value: searchParams.get("page") },
     { name: "limit", value: searchParams.get("limit") },
-    { name: "budgetMin", value: budgetMin },
-    { name: "budgetMax", value: budgetMax },
+    { name: "budgetMin", value: budgetMin, bigint: true },
+    { name: "budgetMax", value: budgetMax, bigint: true },
     { name: "sizeMin", value: sizeMin, number: true },
     { name: "sizeMax", value: sizeMax, number: true },
   ]);
@@ -100,8 +100,10 @@ export async function GET(req: NextRequest) {
   }
   if (session.user.role !== "OWNER") and.push({ assignedAgentId: session.user.id });
   else if (agentId) and.push({ assignedAgentId: agentId });
-  if (budgetMin) and.push({ budgetMax: { gte: BigInt(budgetMin) } });
-  if (budgetMax) and.push({ budgetMin: { lte: BigInt(budgetMax) } });
+  const budgetMinValue = safeBigInt(budgetMin);
+  if (budgetMinValue !== null) and.push({ budgetMax: { gte: budgetMinValue } });
+  const budgetMaxValue = safeBigInt(budgetMax);
+  if (budgetMaxValue !== null) and.push({ budgetMin: { lte: budgetMaxValue } });
   if (sizeMin) and.push({ preferredSizeMax: { gte: parseFloat(sizeMin) } });
   if (sizeMax) and.push({ preferredSizeMin: { lte: parseFloat(sizeMax) } });
   if (temperature === "HOT" || temperature === "WARM" || temperature === "COLD") and.push({ temperature });
@@ -253,7 +255,10 @@ export async function POST(req: NextRequest) {
   });
   if (phoneClash) {
     return NextResponse.json(
-      { error: isOwner ? "مالک با این شماره قبلا ثبت شده است" : "مشتری با این شماره قبلا ثبت شده است" },
+      {
+        error: isOwner ? "مالک با این شماره قبلا ثبت شده است" : "مشتری با این شماره قبلا ثبت شده است",
+        existingId: phoneClash.id,
+      },
       { status: 409 }
     );
   }
@@ -315,8 +320,15 @@ export async function POST(req: NextRequest) {
     // P2002: در حالت نادر چند رکورد حذف‌شدهٔ هم‌شماره (مثلاً BUYER و SELLER)
     // بازیابی می‌تواند با یکتای [phone, type] برخورد کند.
     if ((e as { code?: string }).code === "P2002") {
+      // رکورد متعارض را پیدا کن تا UI بتواند به آن لینک بدهد
+      const clash = await prisma.customer.findFirst({
+        where: { phone: d.phone, ...(isOwner ? { type: "OWNER" } : { type: { not: "OWNER" } }) },
+      });
       return NextResponse.json(
-        { error: isOwner ? "مالک با این شماره قبلا ثبت شده است" : "مشتری با این شماره قبلا ثبت شده است" },
+        {
+          error: isOwner ? "مالک با این شماره قبلا ثبت شده است" : "مشتری با این شماره قبلا ثبت شده است",
+          existingId: clash?.id ?? null,
+        },
         { status: 409 }
       );
     }
