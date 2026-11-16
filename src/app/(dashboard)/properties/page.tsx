@@ -431,7 +431,7 @@ export default function PropertiesPage() {
               </Select>
             )}
             <Select value={filters.source} onChange={(e) => setFilters({ ...filters, source: e.target.value })}>
-              <option value="">منبع (همه)</option>
+              <option value="">شیوه آشنایی (همه)</option>
               {CUSTOMER_SOURCE_OPTIONS.map((s) => <option key={s} value={s}>{CUSTOMER_SOURCE_LABELS[s] ?? s}</option>)}
             </Select>
             <Select value={filters.sort} onChange={(e) => setFilters({ ...filters, sort: e.target.value })}>

@@ -351,7 +351,7 @@ export default function NewPropertyPage() {
             <div>
               <Label htmlFor="f-source">منبع فایل</Label>
               <Select id="f-source" value={form.source} onChange={(e) => upd("source", e.target.value)} className="mt-1">
-                <option value="">—</option>
+                <option value="">انتخاب کنید</option>
                 {CUSTOMER_SOURCE_OPTIONS.map((s) => <option key={s} value={s}>{CUSTOMER_SOURCE_LABELS[s] ?? s}</option>)}
               </Select>
             </div>

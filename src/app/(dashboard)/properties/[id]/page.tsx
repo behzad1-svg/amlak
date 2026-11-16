@@ -487,7 +487,7 @@ export default function PropertyDetailPage() {
               <div>
                 <Label htmlFor="f-source">منبع فایل</Label>
                 <Select id="f-source" className="mt-1" value={form.source} onChange={(e) => setForm({ ...form, source: e.target.value })}>
-                  <option value="">—</option>
+                  <option value="">انتخاب کنید</option>
                   {CUSTOMER_SOURCE_OPTIONS.map((s) => <option key={s} value={s}>{CUSTOMER_SOURCE_LABELS[s] ?? s}</option>)}
                 </Select>
               </div>
