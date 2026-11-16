@@ -8,7 +8,7 @@ import { Header } from "@/components/layout/Header";
 import { Card, CardHeader, CardTitle } from "@/components/ui/Card";
 import { Button } from "@/components/ui/Button";
 import { PageError, PageSkeleton } from "@/components/ui/LoadState";
-import { apiFetch, apiJson, errorMessage } from "@/lib/api";
+import { apiJson, errorMessage } from "@/lib/api";
 import { formatBytes, formatDateTime } from "@/lib/utils";
 import { ACTIVITY_TYPE_LABELS } from "@/lib/constants";
 

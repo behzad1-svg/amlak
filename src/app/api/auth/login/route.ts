@@ -25,8 +25,14 @@ function clientIp(req: NextRequest): string | null {
   return req.headers.get("x-forwarded-for")?.split(",")[0]?.trim() ?? req.headers.get("x-real-ip") ?? null;
 }
 
+// هش ساختگی با هزینهٔ یکسان (۱۰) برای هم‌زمان‌سازی پاسخ کاربر ناموجود یا
+// غیرفعال با مسیر رمز اشتباه — تا زمان پاسخ، وجود یا نبود کاربر را لو ندهد.
+// مقدار، هش bcrypt رشته‌ای است که هیچ رمزی با آن مطابقت نمی‌کند.
+const DUMMY_PASSWORD_HASH =
+  "$2b$10$3.czmHD7N9xqss6oLOcsF.BbQUAUKTw/F5GLBXRNmHdIab.D2N/hO";
+
 export async function POST(req: NextRequest) {
-  const body = await req.json();
+  const body = await req.json().catch(() => null);
   const parsed = loginSchema.safeParse(body);
   if (!parsed.success) {
     return NextResponse.json({ error: parsed.error.issues[0].message }, { status: 400 });
@@ -60,6 +66,8 @@ export async function POST(req: NextRequest) {
 
   const user = await prisma.user.findUnique({ where: { phone } });
   if (!user || !user.active) {
+    // مقایسهٔ ساختگی با همان هزینهٔ bcrypt تا زمان پاسخ با مسیر رمز اشتباه یکی باشد
+    await verifyPassword(password, DUMMY_PASSWORD_HASH);
     if (await recordFailure()) {
       return NextResponse.json({ error: "تعداد تلاش بیش از حد مجاز، لطفا بعدا تلاش کنید" }, { status: 429 });
     }

@@ -135,16 +135,18 @@ export default function NewPropertyPage() {
   // با عوض شدن متراژ مبنا (تغییر متراژ یا نوع ملک)، قیمتِ آخرین‌بار دستی‌واردشده
   // ثابت می‌ماند و دیگری دوباره محاسبه می‌شود
   useEffect(() => {
-    if (baseSizeNum <= 0) return;
-    if (lastPriceField.current === "perMetre") {
-      if (form.pricePerSqm !== "") {
-        const n = Math.round(Number(form.pricePerSqm) * baseSizeNum);
-        if (Number.isFinite(n) && n > 0 && String(n) !== form.salePriceToman) upd("salePriceToman", String(n));
+    void (async () => {
+      if (baseSizeNum <= 0) return;
+      if (lastPriceField.current === "perMetre") {
+        if (form.pricePerSqm !== "") {
+          const n = Math.round(Number(form.pricePerSqm) * baseSizeNum);
+          if (Number.isFinite(n) && n > 0 && String(n) !== form.salePriceToman) upd("salePriceToman", String(n));
+        }
+      } else if (form.salePriceToman !== "") {
+        const n = Math.round(Number(form.salePriceToman) / baseSizeNum);
+        if (Number.isFinite(n) && n > 0 && String(n) !== form.pricePerSqm) upd("pricePerSqm", String(n));
       }
-    } else if (form.salePriceToman !== "") {
-      const n = Math.round(Number(form.salePriceToman) / baseSizeNum);
-      if (Number.isFinite(n) && n > 0 && String(n) !== form.pricePerSqm) upd("pricePerSqm", String(n));
-    }
+    })();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [baseSizeNum]);
 

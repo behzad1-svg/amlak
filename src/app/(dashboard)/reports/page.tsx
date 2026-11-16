@@ -85,7 +85,9 @@ export default function ReportsPage() {
   }, []);
 
   useEffect(() => {
-    load(range);
+    void (async () => {
+      await load(range);
+    })();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [range]);
 

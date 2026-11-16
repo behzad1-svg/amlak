@@ -262,12 +262,16 @@ export default function AccountingPage() {
   }, []);
 
   useEffect(() => {
-    loadBase();
+    void (async () => {
+      await loadBase();
+    })();
   }, [loadBase]);
 
   useEffect(() => {
-    if (tab === "cashbox" && !cashbox) loadCashbox();
-    if (tab === "agents" && !agents) loadAgents();
+    void (async () => {
+      if (tab === "cashbox" && !cashbox) await loadCashbox();
+      if (tab === "agents" && !agents) await loadAgents();
+    })();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [tab]);
 
@@ -428,13 +432,15 @@ export default function AccountingPage() {
   // بنر خطای مجموع، زنده با هر ویرایش به‌روز می‌شود: وقتی مجموع درست شد پاک می‌شود،
   // و تا وقتی غلط است عدد تازه را نشان می‌دهد — نه عدد لحظه ذخیره.
   useEffect(() => {
-    if (!editError.startsWith("مجموع سهم دفتر")) return;
-    const total = sharesTotal();
-    if (Math.abs(total - 100) < 0.01) {
-      setEditError("");
-    } else {
-      setEditError(`مجموع سهم دفتر و سهم‌ها باید دقیقاً ۱۰۰٪ شود (الان ${toFaDigits(String(Math.round(total * 100) / 100))}٪ است)`);
-    }
+    void (async () => {
+      if (!editError.startsWith("مجموع سهم دفتر")) return;
+      const total = sharesTotal();
+      if (Math.abs(total - 100) < 0.01) {
+        setEditError("");
+      } else {
+        setEditError(`مجموع سهم دفتر و سهم‌ها باید دقیقاً ۱۰۰٪ شود (الان ${toFaDigits(String(Math.round(total * 100) / 100))}٪ است)`);
+      }
+    })();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [editOfficePct, editShares]);
 

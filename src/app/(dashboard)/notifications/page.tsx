@@ -12,6 +12,11 @@ import { PageError, PageSkeleton } from "@/components/ui/LoadState";
 import { apiFetch, apiJson, errorMessage } from "@/lib/api";
 import { formatDate, toFaDigits } from "@/lib/utils";
 
+// بیرون از کامپوننت تا Date.now در رندر صدا زده نشود (قانون purity لینت)
+function isoInDays(n: number): string {
+  return new Date(Date.now() + n * 86_400_000).toISOString();
+}
+
 const TYPE_LABELS: Record<string, string> = {
   FOLLOW_UP_OVERDUE: "پیگیری",
   VIEWING_REMINDER: "بازدید",
@@ -108,10 +113,6 @@ export default function NotificationsPage() {
     } catch (e) {
       setActionError(errorMessage(e));
     }
-  }
-
-  function isoInDays(n: number): string {
-    return new Date(Date.now() + n * 86_400_000).toISOString();
   }
 
   // ثبت سریع نتیجه تماس از داخل اعلان پیگیری: تماس ثبت می‌شود، پیگیری

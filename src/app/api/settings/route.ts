@@ -29,7 +29,10 @@ export async function PATCH(req: NextRequest) {
   const session = await getSession();
   if (!session) return NextResponse.json({ error: "وارد نشده‌اید" }, { status: 401 });
   if (session.user.role !== "OWNER") return NextResponse.json({ error: "فقط مدیر" }, { status: 403 });
-  const body = await req.json();
+  const body = await req.json().catch(() => null);
+  if (!body || typeof body !== "object") {
+    return NextResponse.json({ error: "بدنهٔ درخواست معتبر نیست" }, { status: 400 });
+  }
   if (body.regions) {
     if (!Array.isArray(body.regions)) return NextResponse.json({ error: "regions باید آرایه باشد" }, { status: 400 });
     await prisma.appSetting.upsert({ where: { key: "regions" }, update: { value: JSON.stringify(body.regions) }, create: { key: "regions", value: JSON.stringify(body.regions) } });

@@ -12,7 +12,7 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
   const existing = await prisma.viewing.findUnique({ where: { id } });
   if (!existing) return NextResponse.json({ error: "یافت نشد" }, { status: 404 });
   if (session.user.role !== "OWNER" && existing.agentId !== session.user.id) return NextResponse.json({ error: "دسترسی ندارید" }, { status: 403 });
-  const body = await req.json();
+  const body = await req.json().catch(() => null);
   const parsed = viewingUpdateSchema.safeParse(body);
   if (!parsed.success) return NextResponse.json({ error: parsed.error.issues[0].message }, { status: 400 });
   const wasDone = existing.status === "DONE";

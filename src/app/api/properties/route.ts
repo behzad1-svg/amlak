@@ -221,7 +221,7 @@ export async function POST(req: NextRequest) {
   if (!hasPermission(session.user, "canCreateProperty")) {
     return NextResponse.json({ error: "اجازه ثبت فایل ندارید" }, { status: 403 });
   }
-  const body = await req.json();
+  const body = await req.json().catch(() => null);
   const parsed = propertyCreateSchema.safeParse(body);
   if (!parsed.success) return NextResponse.json({ error: parsed.error.issues[0].message }, { status: 400 });
   const d = parsed.data;

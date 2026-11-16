@@ -23,7 +23,7 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
   const isOwner = session.user.role === "OWNER";
   const isCreator = existing.advisorId === session.user.id;
   if (!isOwner && !isCreator) return NextResponse.json({ error: "به این کارت دسترسی ندارید" }, { status: 403 });
-  const body = await req.json();
+  const body = await req.json().catch(() => null);
   const parsed = sessionCardUpdateSchema.safeParse(body);
   if (!parsed.success) return NextResponse.json({ error: parsed.error.issues[0].message }, { status: 400 });
   const d = parsed.data;

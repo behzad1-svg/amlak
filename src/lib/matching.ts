@@ -295,7 +295,6 @@ export async function createMatchNotifications(
   const groups = new Map<string, Group>();
   const sourceRelatedType = sourceType === "customer" ? "Customer" : "Property";
   for (const match of strong) {
-    const targetId = match.id;
     let targetAgentId: string | null = null;
     let custName: string | null = null;
     let propTitle: string | null = null;

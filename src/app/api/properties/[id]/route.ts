@@ -81,7 +81,7 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
   // Only owner/lister can edit
   if (session.user.role !== "OWNER" && existing.listedById !== session.user.id) return NextResponse.json({ error: "دسترسی ندارید" }, { status: 403 });
 
-  const body = await req.json();
+  const body = await req.json().catch(() => null);
   const parsed = propertyUpdateSchema.safeParse(body);
   if (!parsed.success) return NextResponse.json({ error: parsed.error.issues[0].message }, { status: 400 });
   const d = parsed.data;

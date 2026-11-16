@@ -46,3 +46,8 @@ next-env.d.ts
 # dev smoke logs
 .next-dev-smoke.log
 .next-dev-smoke.err.log
+# local run logs / scratch (never commit)
+.next-start.log
+.next-start.err.log
+lint-out.txt
+scripts/video-frames/

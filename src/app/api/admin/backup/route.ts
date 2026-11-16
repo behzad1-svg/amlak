@@ -19,7 +19,8 @@ export async function GET() {
   const chunks: Buffer[] = [];
   let stderr = "";
   const code: number | null = await new Promise((resolve) => {
-    const child = spawn("pg_dump", ["-Fc", dbUrl], { stdio: ["ignore", "pipe", "pipe"] });
+    // آدرس دیتابیس (با رمز) از متغیر محیطی خوانده می‌شود تا در فهرست پروسه‌ها دیده نشود
+    const child = spawn("pg_dump", ["-Fc"], { stdio: ["ignore", "pipe", "pipe"], env: { ...process.env, DATABASE_URL: dbUrl } });
     child.stdout.on("data", (d: Buffer) => chunks.push(d));
     child.stderr.on("data", (d: Buffer) => {
       stderr += d.toString();

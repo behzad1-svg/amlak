@@ -43,14 +43,13 @@ export default function UsersPage() {
   }
 
   useEffect(() => {
-    if (roleLoading) return;
-    if (role !== "OWNER") { setLoading(false); return; }
     void (async () => {
+      if (roleLoading) return;
+      if (role !== "OWNER") { setLoading(false); return; }
       setLoading(true);
       await loadUsers();
       setLoading(false);
     })();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [role, roleLoading]);
 
   async function patchUser(id: string, body: Record<string, unknown>, okMsg: string) {
