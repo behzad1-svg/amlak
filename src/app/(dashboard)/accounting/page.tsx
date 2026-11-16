@@ -9,6 +9,7 @@ import { PageError, PageSkeleton } from "@/components/ui/LoadState";
 import { useRole } from "@/hooks/useRole";
 import { apiFetch, apiJson, errorMessage } from "@/lib/api";
 import { formatDate, formatToman, toEnDigits, toFaDigits } from "@/lib/utils";
+import { isValidJalaliDate, jalaliToGregorian } from "@/lib/jalali";
 
 type Summary = {
   isOwner: boolean;
@@ -202,6 +203,7 @@ export default function AccountingPage() {
   const [entryTitle, setEntryTitle] = useState("");
   const [entryNote, setEntryNote] = useState("");
   const [entryDate, setEntryDate] = useState("");
+  const [entryDateError, setEntryDateError] = useState("");
   const [savingEntry, setSavingEntry] = useState(false);
 
   const loadBase = useCallback(async () => {
@@ -589,6 +591,18 @@ export default function AccountingPage() {
   async function submitEntry(e: React.FormEvent) {
     e.preventDefault();
     setActionError(null);
+    setEntryDateError("");
+    // تاریخ شمسی «۱۴۰۵/۰۸/۲۵»؛ خالی یعنی امروز (مثل قبل)
+    let occurredAt: string | null = null;
+    const rawDate = toEnDigits(entryDate).trim();
+    if (rawDate !== "") {
+      const m = rawDate.match(/^(\d{4})\/(\d{1,2})\/(\d{1,2})$/);
+      if (!m || !isValidJalaliDate(Number(m[1]), Number(m[2]), Number(m[3]))) {
+        setEntryDateError("تاریخ شمسی معتبر نیست؛ مثل ۱۴۰۵/۰۸/۲۵ بنویسید");
+        return;
+      }
+      occurredAt = jalaliToGregorian(Number(m[1]), Number(m[2]), Number(m[3])).toISOString();
+    }
     setSavingEntry(true);
     try {
       await apiFetch("/api/accounting/cashbox", {
@@ -599,13 +613,14 @@ export default function AccountingPage() {
           amount: toEnDigits(entryAmount).replace(/[^0-9]/g, ""),
           title: entryTitle,
           note: entryNote || null,
-          occurredAt: entryDate ? new Date(entryDate).toISOString() : null,
+          occurredAt,
         }),
       });
       setEntryAmount("");
       setEntryTitle("");
       setEntryNote("");
       setEntryDate("");
+      setEntryDateError("");
       await loadCashbox();
       await loadBase();
     } catch (err) {
@@ -678,7 +693,7 @@ export default function AccountingPage() {
             <div className="rounded-[12px] border border-[var(--line)] bg-white px-3 py-2">
               <div className="text-[11px] text-[var(--ink-3)]">کمیسیون پرداخت‌نشده</div>
               <div className="text-[20px] font-extrabold text-red-600">{formatToman(summary.commissionUnpaid)}</div>
-              <div className="text-[12px] text-[var(--ink-3)]">{toFaDigits(String(summary.unpaidCount))} مورد در انتظار تسویه</div>
+              <div className="text-[12px] text-[var(--ink-3)]">{toFaDigits(String(summary.unpaidCount))} مورد در انتظار دریافت</div>
             </div>
             <div className="rounded-[12px] border border-[var(--line)] bg-white px-3 py-2">
               <div className="text-[11px] text-[var(--ink-3)]">معامله قطعی</div>
@@ -828,14 +843,14 @@ export default function AccountingPage() {
                           {!dealHasIncome(d) ? (
                             <span className="text-[var(--ink-3)]">—</span>
                           ) : d.commissionPaid ? (
-                            <span className="text-emerald-600 font-bold">تسویه شد{isOwner ? ` · ${formatDate(d.commissionPaidAt)}` : ""}</span>
+                            <span className="text-emerald-600 font-bold">دریافت شد{isOwner ? ` · ${formatDate(d.commissionPaidAt)}` : ""}</span>
                           ) : (
                             <span className="text-red-600 font-bold">پرداخت‌نشده</span>
                           )}
                           {isOwner && dealHasIncome(d) && (
                             <div className="mt-1">
                               <Button size="sm" variant="outline" disabled={settlingId === d.id} onClick={() => toggleSettle(d)}>
-                                {d.commissionPaid ? "برگرداندن" : "تسویه شد"}
+                                {d.commissionPaid ? "برگرداندن" : "دریافت شد"}
                               </Button>
                             </div>
                           )}
@@ -854,7 +869,7 @@ export default function AccountingPage() {
                             </div>
                           )}
                           {isOwner && tab === "commissions" && d.commissionPaid && (
-                            <div className="mt-1 text-[11px] text-[var(--ink-3)]">تسویه شده؛ برای تغییر اول تسویه را برگردان</div>
+                            <div className="mt-1 text-[11px] text-[var(--ink-3)]">دریافت شده؛ برای تغییر اول دریافت را برگردان</div>
                           )}
                         </td>
                       </tr>
@@ -911,11 +926,17 @@ export default function AccountingPage() {
                   <label className="block text-[13px]">
                     تاریخ (اختیاری — پیش‌فرض امروز)
                     <input
-                      type="date"
                       className="mt-1 w-full rounded-[10px] border border-[var(--line)] px-3 py-2 text-[14px]"
+                      inputMode="numeric"
+                      dir="ltr"
                       value={entryDate}
-                      onChange={(e) => setEntryDate(e.target.value)}
+                      onChange={(e) => {
+                        setEntryDate(toEnDigits(e.target.value).replace(/[^0-9/]/g, ""));
+                        setEntryDateError("");
+                      }}
+                      placeholder="۱۴۰۵/۰۸/۲۵"
                     />
+                    {entryDateError && <span className="mt-1 block text-[12px] text-red-600">{entryDateError}</span>}
                   </label>
                 </div>
                 <label className="block text-[13px]">

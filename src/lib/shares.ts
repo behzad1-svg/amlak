@@ -1,4 +1,3 @@
-import type { Prisma } from "@prisma/client";
 import { toFaDigits } from "./utils";
 
 /**
@@ -176,23 +175,4 @@ export function validateSplitInput(officePct: number, shares: ShareInput[]): str
     return `مجموع سهم دفتر و سهم‌ها باید دقیقاً ۱۰۰٪ شود (الان ${toFaDigits(String(Math.round(total * 100) / 100))}٪ است)`;
   }
   return null;
-}
-
-/**
- * همگام‌سازی پرچم تسویه کلی معامله با سهم‌ها: وقتی معامله سهم واقعی دارد،
- * commissionPaid یعنی همه سهم‌ها تسویه شده‌اند. برای معامله بدون سهم واقعی
- * کاری نمی‌کند (تسویه کلی همان‌جا مدیریت می‌شود).
- */
-export async function syncDealCommissionPaid(tx: Prisma.TransactionClient, dealId: string): Promise<void> {
-  const deal = await tx.deal.findUnique({ where: { id: dealId }, include: { shares: true } });
-  if (!deal || deal.shares.length === 0) return;
-  const allSettled = deal.shares.every((s) => s.settled);
-  if (allSettled === deal.commissionPaid) return;
-  await tx.deal.update({
-    where: { id: dealId },
-    data: {
-      commissionPaid: allSettled,
-      commissionPaidAt: allSettled ? (deal.commissionPaidAt ?? new Date()) : null,
-    },
-  });
 }

@@ -2,15 +2,18 @@ import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { getSessionFromCookies } from "@/lib/auth";
 import { commissionSettleSchema } from "@/lib/validation";
-import { serializeBigInt } from "@/lib/utils";
+import { serializeBigInt, formatToman } from "@/lib/utils";
 import { createAuditLog } from "@/lib/audit";
 import { dealSplittable, resolveSplit } from "@/lib/shares";
 
 /**
- * تسویه یا برگرداندن تسویه کمیسیون یک معامله — فقط مدیر.
+ * دریافت یا برگرداندن دریافت کمیسیون یک معامله — فقط مدیر.
  * PATCH /api/accounting/commissions/[id] { commissionPaid: boolean }
- * دکمه «تسویه شد» همه سهم‌های معامله را تسویه می‌کند و «برگرداندن» همه را برمی‌گرداند؛
- * معامله بدون سهم واقعی همان رفتار قبلی را دارد.
+ * دکمه «دریافت شد» یعنی کمیسیون از مشتری دریافت شد: فقط پرچم commissionPaid
+ * عوض می‌شود و به سهم‌ها دست نمی‌زند؛ با دریافت، مبلغ مبنای تقسیم (کمیسیون +
+ * هر دو شیرینی) به‌عنوان ورودی خودکار در صندوق دفتر ثبت می‌شود و با برگرداندن
+ * دریافت، آن ورودی حذف می‌شود. برگرداندن دریافت فقط وقتی مجاز است که هیچ
+ * سهمی تسویه نشده باشد.
  */
 export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
   const session = await getSessionFromCookies();
@@ -26,7 +29,10 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
     return NextResponse.json({ error: parsed.error.issues[0].message }, { status: 400 });
   }
 
-  const deal = await prisma.deal.findUnique({ where: { id }, include: { shares: true } });
+  const deal = await prisma.deal.findUnique({
+    where: { id },
+    include: { shares: true, property: { select: { code: true, title: true } } },
+  });
   if (!deal) return NextResponse.json({ error: "معامله یافت نشد" }, { status: 404 });
   const dealIncome = dealSplittable(deal);
   if (dealIncome <= BigInt(0)) {
@@ -34,18 +40,37 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
   }
 
   const paid = parsed.data.commissionPaid;
+  // برگرداندن دریافت فقط وقتی مجاز است که هیچ سهمی تسویه نشده باشد
+  if (!paid && deal.shares.some((s) => s.settled)) {
+    return NextResponse.json({ error: "اول تسویه سهم‌ها را برگردانید" }, { status: 400 });
+  }
+
+  const now = new Date();
   const updated = await prisma.$transaction(async (tx) => {
-    if (deal.shares.length > 0) {
-      await tx.dealShare.updateMany({
-        where: { dealId: id },
-        data: { settled: paid, settledAt: paid ? new Date() : null },
-      });
+    if (paid) {
+      // ورودی خودکار صندوق — فقط اگر برای این معامله ورودی خودکار نیست
+      const existing = await tx.cashboxEntry.findFirst({ where: { dealId: id, type: "IN" } });
+      if (!existing) {
+        await tx.cashboxEntry.create({
+          data: {
+            type: "IN",
+            amount: dealIncome,
+            title: `دریافت کمیسیون معامله ${deal.property.code ?? deal.property.title}`,
+            note: `کمیسیون ${formatToman(deal.commissionToman ?? BigInt(0))} · شیرینی فروشنده ${formatToman(deal.sellerShiriniToman ?? BigInt(0))} · شیرینی خریدار ${formatToman(deal.buyerShiriniToman ?? BigInt(0))}`,
+            occurredAt: now,
+            dealId: id,
+            createdById: session.user.id,
+          },
+        });
+      }
+    } else {
+      await tx.cashboxEntry.deleteMany({ where: { dealId: id, type: "IN" } });
     }
     return tx.deal.update({
       where: { id },
       data: {
         commissionPaid: paid,
-        commissionPaidAt: paid ? new Date() : null,
+        commissionPaidAt: paid ? now : null,
       },
       include: {
         customer: { select: { id: true, name: true, phone: true } },

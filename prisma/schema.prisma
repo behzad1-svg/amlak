@@ -444,9 +444,13 @@ model CashboxEntry {
   createdById String
   createdBy   User        @relation("CashboxCreatedBy", fields: [createdById], references: [id])
   createdAt   DateTime    @default(now())
+  dealId      String?
+  shareId     String?
 
   @@index([occurredAt])
   @@index([createdById])
+  @@index([dealId])
+  @@index([shareId])
 }
 
 model FollowUp {

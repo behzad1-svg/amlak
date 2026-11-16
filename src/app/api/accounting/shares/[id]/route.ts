@@ -4,13 +4,15 @@ import { getSessionFromCookies } from "@/lib/auth";
 import { shareSettleSchema } from "@/lib/validation";
 import { serializeBigInt } from "@/lib/utils";
 import { createAuditLog } from "@/lib/audit";
-import { dealSplittable, syncDealCommissionPaid } from "@/lib/shares";
+import { dealSplittable, shareAmount } from "@/lib/shares";
 
 /**
  * تسویه یا برگرداندن تسویه یک سهم — فقط مدیر.
  * PATCH /api/accounting/shares/[id] { settled: boolean }
- * بعد از هر تغییر، پرچم تسویه کلی معامله از روی سهم‌ها همگام می‌شود:
- * همه سهم‌ها تسویه شده‌اند یعنی معامله تسویه شده است.
+ * دکمه «تسویه» یعنی پرداخت سهم به مشاور/تعاون: سهم تسویه می‌شود و مبلغ همان
+ * سهم به‌عنوان خروجی خودکار در صندوق دفتر ثبت می‌شود؛ با برگرداندن تسویه
+ * سهم، آن خروجی حذف می‌شود. پرچم دریافت کلی معامله (commissionPaid) از روی
+ * سهم‌ها همگام نمی‌شود — فقط با دکمه دریافت معامله عوض می‌شود.
  */
 export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
   const session = await getSessionFromCookies();
@@ -29,7 +31,16 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
   const share = await prisma.dealShare.findUnique({
     where: { id },
     include: {
-      deal: { select: { id: true, commissionToman: true, sellerShiriniToman: true, buyerShiriniToman: true, commissionPaid: true } },
+      deal: {
+        select: {
+          id: true,
+          commissionToman: true,
+          sellerShiriniToman: true,
+          buyerShiriniToman: true,
+          commissionPaid: true,
+          property: { select: { code: true, title: true } },
+        },
+      },
     },
   });
   if (!share) return NextResponse.json({ error: "سهم یافت نشد" }, { status: 404 });
@@ -38,12 +49,30 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
   }
 
   const settled = parsed.data.settled;
+  const now = new Date();
   const updated = await prisma.$transaction(async (tx) => {
     const s = await tx.dealShare.update({
       where: { id },
-      data: { settled, settledAt: settled ? new Date() : null },
+      data: { settled, settledAt: settled ? now : null },
     });
-    await syncDealCommissionPaid(tx, share.dealId);
+    if (settled) {
+      // خروجی خودکار صندوق — فقط اگر برای این سهم خروجی خودکار نیست
+      const existing = await tx.cashboxEntry.findFirst({ where: { shareId: id, type: "OUT" } });
+      if (!existing) {
+        await tx.cashboxEntry.create({
+          data: {
+            type: "OUT",
+            amount: shareAmount(dealSplittable(share.deal), Number(share.pct)),
+            title: `تسویه سهم ${share.name} — معامله ${share.deal.property.code ?? share.deal.property.title}`,
+            shareId: id,
+            occurredAt: now,
+            createdById: session.user.id,
+          },
+        });
+      }
+    } else {
+      await tx.cashboxEntry.deleteMany({ where: { shareId: id, type: "OUT" } });
+    }
     const deal = await tx.deal.findUnique({ where: { id: share.dealId }, select: { commissionPaid: true } });
     return { share: s, dealCommissionPaid: deal?.commissionPaid ?? false };
   });
