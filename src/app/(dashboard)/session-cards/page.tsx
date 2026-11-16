@@ -74,6 +74,7 @@ export default function SessionCardsPage() {
   const [actionOk, setActionOk] = useState("");
   const [statusFilter, setStatusFilter] = useState<string>("all");
   const [showForm, setShowForm] = useState(false);
+  const [editingId, setEditingId] = useState<string | null>(null);
   const [expandedId, setExpandedId] = useState<string | null>(null);
   const [myId, setMyId] = useState<string | null>(null);
 
@@ -191,6 +192,60 @@ export default function SessionCardsPage() {
     if (customerOptions.length === 0 || advisorOptions.length === 0) loadOptions();
   }
 
+  function closeForm() {
+    setShowForm(false);
+    setEditingId(null);
+    resetForm();
+  }
+
+  // ویرایش کارت خودم (فقط PENDING) — همان فرم ساخت، با مقدارهای فعلی کارت
+  function openEdit(card: SessionCardRow) {
+    setEditingId(card.id);
+    setCustomerId(card.customer.id);
+    setPropertyId(card.property?.id ?? "");
+    const at = new Date(card.scheduledAt);
+    const y = at.getFullYear();
+    const m = String(at.getMonth() + 1).padStart(2, "0");
+    const dd = String(at.getDate()).padStart(2, "0");
+    setDateIso(`${y}-${m}-${dd}T00:00:00`);
+    setTime(`${String(at.getHours()).padStart(2, "0")}:${String(at.getMinutes()).padStart(2, "0")}`);
+    setCash(card.cashAmountToman ?? "");
+    setDepositAmount(card.depositAmountToman ?? "");
+    setRentAmount(card.rentAmountToman ?? "");
+    if (card.intent && INTENT_OPTIONS.includes(card.intent)) {
+      setIntent(card.intent);
+      setIntentOther("");
+    } else {
+      setIntent(card.intent ? "سایر" : "");
+      setIntentOther(card.intent ?? "");
+    }
+    setShirini(card.sellerShiriniToman ?? "");
+    setDepositPaid(card.depositPaid === true ? "paid" : card.depositPaid === false ? "unpaid" : "");
+    setCooperatingAdvisorId(card.cooperatingAdvisor?.id ?? "");
+    setContractManagerId(card.contractManager?.id ?? "");
+    setPaymentTerms(card.paymentTerms ?? "");
+    setNotes(card.notes ?? "");
+    setPropSearch("");
+    setPropDealType("");
+    setPropAdvisorId("");
+    // مشتری و فایل انتخاب شده را در گزینه‌ها نگه دار تا برچسب آن‌ها ناپدید نشود
+    setCustomerOptions((prev) =>
+      prev.some((o) => o.id === card.customer.id)
+        ? prev
+        : [...prev, { id: card.customer.id, label: card.customer.name, sub: card.customer.phone }]
+    );
+    if (card.property) {
+      const opt = {
+        id: card.property.id,
+        label: card.property.code ? `${card.property.code} — ${card.property.title}` : card.property.title,
+      };
+      setPropertyOptions((prev) => (prev.some((o) => o.id === opt.id) ? prev : [...prev, opt]));
+    }
+    setShowForm(true);
+    setActionError("");
+    if (customerOptions.length === 0 || advisorOptions.length === 0) loadOptions();
+  }
+
   function resetForm() {
     setCustomerId("");
     setPropertyId("");
@@ -225,30 +280,43 @@ export default function SessionCardsPage() {
     at.setHours(Number.isNaN(hh) ? 12 : hh, Number.isNaN(mm) ? 0 : mm, 0, 0);
     const finalIntent = intent === "سایر" ? intentOther.trim() : intent;
     const isRent = intent === "رهن" || intent === "اجاره";
+    const body = {
+      customerId,
+      propertyId: propertyId || null,
+      scheduledAt: at.toISOString(),
+      cashAmountToman: isRent ? null : cash || null,
+      depositAmountToman: isRent ? depositAmount || null : null,
+      rentAmountToman: isRent ? rentAmount || null : null,
+      intent: finalIntent || null,
+      sellerShiriniToman: shirini || null,
+      cooperatingAdvisorId: cooperatingAdvisorId || null,
+      contractManagerId: contractManagerId || null,
+      depositPaid: depositPaid === "paid" ? true : depositPaid === "unpaid" ? false : null,
+      paymentTerms: paymentTerms.trim() || null,
+      notes: notes.trim() || null,
+    };
     setSaving(true);
     try {
-      await apiJson("/api/session-cards", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          customerId,
-          propertyId: propertyId || null,
-          scheduledAt: at.toISOString(),
-          cashAmountToman: isRent ? null : cash || null,
-          depositAmountToman: isRent ? depositAmount || null : null,
-          rentAmountToman: isRent ? rentAmount || null : null,
-          intent: finalIntent || null,
-          sellerShiriniToman: shirini || null,
-          cooperatingAdvisorId: cooperatingAdvisorId || null,
-          contractManagerId: contractManagerId || null,
-          depositPaid: depositPaid === "paid" ? true : depositPaid === "unpaid" ? false : null,
-          paymentTerms: paymentTerms.trim() || null,
-          notes: notes.trim() || null,
-        }),
-      });
-      resetForm();
-      setShowForm(false);
-      setActionOk("کارت جلسه ثبت شد و اعلان رفت.");
+      if (editingId) {
+        await apiJson(`/api/session-cards/${editingId}`, {
+          method: "PATCH",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify(body),
+        });
+        setEditingId(null);
+        resetForm();
+        setShowForm(false);
+        setActionOk("کارت جلسه ویرایش شد.");
+      } else {
+        await apiJson("/api/session-cards", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify(body),
+        });
+        resetForm();
+        setShowForm(false);
+        setActionOk("کارت جلسه ثبت شد و اعلان رفت.");
+      }
       load();
       // نشان کارت جلسه در سایدبار از لی‌اوت سروری می‌آید؛ بدون رفرش، عددش کهنه می‌ماند.
       router.refresh();
@@ -310,7 +378,7 @@ export default function SessionCardsPage() {
       <Header
         title="کارت جلسه"
         action={
-          <Button onClick={() => (showForm ? setShowForm(false) : openForm())}>
+          <Button onClick={() => (showForm ? closeForm() : openForm())}>
             {showForm ? "بستن فرم" : "+ کارت جلسه تازه"}
           </Button>
         }
@@ -327,8 +395,9 @@ export default function SessionCardsPage() {
           <Card>
             <div className="space-y-4">
               <p className="text-[13px] leading-6 text-[var(--ink-2)]">
-                پیش از قرارداد، شرایط جلسه را اینجا بنویسید تا مدیر پیش از جلسه همه اطلاعات را داشته باشد؛
-                به‌محض ثبت، اعلان کارت جلسه برای مدیر می‌رود؛ اگر مشاور همکار یا مدیر قرارداد انتخاب شده باشد، برای آن‌ها هم می‌رود.
+                {editingId
+                  ? "در حال ویرایش کارت جلسه."
+                  : "پیش از قرارداد، شرایط جلسه را اینجا بنویسید تا مدیر پیش از جلسه همه اطلاعات را داشته باشد؛ به‌محض ثبت، اعلان کارت جلسه برای مدیر می‌رود؛ اگر مشاور همکار یا مدیر قرارداد انتخاب شده باشد، برای آن‌ها هم می‌رود."}
               </p>
               <SearchSelect label="مشتری *" required value={customerId} onChange={setCustomerId} options={customerOptions} placeholder="مشتری را جستجو و انتخاب کنید..." />
               <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
@@ -420,8 +489,8 @@ export default function SessionCardsPage() {
                 <Textarea id="sc-notes" value={notes} onChange={(e) => setNotes(e.target.value)} placeholder="هر نکته‌ای که مدیر پیش از جلسه باید بداند..." className="mt-1" />
               </div>
               <div className="flex gap-2">
-                <Button onClick={submit} disabled={saving}>{saving ? "در حال ثبت..." : "ثبت کارت جلسه"}</Button>
-                <Button variant="outline" onClick={() => { setShowForm(false); resetForm(); }}>انصراف</Button>
+                <Button onClick={submit} disabled={saving}>{saving ? "در حال ذخیره..." : editingId ? "ذخیره ویرایش" : "ثبت کارت جلسه"}</Button>
+                <Button variant="outline" onClick={closeForm}>انصراف</Button>
               </div>
             </div>
           </Card>
@@ -486,7 +555,10 @@ export default function SessionCardsPage() {
                       </div>
                     )}
                     {(c.status === "PENDING" || c.status === "CONFIRMED") && !isOwner && myId === c.advisor.id && (
-                      <div className="pt-1">
+                      <div className="flex gap-2 pt-1">
+                        {c.status === "PENDING" && (
+                          <Button size="sm" onClick={() => openEdit(c)} disabled={actingId === c.id}>ویرایش</Button>
+                        )}
                         <Button size="sm" variant="outline" onClick={() => cancelMine(c)} disabled={actingId === c.id}>لغو کارت</Button>
                       </div>
                     )}

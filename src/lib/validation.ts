@@ -170,9 +170,23 @@ export const sessionCardCreateSchema = z.object({
 });
 
 /// مدیر: تغییر وضعیت + نظر؛ سازنده فقط لغو کارت خودش (status=CANCELLED)
+/// ویرایش محتوا (فقط سازنده، فقط PENDING) — فیلدها مثل ساخت، همه اختیاری
 export const sessionCardUpdateSchema = z.object({
   status: z.enum(["CONFIRMED", "CANCELLED"]).optional(),
   managerNote: z.string().max(2000).optional().nullable(),
+  customerId: z.string().min(1, "مشتری الزامی است").optional(),
+  propertyId: z.string().optional().nullable(),
+  scheduledAt: z.string().min(1, "تاریخ و ساعت جلسه الزامی است").optional(),
+  cashAmountToman: z.string().regex(/^[0-9]*$/, "پول نقد فقط عدد").optional().nullable(),
+  depositAmountToman: z.string().regex(/^[0-9]*$/, "مبلغ رهن فقط عدد").optional().nullable(),
+  rentAmountToman: z.string().regex(/^[0-9]*$/, "اجاره فقط عدد").optional().nullable(),
+  intent: z.string().max(100).optional().nullable(),
+  sellerShiriniToman: z.string().regex(/^[0-9]*$/, "شیرینی فقط عدد").optional().nullable(),
+  cooperatingAdvisorId: z.string().optional().nullable(),
+  contractManagerId: z.string().optional().nullable(),
+  depositPaid: z.boolean().optional().nullable(),
+  paymentTerms: z.string().max(2000).optional().nullable(),
+  notes: z.string().max(5000).optional().nullable(),
 });
 
 export const dealCreateSchema = z.object({
