@@ -6,7 +6,7 @@ import { Button } from "@/components/ui/Button";
 import { Badge } from "@/components/ui/Badge";
 import { Card } from "@/components/ui/Card";
 import { Input, Select } from "@/components/ui/Input";
-import { PROPERTY_TYPE_LABELS, DEAL_TYPE_LABELS, PROPERTY_STATUS_LABELS } from "@/lib/constants";
+import { PROPERTY_TYPE_LABELS, DEAL_TYPE_LABELS, PROPERTY_STATUS_LABELS, CUSTOMER_SOURCE_LABELS, CUSTOMER_SOURCE_OPTIONS } from "@/lib/constants";
 import { useRole } from "@/hooks/useRole";
 import { MoneyText } from "@/components/ui/MoneyText";
 import { PageError, PageSkeleton } from "@/components/ui/LoadState";
@@ -21,6 +21,7 @@ type Property = {
   dealType: string;
   region: string;
   status: string;
+  source?: string | null;
   visibility: string;
   salePriceToman: string | null;
   depositToman: string | null;
@@ -63,6 +64,7 @@ const emptyFilters = {
   landSizeMin: "",
   landSizeMax: "",
   listedById: "",
+  source: "",
   sort: "newest",
   hasElevator: false,
   hasParking: false,
@@ -109,6 +111,7 @@ export default function PropertiesPage() {
     if (filters.landSizeMin) params.set("landSizeMin", filters.landSizeMin);
     if (filters.landSizeMax) params.set("landSizeMax", filters.landSizeMax);
     if (filters.listedById) params.set("listedById", filters.listedById);
+    if (filters.source) params.set("source", filters.source);
     if (filters.sort && filters.sort !== "newest") params.set("sort", filters.sort);
     if (filters.hasElevator) params.set("hasElevator", "true");
     if (filters.hasParking) params.set("hasParking", "true");
@@ -174,6 +177,7 @@ export default function PropertiesPage() {
     (filters.bedsMin || filters.bedsMax ? 1 : 0) +
     (filters.appraised ? 1 : 0) +
     (filters.listedById ? 1 : 0) +
+    (filters.source ? 1 : 0) +
     (filters.sort !== "newest" ? 1 : 0) +
     (filters.hasElevator || filters.hasParking || filters.hasStorage || filters.hasTerrace || filters.hasRenovated || filters.isNewBuild ? 1 : 0);
 
@@ -426,6 +430,10 @@ export default function PropertiesPage() {
                 {agents.map((a) => <option key={a.id} value={a.id}>{a.name}</option>)}
               </Select>
             )}
+            <Select value={filters.source} onChange={(e) => setFilters({ ...filters, source: e.target.value })}>
+              <option value="">منبع (همه)</option>
+              {CUSTOMER_SOURCE_OPTIONS.map((s) => <option key={s} value={s}>{CUSTOMER_SOURCE_LABELS[s] ?? s}</option>)}
+            </Select>
             <Select value={filters.sort} onChange={(e) => setFilters({ ...filters, sort: e.target.value })}>
               <option value="newest">جدیدترین</option>
               <option value="priceAsc">ارزان‌ترین</option>
@@ -566,6 +574,9 @@ export default function PropertiesPage() {
                       </div>
                       {p.listedBy?.name && (
                         <div className="mt-2 text-[11px] text-[var(--ink-3)]">مشاور: {p.listedBy.name}</div>
+                      )}
+                      {p.source && (
+                        <div className="mt-1 text-[11px] text-[var(--ink-3)]">منبع: {CUSTOMER_SOURCE_LABELS[p.source] ?? p.source}</div>
                       )}
                     </div>
                   </Card>

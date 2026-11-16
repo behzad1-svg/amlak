@@ -25,6 +25,7 @@ export async function GET(req: NextRequest) {
   const type = searchParams.get("type");
   const dealType = searchParams.get("dealType");
   const status = searchParams.get("status");
+  const source = searchParams.get("source");
   const search = searchParams.get("search");
 
   const page = Math.max(1, parseInt(searchParams.get("page") ?? "1"));
@@ -70,6 +71,9 @@ export async function GET(req: NextRequest) {
   if (!["newest", "priceAsc", "priceDesc", "sizeDesc"].includes(sort)) {
     return NextResponse.json({ error: "مقدار «sort» معتبر نیست" }, { status: 400 });
   }
+  if (source && !["INSTAGRAM", "DIVAR", "DIRECT_CALL", "REFERRAL", "SIGN_BOARD", "WEBSITE", "IN_PERSON", "ADVERTISEMENT", "OTHER", "FILE_FINDING"].includes(source)) {
+    return NextResponse.json({ error: "مقدار «source» معتبر نیست" }, { status: 400 });
+  }
 
   const and: Record<string, unknown>[] = [{ deletedAt: null }];
   if (region) and.push({ region });
@@ -78,6 +82,7 @@ export async function GET(req: NextRequest) {
   if (dealType) and.push({ dealType });
   if (status) and.push({ status });
   else and.push({ status: { not: "ARCHIVED" } }); // بایگانی‌شده‌ها در فهرست پیش‌فرض دیده نمی‌شوند
+  if (source) and.push({ source });
 
   if (search) {
     and.push({
@@ -266,6 +271,7 @@ export async function POST(req: NextRequest) {
       depositToman: d.depositToman ? BigInt(d.depositToman) : null,
       monthlyRentToman: d.monthlyRentToman ? BigInt(d.monthlyRentToman) : null,
       status,
+      source: (d.source as never) ?? null,
       sizeSqm: d.sizeSqm,
       beds: d.beds,
       builtYear: d.builtYear,

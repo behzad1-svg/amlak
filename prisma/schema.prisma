@@ -247,6 +247,8 @@ model Property {
   monthlyRentToman    BigInt?
 
   status      PropertyStatus     @default(ACTIVE)
+  /// منبع فایل — از کجا پیدا شده (دیوار، فایل‌یابی، ...)
+  source      CustomerSource?
   sizeSqm     Float?
   beds        Int?
   builtYear   Int?
@@ -313,6 +315,7 @@ model Property {
   @@index([status, visibility])
   @@index([dealType, status])
   @@index([region, type, dealType, status, deletedAt])
+  @@index([source])
 }
 
 model PropertyAccess {

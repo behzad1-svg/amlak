@@ -26,6 +26,8 @@ import {
   DEAL_TYPE_LABELS,
   PROPERTY_STATUS_LABELS,
   ACTIVITY_TYPE_LABELS,
+  CUSTOMER_SOURCE_LABELS,
+  CUSTOMER_SOURCE_OPTIONS,
 } from "@/lib/constants";
 import { useRole } from "@/hooks/useRole";
 import { hasPermission } from "@/lib/permissions";
@@ -37,6 +39,7 @@ type Prop = Record<string, unknown> & {
   type: string;
   dealType: string;
   status: string;
+  source?: string | null;
   region: string;
   address?: string | null;
   description?: string | null;
@@ -166,6 +169,7 @@ export default function PropertyDetailPage() {
           depositToman: propRes.depositToman ?? "",
           monthlyRentToman: propRes.monthlyRentToman ?? "",
           listedById: propRes.listedBy?.id ?? "",
+          source: (propRes.source as string) ?? "",
           description: propRes.description ?? "",
         });
         // متری از قیمت و متراژ ثبت‌شده محاسبه می‌شود
@@ -207,6 +211,7 @@ export default function PropertyDetailPage() {
     if (form.depositToman) body.depositToman = form.depositToman;
     if (form.monthlyRentToman) body.monthlyRentToman = form.monthlyRentToman;
     body.description = form.description?.trim() ? form.description.trim() : null;
+    body.source = form.source || null;
     if (isOwner && form.listedById) body.listedById = form.listedById;
     if (canManageAccess) body.accessUserIds = accessUserIds;
     try {
@@ -380,6 +385,7 @@ export default function PropertyDetailPage() {
           </div>
           <dl className="text-sm">
             <Row label="مشاور فایل" value={p.listedBy?.name ?? "—"} />
+            <Row label="منبع" value={p.source ? (CUSTOMER_SOURCE_LABELS[p.source as string] ?? p.source) : null} />
             <Row
               label="کارشناسی"
               value={
@@ -476,6 +482,13 @@ export default function PropertyDetailPage() {
                   <option value="SOLD">فروخته‌شده</option>
                   <option value="RENTED">اجاره‌رفته</option>
                   <option value="ARCHIVED">بایگانی‌شده</option>
+                </Select>
+              </div>
+              <div>
+                <Label htmlFor="f-source">منبع فایل</Label>
+                <Select id="f-source" className="mt-1" value={form.source} onChange={(e) => setForm({ ...form, source: e.target.value })}>
+                  <option value="">—</option>
+                  {CUSTOMER_SOURCE_OPTIONS.map((s) => <option key={s} value={s}>{CUSTOMER_SOURCE_LABELS[s] ?? s}</option>)}
                 </Select>
               </div>
               {isOwner && (

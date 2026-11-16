@@ -88,7 +88,7 @@ export default function NewPropertyPage() {
     sizeSqm: "", landSizeSqm: "", builtYear: "", address: "", description: "",
     floor: "", totalFloors: "", unitsPerFloor: "", unitCount: "",
     beds: "", passageWidth: "", buildingFrontage: "", buildingFloors: "",
-    isAppraised: "false",
+    isAppraised: "false", source: "",
   });
   const [flags, setFlags] = useState<Flags>(emptyFlags);
   const [agents, setAgents] = useState<{ id: string; name: string }[]>([]);
@@ -257,6 +257,7 @@ export default function NewPropertyPage() {
         hasRenovated: flags.hasRenovated,
         isNewBuild: flags.isNewBuild,
         isAppraised: form.isAppraised === "true",
+        source: form.source || null,
         accessUserIds,
       };
 
@@ -345,6 +346,13 @@ export default function NewPropertyPage() {
               <Select id="f-region" value={form.region} onChange={(e) => upd("region", e.target.value)} className="mt-1" required>
                 <option value="">انتخاب کنید</option>
                 {regions.map((r) => <option key={r} value={r}>{r}</option>)}
+              </Select>
+            </div>
+            <div>
+              <Label htmlFor="f-source">منبع فایل</Label>
+              <Select id="f-source" value={form.source} onChange={(e) => upd("source", e.target.value)} className="mt-1">
+                <option value="">—</option>
+                {CUSTOMER_SOURCE_OPTIONS.map((s) => <option key={s} value={s}>{CUSTOMER_SOURCE_LABELS[s] ?? s}</option>)}
               </Select>
             </div>
             <div>

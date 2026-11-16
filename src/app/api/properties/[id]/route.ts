@@ -106,6 +106,7 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
   if (d.depositToman !== undefined) updateData.depositToman = d.depositToman ? BigInt(d.depositToman as string) : null;
   if (d.monthlyRentToman !== undefined) updateData.monthlyRentToman = d.monthlyRentToman ? BigInt(d.monthlyRentToman as string) : null;
   if (d.status !== undefined) updateData.status = d.status;
+  if (d.source !== undefined) updateData.source = d.source ?? null;
   if (d.sizeSqm !== undefined) updateData.sizeSqm = d.sizeSqm;
   if (d.beds !== undefined) updateData.beds = d.beds;
   if (d.builtYear !== undefined) updateData.builtYear = d.builtYear;

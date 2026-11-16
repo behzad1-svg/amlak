@@ -101,6 +101,7 @@ export const propertyCreateSchema = z.object({
   depositToman: z.string().regex(/^[0-9]*$/, "فقط عدد").optional().nullable(),
   monthlyRentToman: z.string().regex(/^[0-9]*$/, "فقط عدد").optional().nullable(),
   status: z.enum(["ACTIVE", "SOLD", "RENTED", "ARCHIVED"]).optional(),
+  source: z.enum(["INSTAGRAM", "DIVAR", "DIRECT_CALL", "REFERRAL", "SIGN_BOARD", "WEBSITE", "IN_PERSON", "ADVERTISEMENT", "OTHER", "FILE_FINDING"]).optional().nullable(),
   sizeSqm: z.number().min(0).optional().nullable(),
   beds: z.number().int().min(0).max(20).optional().nullable(),
   builtYear: z.number().int().min(1300).max(1500).optional().nullable(),
