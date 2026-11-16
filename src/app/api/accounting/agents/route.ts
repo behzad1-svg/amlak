@@ -25,7 +25,7 @@ export async function GET() {
       orderBy: { name: "asc" },
     }),
     prisma.deal.findMany({
-      where: { status: { not: "CANCELED" } },
+      where: { status: "COMPLETED" },
       select: {
         agentId: true,
         status: true,
@@ -42,10 +42,10 @@ export async function GET() {
     }),
   ]);
 
-  // سهم‌بندی حل‌شدهٔ هر معامله را یک بار حساب کن — برای جمع دفتر/تعاون و جمع هر مشاور
+  // سهم‌بندی حل‌شدهٔ هر معامله را یک بار حساب کن — برای جمع دفتر/تعاون و جمع هر مشاور (فقط قطعی‌ها)
   const splits = deals.map((d) => resolveSplit(d));
 
-  // سهم دفتر و تعاون روی همه معامله‌های دارای درآمد؛ جمع کل مبنای تقسیم (کمیسیون + هر دو شیرینی منهای تخفیف) می‌ماند
+  // سهم دفتر و تعاون روی معامله‌های قطعی دارای درآمد؛ جمع کل مبنای تقسیم (کمیسیون + هر دو شیرینی منهای تخفیف) می‌ماند
   let officeTotal = BigInt(0);
   let externalTotal = BigInt(0);
   let commissionGrandTotal = BigInt(0);

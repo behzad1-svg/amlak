@@ -1,20 +1,13 @@
 import { NextRequest, NextResponse } from "next/server";
-import { cookies } from "next/headers";
 import { prisma } from "@/lib/prisma";
-import { validateSession } from "@/lib/auth";
+import { getSessionFromCookies } from "@/lib/auth";
 import { followUpUpdateSchema } from "@/lib/validation";
 import { serializeBigInt } from "@/lib/utils";
 import { canAccessCustomer } from "@/lib/access";
 import { createAuditLog } from "@/lib/audit";
 
-async function getSession() {
-  const cookieStore = await cookies();
-  const token = cookieStore.get("saj_token")?.value;
-  return validateSession(token);
-}
-
 export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
-  const session = await getSession();
+  const session = await getSessionFromCookies();
   if (!session) return NextResponse.json({ error: "وارد نشده‌اید" }, { status: 401 });
   const { id } = await params;
   const existing = await prisma.followUp.findUnique({ where: { id }, include: { customer: true } });
@@ -38,7 +31,7 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
 }
 
 export async function DELETE(_req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
-  const session = await getSession();
+  const session = await getSessionFromCookies();
   if (!session) return NextResponse.json({ error: "وارد نشده‌اید" }, { status: 401 });
   // حذف پیگیری هم فقط مدیر — مشاور می‌تواند «انجام شد» بزند
   if (session.user.role !== "OWNER") {

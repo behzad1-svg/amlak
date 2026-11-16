@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { getSessionFromCookies } from "@/lib/auth";
+import { cashboxBalanceFromTotals } from "@/lib/cashbox";
 import { cashboxEntrySchema } from "@/lib/validation";
 import { serializeBigInt } from "@/lib/utils";
 import { createAuditLog } from "@/lib/audit";
@@ -17,14 +18,17 @@ export async function GET() {
     return NextResponse.json({ error: "صندوق فقط برای مدیر است" }, { status: 403 });
   }
 
-  const entries = await prisma.cashboxEntry.findMany({
-    include: { createdBy: { select: { id: true, name: true } } },
-    orderBy: [{ occurredAt: "desc" }, { createdAt: "desc" }],
-    take: 200,
-  });
+  // موجودی از کل جدول حساب می‌شود، نه فقط ۲۰۰ ردیف آخر فهرست
+  const [entries, totals] = await Promise.all([
+    prisma.cashboxEntry.findMany({
+      include: { createdBy: { select: { id: true, name: true } } },
+      orderBy: [{ occurredAt: "desc" }, { createdAt: "desc" }],
+      take: 200,
+    }),
+    prisma.cashboxEntry.groupBy({ by: ["type"], _sum: { amount: true } }),
+  ]);
 
-  let balance = BigInt(0);
-  for (const e of entries) balance += e.type === "IN" ? e.amount : -e.amount;
+  const balance = cashboxBalanceFromTotals(totals);
 
   // مبدا / مقصد / بابت — ساخت‌یافته، موقع خواندن از dealId/shareId حل می‌شود؛
   // عنوان و یادداشت ذخیره‌شده دست نمی‌خورند.

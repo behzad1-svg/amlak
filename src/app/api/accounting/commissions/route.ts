@@ -22,7 +22,11 @@ export async function GET(req: NextRequest) {
   const where: Record<string, unknown> = {
     status: { not: "CANCELED" },
   };
-  if (!isOwner) where.agentId = session.user.id;
+  if (!isOwner) {
+    // مشاور معامله‌های خودش را می‌بیند، به‌علاوه معامله‌هایی که در آن‌ها سهم دارد؛
+    // زیر AND می‌آید تا OR فیلتر «پرداخت‌نشده» در پایین روی آن ننشیند
+    where.AND = [{ OR: [{ agentId: session.user.id }, { shares: { some: { userId: session.user.id } } }] }];
+  }
   if (paid === "paid") where.commissionPaid = true;
   else if (paid === "unpaid") {
     // معامله بدون درآمد «پرداخت‌نشده» نیست — فقط دارای کمیسیون یا شیرینی‌ها

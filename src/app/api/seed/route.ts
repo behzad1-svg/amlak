@@ -1,7 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
-import { cookies } from "next/headers";
 import { prisma } from "@/lib/prisma";
-import { validateSession, hashPassword } from "@/lib/auth";
+import { getSessionFromCookies, hashPassword } from "@/lib/auth";
 import { DEFAULT_BUSHEHR_REGIONS } from "@/lib/constants";
 
 /**
@@ -12,12 +11,6 @@ import { DEFAULT_BUSHEHR_REGIONS } from "@/lib/constants";
  * - wipe is opt-in via body/query `wipe=true` (customers only), never implicit full wipe of users
  * - نقد ۱۳: هندلر GET حذف شد تا seed با یک لینک ساده قابل اجرا نباشد؛ فقط POST
  */
-
-async function getSession() {
-  const cookieStore = await cookies();
-  const token = cookieStore.get("saj_token")?.value;
-  return validateSession(token);
-}
 
 function seedEnabled(): boolean {
   return process.env.SEED_ENABLED === "true";
@@ -39,7 +32,7 @@ async function handleSeed(req: NextRequest) {
     );
   }
 
-  const session = await getSession();
+  const session = await getSessionFromCookies();
   if (!session) return NextResponse.json({ error: "وارد نشده‌اید" }, { status: 401 });
   if (session.user.role !== "OWNER") {
     return NextResponse.json({ error: "فقط مدیر می‌تواند seed اجرا کند" }, { status: 403 });

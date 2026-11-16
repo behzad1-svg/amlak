@@ -1,19 +1,12 @@
 import { NextRequest, NextResponse } from "next/server";
-import { cookies } from "next/headers";
 import { prisma } from "@/lib/prisma";
-import { validateSession } from "@/lib/auth";
+import { getSessionFromCookies } from "@/lib/auth";
 import { propertyUpdateSchema } from "@/lib/validation";
 import { serializeBigInt } from "@/lib/utils";
 import { hasRestrictedAccess, maskPropertyForTeam, syncPropertyAccess } from "@/lib/access";
 import { runMatchingForProperty } from "@/lib/matching";
 import { createAuditLog } from "@/lib/audit";
 import { hasPermission } from "@/lib/permissions";
-
-async function getSession() {
-  const cookieStore = await cookies();
-  const token = cookieStore.get("saj_token")?.value;
-  return validateSession(token);
-}
 
 async function canViewProperty(user: { id: string; role: string }, property: { listedById: string; visibility: string; id: string; isOfficeFile?: boolean }) {
   if (user.role === "OWNER") return true;
@@ -25,7 +18,7 @@ async function canViewProperty(user: { id: string; role: string }, property: { l
 }
 
 export async function GET(_req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
-  const session = await getSession();
+  const session = await getSessionFromCookies();
   if (!session) return NextResponse.json({ error: "وارد نشده‌اید" }, { status: 401 });
   const { id } = await params;
   const property = await prisma.property.findUnique({
@@ -73,7 +66,7 @@ export async function GET(_req: NextRequest, { params }: { params: Promise<{ id:
 }
 
 export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
-  const session = await getSession();
+  const session = await getSessionFromCookies();
   if (!session) return NextResponse.json({ error: "وارد نشده‌اید" }, { status: 401 });
   const { id } = await params;
   const existing = await prisma.property.findUnique({ where: { id } });
@@ -175,7 +168,7 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
 }
 
 export async function DELETE(_req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
-  const session = await getSession();
+  const session = await getSessionFromCookies();
   if (!session) return NextResponse.json({ error: "وارد نشده‌اید" }, { status: 401 });
   // حذف فایل فقط با مجوز حذف (پیش‌فرض فقط مدیر دارد)
   if (!hasPermission(session.user, "canDeleteProperty")) {

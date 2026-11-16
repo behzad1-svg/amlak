@@ -1,18 +1,11 @@
 import { NextRequest, NextResponse } from "next/server";
-import { cookies } from "next/headers";
 import { prisma } from "@/lib/prisma";
-import { validateSession } from "@/lib/auth";
+import { getSessionFromCookies } from "@/lib/auth";
 import { viewingCreateSchema } from "@/lib/validation";
 import { serializeBigInt } from "@/lib/utils";
 import { canAccessCustomer } from "@/lib/access";
 import { hasRestrictedAccess } from "@/lib/access";
 import { createAuditLog } from "@/lib/audit";
-
-async function getSession() {
-  const cookieStore = await cookies();
-  const token = cookieStore.get("saj_token")?.value;
-  return validateSession(token);
-}
 
 async function canAccessPropertyForAction(
   user: { id: string; role: string },
@@ -26,7 +19,7 @@ async function canAccessPropertyForAction(
 }
 
 export async function GET(req: NextRequest) {
-  const session = await getSession();
+  const session = await getSessionFromCookies();
   if (!session) return NextResponse.json({ error: "وارد نشده‌اید" }, { status: 401 });
   const { searchParams } = new URL(req.url);
   const customerId = searchParams.get("customerId");
@@ -60,7 +53,7 @@ export async function GET(req: NextRequest) {
 }
 
 export async function POST(req: NextRequest) {
-  const session = await getSession();
+  const session = await getSessionFromCookies();
   if (!session) return NextResponse.json({ error: "وارد نشده‌اید" }, { status: 401 });
   const body = await req.json().catch(() => null);
   const parsed = viewingCreateSchema.safeParse(body);

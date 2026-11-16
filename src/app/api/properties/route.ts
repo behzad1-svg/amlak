@@ -1,7 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
-import { cookies } from "next/headers";
 import { prisma } from "@/lib/prisma";
-import { validateSession } from "@/lib/auth";
+import { getSessionFromCookies } from "@/lib/auth";
 import { propertyCreateSchema, findInvalidQueryParam, safeBigInt } from "@/lib/validation";
 import { serializeBigInt } from "@/lib/utils";
 import { maskPropertyForTeam, syncPropertyAccess } from "@/lib/access";
@@ -11,14 +10,8 @@ import { hasPermission } from "@/lib/permissions";
 import { nextPropertyCode } from "@/lib/propertyCode";
 import { persianSearchOr } from "@/lib/search";
 
-async function getSession() {
-  const cookieStore = await cookies();
-  const token = cookieStore.get("saj_token")?.value;
-  return validateSession(token);
-}
-
 export async function GET(req: NextRequest) {
-  const session = await getSession();
+  const session = await getSessionFromCookies();
   if (!session) return NextResponse.json({ error: "وارد نشده‌اید" }, { status: 401 });
   const { searchParams } = new URL(req.url);
   const region = searchParams.get("region");
@@ -94,9 +87,37 @@ export async function GET(req: NextRequest) {
   else and.push({ status: { not: "ARCHIVED" } }); // بایگانی‌شده‌ها در فهرست پیش‌فرض دیده نمی‌شوند
   if (source) and.push({ source });
 
+  // شناسه فایل‌های دارای دسترسی صریح — هم برای محدودکردن جستجوی آدرس، هم برای ماسک‌نکردن در پایین
+  let grantedPropertyIds: string[] = [];
+  if (session.user.role !== "OWNER") {
+    const accessibleIds = await prisma.propertyAccess.findMany({
+      where: { userId: session.user.id, revokedAt: null, OR: [{ expiresAt: null }, { expiresAt: { gt: new Date() } }] },
+      select: { propertyId: true },
+    });
+    grantedPropertyIds = accessibleIds.map((a) => a.propertyId);
+  }
+
   if (search) {
     // جستجوی فارسی با نیم‌فاصله: «سهمبندی» باید «سهم‌بندی» را هم پیدا کند
-    and.push({ OR: persianSearchOr(["title", "code", "address", "region"], search) });
+    if (session.user.role === "OWNER") {
+      and.push({ OR: persianSearchOr(["title", "code", "address", "region"], search) });
+    } else {
+      // آدرس فقط روی فایل‌هایی جستجو می‌شود که مشاور اطلاعات کاملشان را می‌بیند
+      // (فایل خودش، فایل دفتر، یا دسترسی صریح) — نه روی فایل TEAM_VISIBLE دیگران
+      const fullAccessFilter = {
+        OR: [
+          { listedById: session.user.id },
+          { isOfficeFile: true },
+          ...(grantedPropertyIds.length ? [{ id: { in: grantedPropertyIds } }] : []),
+        ],
+      };
+      and.push({
+        OR: [
+          ...persianSearchOr(["title", "code", "region"], search),
+          { AND: [fullAccessFilter, { OR: persianSearchOr(["address"], search) }] },
+        ],
+      });
+    }
   }
 
   // قیمت: فروش = salePrice؛ رهن = deposit (+ اجاره ماهانه اختیاری)؛ بدون نوع معامله = هر دو
@@ -161,21 +182,13 @@ export async function GET(req: NextRequest) {
   if (appraised === "false") and.push({ isAppraised: false });
 
   // AGENT: only own + TEAM_VISIBLE, plus RESTRICTED with active access
-  // (شناسه فایل‌های دارای دسترسی صریح — برای ماسک‌نکردن در پایین هم لازم است)
-  let grantedPropertyIds: string[] = [];
   if (session.user.role !== "OWNER") {
-    const accessibleIds = await prisma.propertyAccess.findMany({
-      where: { userId: session.user.id, revokedAt: null, OR: [{ expiresAt: null }, { expiresAt: { gt: new Date() } }] },
-      select: { propertyId: true },
-    });
-    const ids = accessibleIds.map((a) => a.propertyId);
-    grantedPropertyIds = ids;
     and.push({
       OR: [
         { listedById: session.user.id },
         { visibility: "TEAM_VISIBLE" },
         { isOfficeFile: true },
-        ...(ids.length ? [{ id: { in: ids } }] : []),
+        ...(grantedPropertyIds.length ? [{ id: { in: grantedPropertyIds } }] : []),
       ],
     });
   }
@@ -220,7 +233,7 @@ export async function GET(req: NextRequest) {
 }
 
 export async function POST(req: NextRequest) {
-  const session = await getSession();
+  const session = await getSessionFromCookies();
   if (!session) return NextResponse.json({ error: "وارد نشده‌اید" }, { status: 401 });
   if (!hasPermission(session.user, "canCreateProperty")) {
     return NextResponse.json({ error: "اجازه ثبت فایل ندارید" }, { status: 403 });

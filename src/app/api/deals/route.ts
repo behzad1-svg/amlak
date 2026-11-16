@@ -31,7 +31,15 @@ export async function GET(req: NextRequest) {
   if (status) where.status = status;
   if (customerId) where.customerId = customerId;
   if (propertyId) where.propertyId = propertyId;
-  if (session.user.role !== "OWNER") where.agentId = session.user.id;
+  if (session.user.role !== "OWNER") {
+    // بعد از انتقال مشتری، مشاور تازه‌منتقل‌شده هم معامله را می‌بیند؛
+    // مشاورِ سهم‌دار هم معاملهٔ مشترک را می‌بیند (مالکیت معامله عوض نمی‌شود)
+    where.OR = [
+      { agentId: session.user.id },
+      { customer: { assignedAgentId: session.user.id } },
+      { shares: { some: { userId: session.user.id } } },
+    ];
+  }
 
   const deals = await prisma.deal.findMany({
     where,
@@ -86,6 +94,7 @@ export async function POST(req: NextRequest) {
     }
   }
 
+  // بررسی سریعِ پیش از تراکنش (مسیر رایج)؛ بررسی قطعی داخل تراکنش با قفل ردیف انجام می‌شود
   if (property.status === "SOLD" || property.status === "RENTED") {
     return NextResponse.json({ error: "این فایل قبلا معامله شده" }, { status: 409 });
   }
@@ -104,29 +113,52 @@ export async function POST(req: NextRequest) {
     );
   }
 
-  const deal = await prisma.$transaction(async (tx) => {
-    const created = await tx.deal.create({
-      data: {
-        customerId: d.customerId,
-        propertyId: d.propertyId,
-        // کمیسیون مال مشاورِ مشتری است، نه کسی که دکمه «موفق» را زده
-        agentId: customer.assignedAgentId,
-        status: status as never,
-        contractAt: d.contractAt ? new Date(d.contractAt) : status === "COMPLETED" ? new Date() : null,
-        notes: d.notes,
-        commissionToman: session.user.role === "OWNER" && d.commissionToman ? BigInt(d.commissionToman) : null,
-        commissionPercent: session.user.role === "OWNER" ? (d.commissionPercent ?? null) : null,
-        dealSalePriceToman: d.dealSalePriceToman ? BigInt(d.dealSalePriceToman) : (property.salePriceToman ?? null),
-        dealDepositToman: d.dealDepositToman ? BigInt(d.dealDepositToman) : (property.depositToman ?? null),
-        dealMonthlyRentToman: d.dealMonthlyRentToman
-          ? BigInt(d.dealMonthlyRentToman)
-          : (property.monthlyRentToman ?? null),
-      },
-    });
+  let deal;
+  try {
+    deal = await prisma.$transaction(async (tx) => {
+      // قفل ردیف ملک: دو درخواست هم‌زمان نمی‌توانند هر دو از بررسی عبور کنند؛
+      // دومی تا پایان تراکنش اولی صبر می‌کند و بعد وضعیت قفل‌شده را می‌بیند.
+      // (خواندن ساده داخل تراکنش زیر read-committed کافی نیست.)
+      await tx.$queryRaw`SELECT "id" FROM "Property" WHERE "id" = ${d.propertyId} FOR UPDATE`;
+      const lockedProperty = await tx.property.findUnique({ where: { id: d.propertyId } });
+      if (!lockedProperty || lockedProperty.deletedAt) {
+        throw new Error("DEAL_CONFLICT_PROPERTY_GONE");
+      }
+      if (lockedProperty.status === "SOLD" || lockedProperty.status === "RENTED") {
+        throw new Error("DEAL_CONFLICT_SOLD");
+      }
+      const openInsideTx = await tx.deal.findFirst({
+        where: {
+          propertyId: d.propertyId,
+          status: { in: ["PENDING", "COMPLETED"] },
+        },
+      });
+      if (openInsideTx) {
+        throw new Error("DEAL_CONFLICT_OPEN");
+      }
 
-    if (status === "COMPLETED") {
-      const newStatus = property.dealType === "SALE" ? "SOLD" : "RENTED";
-      await tx.property.update({ where: { id: property.id }, data: { status: newStatus as never } });
+      const created = await tx.deal.create({
+        data: {
+          customerId: d.customerId,
+          propertyId: d.propertyId,
+          // کمیسیون مال مشاورِ مشتری است، نه کسی که دکمه «موفق» را زده
+          agentId: customer.assignedAgentId,
+          status: status as never,
+          contractAt: d.contractAt ? new Date(d.contractAt) : status === "COMPLETED" ? new Date() : null,
+          notes: d.notes,
+          commissionToman: session.user.role === "OWNER" && d.commissionToman ? BigInt(d.commissionToman) : null,
+          commissionPercent: session.user.role === "OWNER" ? (d.commissionPercent ?? null) : null,
+          dealSalePriceToman: d.dealSalePriceToman ? BigInt(d.dealSalePriceToman) : (lockedProperty.salePriceToman ?? null),
+          dealDepositToman: d.dealDepositToman ? BigInt(d.dealDepositToman) : (lockedProperty.depositToman ?? null),
+          dealMonthlyRentToman: d.dealMonthlyRentToman
+            ? BigInt(d.dealMonthlyRentToman)
+            : (lockedProperty.monthlyRentToman ?? null),
+        },
+      });
+
+      if (status === "COMPLETED") {
+        const newStatus = lockedProperty.dealType === "SALE" ? "SOLD" : "RENTED";
+        await tx.property.update({ where: { id: lockedProperty.id }, data: { status: newStatus as never } });
 
       // تکمیل معامله یعنی مشتری «موفق» شد — فقط مسیر معامله مرحله را WON می‌کند
       if (customer.stage !== "WON" && customer.stage !== "LOST") {
@@ -138,7 +170,22 @@ export async function POST(req: NextRequest) {
     }
 
     return created;
-  });
+    });
+  } catch (e) {
+    if (e instanceof Error && e.message === "DEAL_CONFLICT_SOLD") {
+      return NextResponse.json({ error: "این فایل قبلا معامله شده" }, { status: 409 });
+    }
+    if (e instanceof Error && e.message === "DEAL_CONFLICT_OPEN") {
+      return NextResponse.json(
+        { error: "برای این فایل معامله باز/قطعی وجود دارد. ابتدا آن را لغو کنید." },
+        { status: 409 }
+      );
+    }
+    if (e instanceof Error && e.message === "DEAL_CONFLICT_PROPERTY_GONE") {
+      return NextResponse.json({ error: "فایل یافت نشد" }, { status: 404 });
+    }
+    throw e;
+  }
 
   await createAuditLog({
     actorId: session.user.id,

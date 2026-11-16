@@ -21,13 +21,17 @@ export async function GET() {
   const session = await getSessionFromCookies();
   if (!session) return NextResponse.json({ error: "وارد نشده‌اید" }, { status: 401 });
   const isOwner = session.user.role === "OWNER";
-  const agentFilter = isOwner ? {} : { agentId: session.user.id };
+  // مشاور معامله‌های خودش را می‌بیند، به‌علاوه معامله‌هایی که در آن‌ها سهم دارد
+  const agentFilter = isOwner
+    ? {}
+    : { OR: [{ agentId: session.user.id }, { shares: { some: { userId: session.user.id } } }] };
   const taxRatePct = await getTaxRatePct();
 
-  // «معامله قطعی» روی همه معامله‌های غیرلغوشده شمرده می‌شود، نه فقط آن‌هایی که کمیسیون دارند؛
-  // جمع‌های کمیسیون فقط از معامله‌های دارای کمیسیون می‌آیند؛ «مجموع شیرینی» جمع هر دو شیرینی است.
+  // همه جمع‌ها فقط روی معامله‌های قطعی (COMPLETED) حساب می‌شوند تا تراز بخواند؛
+  // معامله‌های در جریان و لغوشده نمی‌آیند. جمع‌های کمیسیون فقط از معامله‌های دارای کمیسیون می‌آیند؛
+  // «مجموع شیرینی» جمع هر دو شیرینی است.
   const deals = await prisma.deal.findMany({
-    where: { ...agentFilter, status: { not: "CANCELED" } },
+    where: { ...agentFilter, status: "COMPLETED" },
     select: {
       commissionToman: true,
       sellerShiriniToman: true,
@@ -50,7 +54,7 @@ export async function GET() {
   let unpaidCount = 0;
   let dealsCompleted = 0;
   let dealsWithCommission = 0;
-  // سهم دفتر فقط روی معامله‌های قطعی دارای درآمد؛ بدهی به مشاوران روی همه معامله‌های دارای درآمد
+  // سهم دفتر و بدهی به مشاوران فقط روی معامله‌های قطعی دارای درآمد
   let officeTotal = BigInt(0);
   let debtToAgents = BigInt(0);
   for (const d of deals) {
@@ -118,9 +122,9 @@ export async function GET() {
       commissionTotal,
       commissionPaid,
       commissionUnpaid,
-      // فقط مدیر: مجموع شیرینی فروشنده و خریدار روی معامله‌های لغونشده
+      // فقط مدیر: مجموع شیرینی فروشنده و خریدار روی معامله‌های قطعی
       shiriniTotal: isOwner ? shiriniTotal : null,
-      // نرخ مالیات ارزش افزوده (٪) و مجموع مالیات روی معامله‌های لغونشده دارای درآمد؛ فقط مدیر
+      // نرخ مالیات ارزش افزوده (٪) و مجموع مالیات روی معامله‌های قطعی دارای درآمد؛ فقط مدیر
       taxRatePct,
       taxTotal: isOwner ? taxTotal : null,
       unpaidCount,

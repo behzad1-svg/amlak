@@ -3,7 +3,8 @@ import { prisma } from "@/lib/prisma";
 import { verifyPassword, signToken } from "@/lib/auth";
 import { COOKIE_NAME, authCookieOptions } from "@/lib/jwt";
 import { loginSchema } from "@/lib/validation";
-import { checkRateLimitDb, recordRateLimitDb, rateLimitForKey } from "@/lib/rateLimitDb";
+import { checkRateLimitDb, clearRateLimitDb, recordRateLimitDb, rateLimitForKey } from "@/lib/rateLimitDb";
+import { clientIpFromHeaders } from "@/lib/clientIp";
 import { serializeBigInt } from "@/lib/utils";
 
 // توجه: محدودیت نرخ ورود با جدول RateLimitHit در دیتابیس ذخیره می‌شود (نقد ۱۳)
@@ -21,8 +22,7 @@ import { serializeBigInt } from "@/lib/utils";
 // تماس اعمال می‌شود.
 
 function clientIp(req: NextRequest): string | null {
-  if (process.env.TRUSTED_PROXY !== "true") return null;
-  return req.headers.get("x-forwarded-for")?.split(",")[0]?.trim() ?? req.headers.get("x-real-ip") ?? null;
+  return clientIpFromHeaders(req.headers);
 }
 
 // هش ساختگی با هزینهٔ یکسان (۱۰) برای هم‌زمان‌سازی پاسخ کاربر ناموجود یا
@@ -83,6 +83,9 @@ export async function POST(req: NextRequest) {
   }
 
   const token = await signToken({ userId: user.id, role: user.role, tokenVersion: user.tokenVersion });
+
+  // ورود موفق: شمارندهٔ خطاهای همان پنجره پاک می‌شود تا چند خطای قدیمی باعث 429 نشوند
+  await clearRateLimitDb(`login:phone:${phone}`, ...(ip ? [`login:ip:${ip}`] : []));
 
   const res = NextResponse.json(serializeBigInt({ user: { id: user.id, name: user.name, phone: user.phone, role: user.role } }));
   res.cookies.set(COOKIE_NAME, token, authCookieOptions());

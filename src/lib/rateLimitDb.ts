@@ -84,3 +84,14 @@ export async function recordRateLimitDb(key: string): Promise<number> {
     return memRecord(key);
   }
 }
+
+/** پاک‌کردن شمارندهٔ تلاش‌های ناموفق — بعد از ورود موفق صدا می‌شود. */
+export async function clearRateLimitDb(...keys: string[]): Promise<void> {
+  for (const key of keys) mem.delete(key);
+  if (keys.length === 0) return;
+  try {
+    await prisma.rateLimitHit.deleteMany({ where: { key: { in: keys } } });
+  } catch (e) {
+    console.error("[rate-limit] DB clear failed:", e instanceof Error ? e.message : "");
+  }
+}

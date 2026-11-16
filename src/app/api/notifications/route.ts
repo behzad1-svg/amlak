@@ -1,15 +1,8 @@
 import { NextRequest, NextResponse } from "next/server";
-import { cookies } from "next/headers";
 import { prisma } from "@/lib/prisma";
-import { validateSession } from "@/lib/auth";
+import { getSessionFromCookies } from "@/lib/auth";
 import { findInvalidQueryParam } from "@/lib/validation";
 import { serializeBigInt } from "@/lib/utils";
-
-async function getSession() {
-  const cookieStore = await cookies();
-  const token = cookieStore.get("saj_token")?.value;
-  return validateSession(token);
-}
 
 const NOTIFICATION_TYPES = ["MATCH_SUGGESTION", "FOLLOW_UP_OVERDUE", "VIEWING_REMINDER", "ACCESS_GRANTED", "CUSTOMER_TRANSFERRED", "SESSION_CARD", "ADVERTISED"] as const;
 type NotificationTypeName = (typeof NOTIFICATION_TYPES)[number];
@@ -19,7 +12,7 @@ function invalidType(value: string | null): value is string {
 }
 
 export async function GET(req: NextRequest) {
-  const session = await getSession();
+  const session = await getSessionFromCookies();
   if (!session) return NextResponse.json({ error: "وارد نشده‌اید" }, { status: 401 });
   const { searchParams } = new URL(req.url);
   const unreadOnly = searchParams.get("unreadOnly") === "true";
@@ -56,7 +49,7 @@ export async function GET(req: NextRequest) {
 }
 
 export async function PATCH(req: NextRequest) {
-  const session = await getSession();
+  const session = await getSessionFromCookies();
   if (!session) return NextResponse.json({ error: "وارد نشده‌اید" }, { status: 401 });
   const body = await req.json().catch(() => null);
   if (!body || typeof body !== "object") {

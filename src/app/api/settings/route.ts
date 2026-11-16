@@ -1,19 +1,12 @@
 import { NextRequest, NextResponse } from "next/server";
-import { cookies } from "next/headers";
 import { prisma } from "@/lib/prisma";
-import { validateSession } from "@/lib/auth";
+import { getSessionFromCookies } from "@/lib/auth";
 import { DEFAULT_BUSHEHR_REGIONS, DEFAULT_PROPERTY_TYPES, DEFAULT_CUSTOMER_TAGS } from "@/lib/constants";
 import { getTaxRatePct } from "@/lib/settings";
 import { serializeBigInt } from "@/lib/utils";
 
-async function getSession() {
-  const cookieStore = await cookies();
-  const token = cookieStore.get("saj_token")?.value;
-  return validateSession(token);
-}
-
 export async function GET() {
-  const session = await getSession();
+  const session = await getSessionFromCookies();
   if (!session) return NextResponse.json({ error: "وارد نشده‌اید" }, { status: 401 });
   const regionsRow = await prisma.appSetting.findUnique({ where: { key: "regions" } });
   const typesRow = await prisma.appSetting.findUnique({ where: { key: "propertyTypes" } });
@@ -26,7 +19,7 @@ export async function GET() {
 }
 
 export async function PATCH(req: NextRequest) {
-  const session = await getSession();
+  const session = await getSessionFromCookies();
   if (!session) return NextResponse.json({ error: "وارد نشده‌اید" }, { status: 401 });
   if (session.user.role !== "OWNER") return NextResponse.json({ error: "فقط مدیر" }, { status: 403 });
   const body = await req.json().catch(() => null);
