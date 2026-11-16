@@ -1,15 +1,17 @@
 "use client";
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { useParams, useRouter } from "next/navigation";
+import Link from "next/link";
 import { Header } from "@/components/layout/Header";
 import { Button } from "@/components/ui/Button";
 import { Input, Textarea, Select, Label, PhoneInput } from "@/components/ui/Input";
 import { Card } from "@/components/ui/Card";
 import { Badge } from "@/components/ui/Badge";
 import dynamic from "next/dynamic";
-import { formatDate } from "@/lib/utils";
+import { formatDate, toFaDigits } from "@/lib/utils";
 import { MoneyText } from "@/components/ui/MoneyText";
 import { MoneyInput } from "@/components/ui/MoneyInput";
+import { SearchSelect, type SearchOption } from "@/components/ui/SearchSelect";
 import { PageError, PageSkeleton } from "@/components/ui/LoadState";
 import { apiFetch, apiJson, errorMessage } from "@/lib/api";
 
@@ -73,6 +75,16 @@ type TransferHistory = {
 
 type Activity = { id: string; type: string; description: string | null; createdAt: string; agent: { name: string } };
 type FollowUp = { id: string; dueAt: string; note: string | null; done: boolean };
+
+type Viewing = {
+  id: string;
+  startAt: string;
+  endAt?: string | null;
+  status: string;
+  feedback?: string | null;
+  property?: { id: string; title: string; code?: string | null } | null;
+  agent?: { id: string; name: string } | null;
+};
 
 type CustomerForm = {
   name: string;
@@ -140,6 +152,21 @@ export default function CustomerDetailPage() {
   const [transferring, setTransferring] = useState(false);
   const [reverting, setReverting] = useState(false);
   const [transferOk, setTransferOk] = useState("");
+  const [viewings, setViewings] = useState<Viewing[]>([]);
+
+  // ثبت بازدید با فایل — مثل فرم بازدید صفحه فایل، با این تفاوت که مشتری ثابت است
+  const [visProperty, setVisProperty] = useState("");
+  const [visDate, setVisDate] = useState<string | null>(null);
+  const [visFeedback, setVisFeedback] = useState("");
+  const [visAgent, setVisAgent] = useState("");
+  const [visStatus, setVisStatus] = useState("SCHEDULED");
+  const [savingVis, setSavingVis] = useState(false);
+  const [visPropertyOptions, setVisPropertyOptions] = useState<SearchOption[]>([]);
+  const [visPropertyTotal, setVisPropertyTotal] = useState<number | null>(null);
+  const [visPropSearch, setVisPropSearch] = useState("");
+  const [visPropDealType, setVisPropDealType] = useState("");
+  const [visPropAdvisorId, setVisPropAdvisorId] = useState("");
+  const visPropertyIdRef = useRef("");
 
   // نقد ۱ — بارگذاری با کمک‌کنندهٔ مرکزی؛ خطا پیام + تلاش دوباره دارد
   // و صفحه دیگر روی «بارگذاری...» گیر نمی‌کند.
@@ -147,10 +174,11 @@ export default function CustomerDetailPage() {
     setLoading(true);
     setLoadError(null);
     try {
-      const [d, fus, acts] = await Promise.all([
+      const [d, fus, acts, vis] = await Promise.all([
         apiJson<Customer>(`/api/customers/${id}`),
         apiJson<FollowUp[]>(`/api/customers/${id}/follow-ups`),
         apiJson<{ activities?: Activity[] } | Activity[]>(`/api/activities?customerId=${id}`),
+        apiJson<Viewing[]>(`/api/viewings?customerId=${id}`),
       ]);
       if (d.id) {
         setC(d);
@@ -172,6 +200,7 @@ export default function CustomerDetailPage() {
         });
       }
       setFollowUps(Array.isArray(fus) ? fus : []);
+      setViewings(Array.isArray(vis) ? vis : []);
       const list = Array.isArray(acts) ? acts : (Array.isArray(acts.activities) ? acts.activities : []);
       setActivities(list);
     } catch (e) {
@@ -180,6 +209,41 @@ export default function CustomerDetailPage() {
       setLoading(false);
     }
   }
+
+  // جستجوی فایل — سمت سرور (عنوان/کد + نوع معامله + مشاور)، مثل فرم کارت جلسه
+  const loadPropertyOptions = useCallback(async () => {
+    const params = new URLSearchParams({ limit: "100" });
+    if (visPropSearch.trim()) params.set("search", visPropSearch.trim());
+    if (visPropDealType) params.set("dealType", visPropDealType);
+    if (visPropAdvisorId) params.set("listedById", visPropAdvisorId);
+    try {
+      const d = await apiJson<{ properties?: { id: string; title: string; code?: string | null }[]; total?: number } | { id: string; title: string; code?: string | null }[]>(`/api/properties?${params.toString()}`);
+      const list = (Array.isArray(d) ? d : d.properties ?? []) as { id: string; title: string; code?: string | null }[];
+      setVisPropertyTotal(Array.isArray(d) ? list.length : d.total ?? list.length);
+      const opts = list.map((x) => ({ id: x.id, label: x.code ? `${x.code} — ${x.title}` : x.title }));
+      // فایل انتخابی را نگه دار — حتی اگر با فیلتر تازه در لیست نباشد، برچسبش ناپدید نشود
+      setVisPropertyOptions((prev) => {
+        const selId = visPropertyIdRef.current;
+        if (!selId) return opts;
+        const sel = prev.find((o) => o.id === selId);
+        if (sel && !opts.some((o) => o.id === sel.id)) return [...opts, sel];
+        return opts;
+      });
+    } catch (e) {
+      setError(errorMessage(e));
+    }
+  }, [visPropSearch, visPropDealType, visPropAdvisorId]);
+
+  useEffect(() => {
+    visPropertyIdRef.current = visProperty;
+  }, [visProperty]);
+
+  useEffect(() => {
+    const t = setTimeout(() => {
+      loadPropertyOptions();
+    }, visPropSearch.trim() ? 280 : 0);
+    return () => clearTimeout(t);
+  }, [visPropSearch, visPropDealType, visPropAdvisorId, loadPropertyOptions]);
 
   async function refreshFollowUps() {
     const r = await apiJson<FollowUp[]>(`/api/customers/${id}/follow-ups`);
@@ -313,6 +377,39 @@ export default function CustomerDetailPage() {
     } finally {
       setSavingActivity(false);
     }
+  }
+
+  async function addViewing() {
+    if (!visProperty || !visDate) {
+      setError("فایل و تاریخ بازدید الزامی است");
+      return;
+    }
+    setSavingVis(true);
+    const body: Record<string, unknown> = {
+      customerId: id,
+      propertyId: visProperty,
+      startAt: visDate,
+      status: visStatus,
+      feedback: visFeedback.trim() || null,
+    };
+    if (isOwner && visAgent) body.agentId = visAgent;
+    if (visStatus === "DONE") body.endAt = visDate;
+    try {
+      await apiFetch("/api/viewings", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(body),
+      });
+    } catch (e) {
+      setSavingVis(false);
+      setError(errorMessage(e));
+      return;
+    }
+    setSavingVis(false);
+    setVisFeedback("");
+    setOutcomeMsg("بازدید ثبت شد");
+    setTimeout(() => setOutcomeMsg(""), 3500);
+    load();
   }
 
   async function quickCall(q: (typeof QUICK_CALLS)[number]) {
@@ -952,6 +1049,89 @@ export default function CustomerDetailPage() {
                     </button>
                   ))}
                 </div>
+              </div>
+            )}
+          </Card>
+
+          <Card>
+            <h3 className="font-semibold mb-3">ثبت بازدید با فایل</h3>
+            <div className="grid gap-3 md:grid-cols-2">
+              <div className="md:col-span-2 grid grid-cols-1 gap-2 sm:grid-cols-2">
+                <Select value={visPropDealType} onChange={(e) => setVisPropDealType(e.target.value)} aria-label="نوع معامله">
+                  <option value="">همه معاملات</option>
+                  <option value="SALE">فروش</option>
+                  <option value="RENT">رهن و اجاره</option>
+                </Select>
+                <Select value={visPropAdvisorId} onChange={(e) => setVisPropAdvisorId(e.target.value)} aria-label="مشاور">
+                  <option value="">همه مشاورها</option>
+                  {agents.map((a) => (
+                    <option key={a.id} value={a.id}>{a.name}</option>
+                  ))}
+                </Select>
+              </div>
+              <div className="md:col-span-2">
+                <SearchSelect label="فایل / ملک" required value={visProperty} onChange={setVisProperty} options={visPropertyOptions} placeholder="فایل را جستجو و انتخاب کنید..." onSearchChange={setVisPropSearch} />
+              </div>
+              {visPropertyTotal !== null && visPropertyTotal > visPropertyOptions.length && (
+                <p className="md:col-span-2 text-[11px] text-[var(--ink-3)]">
+                  نمایش {toFaDigits(String(visPropertyOptions.length))} از {toFaDigits(String(visPropertyTotal))} فایل — فیلترها را محدودتر کنید.
+                </p>
+              )}
+              <div>
+                <Label htmlFor="f-visDate">تاریخ بازدید (شمسی) *</Label>
+                <div className="mt-1"><JalaliDatePicker id="f-visDate" value={visDate} onChange={setVisDate} /></div>
+              </div>
+              <div>
+                <Label htmlFor="f-visStatus">وضعیت</Label>
+                <Select id="f-visStatus" className="mt-1" value={visStatus} onChange={(e) => setVisStatus(e.target.value)}>
+                  <option value="SCHEDULED">قرار بازدید</option>
+                  <option value="DONE">انجام شد</option>
+                </Select>
+              </div>
+              {isOwner && (
+                <div>
+                  <SearchSelect
+                    label="مشاور (برای مدیر)"
+                    value={visAgent}
+                    onChange={setVisAgent}
+                    options={agents.map((a) => ({ id: a.id, label: a.name }))}
+                    placeholder="خودم"
+                  />
+                </div>
+              )}
+              <div className="md:col-span-2">
+                <Label htmlFor="f-visFeedback">گزارش بازدید</Label>
+                <Textarea id="f-visFeedback"
+                  className="mt-1"
+                  rows={2}
+                  value={visFeedback}
+                  onChange={(e) => setVisFeedback(e.target.value)}
+                  placeholder="مثلا: رفتیم بازدید، مشتری پسندید"
+                />
+              </div>
+            </div>
+            <div className="mt-3">
+              <Button onClick={addViewing} disabled={savingVis}>{savingVis ? "..." : "ثبت بازدید"}</Button>
+            </div>
+
+            {viewings.length > 0 && (
+              <div className="mt-4 space-y-2">
+                <div className="text-[12px] font-bold text-[var(--ink-2)]">بازدیدها ({viewings.length})</div>
+                {viewings.map((v) => (
+                  <div key={v.id} className="rounded-[12px] border border-[var(--line)] px-3 py-2 text-[13px]">
+                    <div className="flex flex-wrap items-center gap-2">
+                      <Badge className="text-[11px]">{v.status === "DONE" ? "انجام شد" : v.status === "CANCELED" ? "لغو" : "قرار بازدید"}</Badge>
+                      <span className="font-bold">{formatDate(v.startAt)}</span>
+                      {v.property && (
+                        <Link href={`/properties/${v.property.id}`} className="text-[var(--ink-2)] hover:underline">
+                          {v.property.code ? `${v.property.code} — ` : ""}{v.property.title}
+                        </Link>
+                      )}
+                      <span className="text-[12px] text-[var(--ink-3)]">مشاور: {v.agent?.name ?? "—"}</span>
+                    </div>
+                    {v.feedback && <div className="mt-1 text-[var(--ink-2)]">{v.feedback}</div>}
+                  </div>
+                ))}
               </div>
             )}
           </Card>
