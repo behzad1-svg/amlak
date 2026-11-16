@@ -169,7 +169,7 @@ export default function SettingsPage() {
 
             <Card>
               <h3 className="font-semibold mb-3">مالیات ارزش افزوده</h3>
-              <p className="text-[12px] text-[var(--ink-3)] mb-3">نرخ مالیات روی جمع کمیسیون و شیرینی حساب می‌شود؛ مالیات جزو تقسیم درآمد نیست و به مشاور پرداخت نمی‌شود.</p>
+              <p className="text-[12px] text-[var(--ink-3)] mb-3">نرخ مالیات فقط روی کمیسیون حساب می‌شود؛ شیرینی مالیات ندارد. مالیات جزو تقسیم درآمد نیست و به مشاور پرداخت نمی‌شود.</p>
               <div className="flex flex-col gap-2 sm:flex-row">
                 <div className="flex-1">
                   <Label htmlFor="f-taxRate">مالیات ارزش افزوده (٪)</Label>
