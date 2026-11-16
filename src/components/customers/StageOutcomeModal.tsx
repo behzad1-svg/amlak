@@ -1,11 +1,12 @@
 "use client";
 import { useEffect, useRef, useState } from "react";
 import { Button } from "@/components/ui/Button";
-import { Label, Textarea } from "@/components/ui/Input";
+import { Input, Label, Select, Textarea } from "@/components/ui/Input";
 import { SearchSelect } from "@/components/ui/SearchSelect";
 import { LOST_REASON_LABELS, PROPERTY_TYPE_LABELS, DEAL_TYPE_LABELS } from "@/lib/constants";
 import { formatTomanCompact, toFaDigits } from "@/lib/utils";
 import { apiJson } from "@/lib/api";
+import { useRole } from "@/hooks/useRole";
 
 type PropertyOption = {
   id: string;
@@ -45,6 +46,12 @@ export function StageOutcomeModal({
   const [propertiesTotal, setPropertiesTotal] = useState<number | null>(null);
   const [propertiesError, setPropertiesError] = useState("");
   const [propertyId, setPropertyId] = useState("");
+  const [agentFilter, setAgentFilter] = useState("");
+  const [dealTypeFilter, setDealTypeFilter] = useState(preferredDealType ?? "");
+  const [titleSearch, setTitleSearch] = useState("");
+  const [agents, setAgents] = useState<{ id: string; name: string }[]>([]);
+  const propertyIdRef = useRef("");
+  const { isOwner } = useRole();
   const panelRef = useRef<HTMLDivElement>(null);
 
   // نقد ۱۰ — مودال دیالوگ واقعی است: Escape می‌بندد و Tab داخل مودال می‌ماند
@@ -82,22 +89,49 @@ export function StageOutcomeModal({
   const [err, setErr] = useState("");
 
   useEffect(() => {
+    propertyIdRef.current = propertyId;
+  }, [propertyId]);
+
+  useEffect(() => {
+    if (!isWon) return;
+    apiJson<{ id: string; name: string }[]>("/api/users")
+      .then((d) => {
+        if (Array.isArray(d)) setAgents(d.map((u) => ({ id: u.id, name: u.name })));
+      })
+      .catch(() => {});
+  }, [isWon]);
+
+  // جستجوی فایل — سمت سرور (عنوان/کد + نوع معامله + مشاور)، تا سقف ۱۰۰ تایی لیست، گزینه‌های ناسازگار را پنهان نکند
+  useEffect(() => {
     if (!isWon) return;
     const params = new URLSearchParams({ status: "ACTIVE", limit: "100" });
-    if (preferredDealType) params.set("dealType", preferredDealType);
+    if (dealTypeFilter) params.set("dealType", dealTypeFilter);
+    if (agentFilter && isOwner) params.set("listedById", agentFilter);
+    if (titleSearch.trim()) params.set("search", titleSearch.trim());
     if (preferredType) params.set("type", preferredType);
-    apiJson<{ properties?: PropertyOption[]; total?: number } | PropertyOption[]>(`/api/properties?${params.toString()}`)
-      .then((d) => {
-        const list = Array.isArray(d) ? d : d?.properties ?? [];
-        setProperties(list as PropertyOption[]);
-        setPropertiesTotal(Array.isArray(d) ? list.length : d.total ?? list.length);
-      })
-      .catch(() => {
-        setProperties([]);
-        setPropertiesTotal(null);
-        setPropertiesError("لیست فایل‌ها بارگذاری نشد — مودال را ببندید و دوباره باز کنید.");
-      });
-  }, [isWon, preferredDealType, preferredType]);
+    const t = setTimeout(() => {
+      apiJson<{ properties?: PropertyOption[]; total?: number } | PropertyOption[]>(`/api/properties?${params.toString()}`)
+        .then((d) => {
+          const list = (Array.isArray(d) ? d : d?.properties ?? []) as PropertyOption[];
+          // فایل انتخاب‌شده را نگه دار — حتی اگر با فیلتر تازه در لیست نباشد
+          setProperties((prev) => {
+            const selId = propertyIdRef.current;
+            if (!selId) return list;
+            const sel = prev.find((p) => p.id === selId);
+            if (sel && !list.some((p) => p.id === sel.id)) return [...list, sel];
+            return list;
+          });
+          setPropertiesTotal(Array.isArray(d) ? list.length : d.total ?? list.length);
+          setPropertiesError("");
+        })
+        .catch(() => {
+          setProperties([]);
+          setPropertiesTotal(null);
+          setPropertiesError("لیست فایل‌ها بارگذاری نشد — مودال را ببندید و دوباره باز کنید.");
+        });
+    }, titleSearch.trim() ? 280 : 0);
+    return () => clearTimeout(t);
+  }, [isWon, dealTypeFilter, agentFilter, titleSearch, preferredType, isOwner]);
 
   async function submit(e: React.FormEvent) {
     e.preventDefault();
@@ -150,6 +184,20 @@ export function StageOutcomeModal({
           {isWon ? (
             <>
               <div>
+                <div className="mb-2 grid gap-2 sm:grid-cols-3">
+                  <Input placeholder="عنوان یا کد فایل را بنویسید..." value={titleSearch} onChange={(e) => setTitleSearch(e.target.value)} aria-label="جستجوی عنوان فایل" />
+                  <Select value={dealTypeFilter} onChange={(e) => setDealTypeFilter(e.target.value)} aria-label="نوع معامله">
+                    <option value="">همه معاملات</option>
+                    <option value="SALE">فروش</option>
+                    <option value="RENT">رهن و اجاره</option>
+                  </Select>
+                  {isOwner && (
+                    <Select value={agentFilter} onChange={(e) => setAgentFilter(e.target.value)} aria-label="مشاور">
+                      <option value="">همه مشاورها</option>
+                      {agents.map((a) => <option key={a.id} value={a.id}>{a.name}</option>)}
+                    </Select>
+                  )}
+                </div>
                 <SearchSelect
                   label="فایل معامله‌شده"
                   required

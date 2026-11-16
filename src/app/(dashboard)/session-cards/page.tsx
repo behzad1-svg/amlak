@@ -2,7 +2,7 @@
 // مشاور کارت را پر می‌کند، همان لحظه اعلان HIGH برای مدیر می‌رود،
 // مدیر تأیید یا لغو می‌کند و نظر می‌گذارد.
 "use client";
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import dynamic from "next/dynamic";
 import { Header } from "@/components/layout/Header";
@@ -81,6 +81,12 @@ export default function SessionCardsPage() {
   const [propertyOptions, setPropertyOptions] = useState<SearchOption[]>([]);
   const [advisorOptions, setAdvisorOptions] = useState<SearchOption[]>([]);
   const [contractManagerOptions, setContractManagerOptions] = useState<SearchOption[]>([]);
+  const [propertyTotal, setPropertyTotal] = useState<number | null>(null);
+  const [propSearch, setPropSearch] = useState("");
+  const [propDealType, setPropDealType] = useState("");
+  const [propAdvisorId, setPropAdvisorId] = useState("");
+  const [fileAdvisorOptions, setFileAdvisorOptions] = useState<SearchOption[]>([]);
+  const propertyIdRef = useRef("");
 
   const [customerId, setCustomerId] = useState("");
   const [propertyId, setPropertyId] = useState("");
@@ -128,22 +134,56 @@ export default function SessionCardsPage() {
 
   async function loadOptions() {
     try {
-      const [c, p, u] = await Promise.all([
+      const [c, u] = await Promise.all([
         apiJson<unknown>("/api/customers?limit=200"),
-        apiJson<unknown>("/api/properties?limit=200"),
         apiJson<unknown>("/api/users"),
       ]);
       const customers = (Array.isArray(c) ? c : (c as { customers?: unknown[] }).customers ?? []) as { id: string; name: string; phone?: string }[];
-      const properties = (Array.isArray(p) ? p : (p as { properties?: unknown[] }).properties ?? []) as { id: string; title: string; code?: string | null }[];
       const users = (Array.isArray(u) ? u : []) as { id: string; name: string; role?: string; active?: boolean; isContractManager?: boolean }[];
       setCustomerOptions(customers.map((x) => ({ id: x.id, label: x.name, sub: x.phone })));
-      setPropertyOptions(properties.map((x) => ({ id: x.id, label: x.code ? `${x.code} — ${x.title}` : x.title })));
       setAdvisorOptions(users.filter((x) => x.role === "AGENT" && x.active !== false).map((x) => ({ id: x.id, label: x.name })));
       setContractManagerOptions(users.filter((x) => x.isContractManager && x.active !== false).map((x) => ({ id: x.id, label: x.name })));
+      setFileAdvisorOptions(users.map((x) => ({ id: x.id, label: x.name })));
     } catch (e) {
       setActionError(errorMessage(e));
     }
   }
+
+  // جستجوی فایل — سمت سرور (عنوان/کد + نوع معامله + مشاور)، تا سقف ۱۰۰ تایی لیست، گزینه‌های ناسازگار را پنهان نکند
+  const loadPropertyOptions = useCallback(async () => {
+    const params = new URLSearchParams({ limit: "100" });
+    if (propSearch.trim()) params.set("search", propSearch.trim());
+    if (propDealType) params.set("dealType", propDealType);
+    if (propAdvisorId && isOwner) params.set("listedById", propAdvisorId);
+    try {
+      const d = await apiJson<{ properties?: { id: string; title: string; code?: string | null }[]; total?: number } | { id: string; title: string; code?: string | null }[]>(`/api/properties?${params.toString()}`);
+      const list = (Array.isArray(d) ? d : d.properties ?? []) as { id: string; title: string; code?: string | null }[];
+      setPropertyTotal(Array.isArray(d) ? list.length : d.total ?? list.length);
+      const opts = list.map((x) => ({ id: x.id, label: x.code ? `${x.code} — ${x.title}` : x.title }));
+      // فایل انتخاب‌شده را نگه دار — حتی اگر با فیلتر تازه در لیست نباشد، برچسبش ناپدید نشود
+      setPropertyOptions((prev) => {
+        const selId = propertyIdRef.current;
+        if (!selId) return opts;
+        const sel = prev.find((o) => o.id === selId);
+        if (sel && !opts.some((o) => o.id === sel.id)) return [...opts, sel];
+        return opts;
+      });
+    } catch (e) {
+      setActionError(errorMessage(e));
+    }
+  }, [propSearch, propDealType, propAdvisorId, isOwner]);
+
+  useEffect(() => {
+    propertyIdRef.current = propertyId;
+  }, [propertyId]);
+
+  useEffect(() => {
+    if (!showForm) return;
+    const t = setTimeout(() => {
+      loadPropertyOptions();
+    }, propSearch.trim() ? 280 : 0);
+    return () => clearTimeout(t);
+  }, [showForm, propSearch, propDealType, propAdvisorId, loadPropertyOptions]);
 
   function openForm() {
     setShowForm(true);
@@ -291,7 +331,28 @@ export default function SessionCardsPage() {
                 به‌محض ثبت، اعلان کارت جلسه برای مدیر می‌رود؛ اگر مشاور همکار یا مدیر قرارداد انتخاب شده باشد، برای آن‌ها هم می‌رود.
               </p>
               <SearchSelect label="مشتری *" required value={customerId} onChange={setCustomerId} options={customerOptions} placeholder="مشتری را جستجو و انتخاب کنید..." />
+              <div className="grid grid-cols-1 gap-2 sm:grid-cols-3">
+                <Input placeholder="عنوان یا کد فایل را بنویسید..." value={propSearch} onChange={(e) => setPropSearch(e.target.value)} aria-label="جستجوی عنوان فایل" />
+                <Select value={propDealType} onChange={(e) => setPropDealType(e.target.value)} aria-label="نوع معامله">
+                  <option value="">همه معاملات</option>
+                  <option value="SALE">فروش</option>
+                  <option value="RENT">رهن و اجاره</option>
+                </Select>
+                {isOwner && (
+                  <Select value={propAdvisorId} onChange={(e) => setPropAdvisorId(e.target.value)} aria-label="مشاور">
+                    <option value="">همه مشاورها</option>
+                    {fileAdvisorOptions.map((o) => (
+                      <option key={o.id} value={o.id}>{o.label}</option>
+                    ))}
+                  </Select>
+                )}
+              </div>
               <SearchSelect label="فایل / ملک" value={propertyId} onChange={setPropertyId} options={propertyOptions} placeholder="فایل را جستجو و انتخاب کنید..." />
+              {propertyTotal !== null && propertyTotal > propertyOptions.length && (
+                <p className="text-[11px] text-[var(--ink-3)]">
+                  نمایش {toFaDigits(String(propertyOptions.length))} از {toFaDigits(String(propertyTotal))} فایل — فیلترها را دقیق‌تر کنید.
+                </p>
+              )}
               <div className="grid grid-cols-2 gap-3">
                 <div>
                   <Label>تاریخ جلسه *</Label>
