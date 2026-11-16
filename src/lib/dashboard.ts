@@ -17,6 +17,8 @@ export type DashboardTeamStat = {
   viewings: number;
   /// آگهی‌های ۷ روز گذشتهٔ مشاور — «این هفته چند تا آگهی کرده»
   advertisedWeekly: number;
+  /// کارت‌های جلسهٔ ۷ روز گذشتهٔ مشاور — «این هفته چند تا کارت جلسه ثبت کرده»
+  sessionCardsWeekly: number;
   breakdown: {
     calls: number;
     notes: number;
@@ -26,6 +28,7 @@ export type DashboardTeamStat = {
     viewingsDone: number;
     stageChanges: number;
     advertised: number;
+    sessionCards: number;
     other: number;
   };
 };
@@ -110,7 +113,7 @@ export async function getDashboardData(userId: string, isOwner: boolean): Promis
 }
 
 async function getTeamStats(weekAgo: Date, monthAgo: Date): Promise<DashboardTeamStat[]> {
-  const [agents, overdueByAgent, weeklyActivity, monthlyActivity, typeGroups, dealsByAgent, appraisalsByAgent, listedByAgent, viewingsByAgent, advertisedWeeklyByAgent] =
+  const [agents, overdueByAgent, weeklyActivity, monthlyActivity, typeGroups, dealsByAgent, appraisalsByAgent, listedByAgent, viewingsByAgent, advertisedWeeklyByAgent, sessionCardsWeeklyByAgent] =
     await Promise.all([
       prisma.user.findMany({ where: { active: true }, select: { id: true, name: true, role: true } }),
       prisma.customer.groupBy({
@@ -135,6 +138,8 @@ async function getTeamStats(weekAgo: Date, monthAgo: Date): Promise<DashboardTea
       prisma.viewing.groupBy({ by: ["agentId"], _count: true }),
       // آگهی‌های ۷ روز گذشته — ستون «آگهی هفته» در وضعیت تیم
       prisma.activity.groupBy({ by: ["agentId"], where: { type: "ADVERTISED", createdAt: { gte: weekAgo } }, _count: true }),
+      // کارت‌های جلسهٔ ۷ روز گذشته — ستون «کارت جلسه هفته» در وضعیت تیم
+      prisma.activity.groupBy({ by: ["agentId"], where: { type: "SESSION_CARD", createdAt: { gte: weekAgo } }, _count: true }),
     ]);
 
   const overdueMap = new Map(overdueByAgent.map((r) => [r.assignedAgentId, r._count]));
@@ -148,6 +153,7 @@ async function getTeamStats(weekAgo: Date, monthAgo: Date): Promise<DashboardTea
   const listedMap = new Map(listedByAgent.map((r) => [r.listedById, r._count]));
   const viewingMap = new Map(viewingsByAgent.map((r) => [r.agentId, r._count]));
   const advertisedWeeklyMap = new Map(advertisedWeeklyByAgent.map((r) => [r.agentId, r._count]));
+  const sessionCardsWeeklyMap = new Map(sessionCardsWeeklyByAgent.map((r) => [r.agentId, r._count]));
 
   return agents.map((a) => ({
     id: a.id,
@@ -161,6 +167,7 @@ async function getTeamStats(weekAgo: Date, monthAgo: Date): Promise<DashboardTea
     listedFiles: listedMap.get(a.id) ?? 0,
     viewings: viewingMap.get(a.id) ?? 0,
     advertisedWeekly: advertisedWeeklyMap.get(a.id) ?? 0,
+    sessionCardsWeekly: sessionCardsWeeklyMap.get(a.id) ?? 0,
     breakdown: {
       calls: typeMap.get(`${a.id}:CALL`) ?? 0,
       notes: typeMap.get(`${a.id}:NOTE`) ?? 0,
@@ -170,6 +177,7 @@ async function getTeamStats(weekAgo: Date, monthAgo: Date): Promise<DashboardTea
       viewingsDone: typeMap.get(`${a.id}:VIEWING_DONE`) ?? 0,
       stageChanges: typeMap.get(`${a.id}:STAGE_CHANGE`) ?? 0,
       advertised: typeMap.get(`${a.id}:ADVERTISED`) ?? 0,
+      sessionCards: typeMap.get(`${a.id}:SESSION_CARD`) ?? 0,
       other: typeMap.get(`${a.id}:OTHER`) ?? 0,
     },
   }));

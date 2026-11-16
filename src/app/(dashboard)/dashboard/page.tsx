@@ -184,7 +184,7 @@ export default async function DashboardPage() {
             <div className="px-4 py-3 border-b border-[var(--line)] flex items-center gap-2">
               <span className="flex h-7 w-7 items-center justify-center rounded-[10px] bg-[var(--ink)] text-white"><Users className="h-4 w-4" /></span>
               <span className="text-[13px] font-extrabold">وضعیت تیم</span>
-              <span className="mr-auto text-[11px] tracking-widest text-[var(--ink-3)]">هفتگی · ماهانه · آگهی هفته</span>
+              <span className="mr-auto text-[11px] tracking-widest text-[var(--ink-3)]">هفتگی · ماهانه · آگهی هفته · کارت جلسه هفته</span>
             </div>
             <div className="overflow-x-auto">
               <table className="w-full text-[13px]">
@@ -195,6 +195,7 @@ export default async function DashboardPage() {
                     <th className="py-2.5 text-center font-medium">هفتگی</th>
                     <th className="py-2.5 text-center font-medium">ماهانه</th>
                     <th className="py-2.5 text-center font-medium">آگهی هفته</th>
+                    <th className="py-2.5 text-center font-medium">کارت جلسه هفته</th>
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-[var(--line)]">
@@ -205,6 +206,7 @@ export default async function DashboardPage() {
                       <td className="text-center text-[var(--ink-2)]">{s.weeklyActivity}</td>
                       <td className="text-center text-[var(--ink-2)]">{s.monthlyActivity}</td>
                       <td className="text-center font-bold text-violet-700">{s.advertisedWeekly}</td>
+                      <td className="text-center font-bold text-teal-700">{s.sessionCardsWeekly}</td>
                     </tr>
                   ))}
                 </tbody>

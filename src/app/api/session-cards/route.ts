@@ -121,6 +121,17 @@ export async function POST(req: NextRequest) {
     entityId: card.id,
     newValue: { customerId: d.customerId, propertyId: d.propertyId ?? null, scheduledAt: d.scheduledAt } as never,
   });
+  // فعالیت «کارت جلسه» — مثل کارشناسی و آگهی: ثبت کارت در گزارش عملکرد سازندهٔ آن حساب می‌شود
+  const fileLabelForActivity = property ? (property.code ? `${property.code} — ${property.title}` : property.title) : "بدون فایل";
+  await prisma.activity.create({
+    data: {
+      type: "SESSION_CARD",
+      agentId: session.user.id,
+      customerId: d.customerId,
+      propertyId: d.propertyId || null,
+      description: `کارت جلسه ثبت شد: ${customer.name} — ${fileLabelForActivity}`,
+    },
+  });
   // اعلان فوری HIGH برای همه مدیرها + مشاور همکار + مدیر قرارداد انتخاب‌شده
   const owners = await prisma.user.findMany({ where: { role: "OWNER", active: true }, select: { id: true } });
   const recipientIds = [...new Set([...owners.map((o) => o.id), cooperatingAdvisor?.id, contractManager?.id].filter(Boolean))] as string[];

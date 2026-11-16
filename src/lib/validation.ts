@@ -232,7 +232,7 @@ export const customerTransferSchema = z.object({
 });
 
 export const activityCreateSchema = z.object({
-  type: z.enum(["CALL", "MESSAGE", "MEETING", "NOTE", "APPRAISAL", "ADVERTISED", "VIEWING_DONE", "STAGE_CHANGE", "OTHER"]),
+  type: z.enum(["CALL", "MESSAGE", "MEETING", "NOTE", "APPRAISAL", "ADVERTISED", "SESSION_CARD", "VIEWING_DONE", "STAGE_CHANGE", "OTHER"]),
   customerId: z.string().optional().nullable(),
   propertyId: z.string().optional().nullable(),
   description: z.string().max(2000).optional().nullable(),

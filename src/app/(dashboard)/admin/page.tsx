@@ -21,6 +21,7 @@ type Breakdown = {
   viewingsDone: number;
   stageChanges: number;
   advertised: number;
+  sessionCards: number;
   other: number;
 };
 
@@ -187,6 +188,7 @@ export default function AdminPage() {
                 ["پیام", selectedAgent.breakdown?.messages ?? 0],
                 ["تغییر مرحله", selectedAgent.breakdown?.stageChanges ?? 0],
                 ["آگهی", selectedAgent.breakdown?.advertised ?? 0],
+                ["کارت جلسه", selectedAgent.breakdown?.sessionCards ?? 0],
                 ["سایر", selectedAgent.breakdown?.other ?? 0],
               ] as const).map(([label, n]) => (
                 <div key={label} className="rounded-[12px] border border-[var(--line)] bg-[var(--paper-2)] px-3 py-2">

@@ -203,6 +203,7 @@ export const ACTIVITY_TYPE_LABELS: Record<string, string> = {
   NOTE: "یادداشت",
   APPRAISAL: "کارشناسی",
   ADVERTISED: "آگهی",
+  SESSION_CARD: "کارت جلسه",
   VIEWING_DONE: "بازدید انجام‌شده",
   STAGE_CHANGE: "تغییر مرحله",
   OTHER: "سایر",

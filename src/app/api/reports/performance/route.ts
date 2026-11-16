@@ -6,7 +6,7 @@ import { serializeBigInt } from "@/lib/utils";
 /**
  * گزارش عملکرد مشاوران — فقط مدیر.
  * GET /api/reports/performance?range=7|30|90 (پیش‌فرض ۳۰ روز)
- * به‌ازای هر کاربر فعال: فایل ثبت‌شده، کارشناسی، آگهی، فایل‌یابی،
+ * به‌ازای هر کاربر فعال: فایل ثبت‌شده، کارشناسی، آگهی، کارت جلسه، فایل‌یابی،
  * بازدید (غیر از لغوشده)، قرارداد (معامله قطعی) و پیگیری عقب‌افتادهٔ جاری.
  */
 export async function GET(req: NextRequest) {
@@ -21,7 +21,7 @@ export async function GET(req: NextRequest) {
   const since = new Date(Date.now() - range * 24 * 60 * 60 * 1000);
   const now = new Date();
 
-  const [users, files, appraisals, advertised, fileFindings, viewings, deals, overdue] = await Promise.all([
+  const [users, files, appraisals, advertised, sessionCards, fileFindings, viewings, deals, overdue] = await Promise.all([
     prisma.user.findMany({ where: { active: true }, select: { id: true, name: true, role: true }, orderBy: { name: "asc" } }),
     prisma.property.groupBy({
       by: ["listedById"],
@@ -37,6 +37,12 @@ export async function GET(req: NextRequest) {
     prisma.activity.groupBy({
       by: ["agentId"],
       where: { type: "ADVERTISED", createdAt: { gte: since } },
+      _count: true,
+    }),
+    // کارت جلسه — از Activity نوع SESSION_CARD (هر ثبت کارت، به نام سازندهٔ آن)
+    prisma.activity.groupBy({
+      by: ["agentId"],
+      where: { type: "SESSION_CARD", createdAt: { gte: since } },
       _count: true,
     }),
     prisma.customer.groupBy({
@@ -65,6 +71,7 @@ export async function GET(req: NextRequest) {
   const appraisalMap = new Map<string, number>();
   for (const r of appraisals) if (r.appraisedById) appraisalMap.set(r.appraisedById, r._count);
   const advertisedMap = new Map(advertised.map((r) => [r.agentId, r._count]));
+  const sessionCardsMap = new Map(sessionCards.map((r) => [r.agentId, r._count]));
   const findingMap = new Map(fileFindings.map((r) => [r.assignedAgentId, r._count]));
   const viewingMap = new Map(viewings.map((r) => [r.agentId, r._count]));
   const dealMap = new Map(deals.map((r) => [r.agentId, r._count]));
@@ -77,6 +84,7 @@ export async function GET(req: NextRequest) {
     files: filesMap.get(u.id) ?? 0,
     appraisals: appraisalMap.get(u.id) ?? 0,
     advertised: advertisedMap.get(u.id) ?? 0,
+    sessionCards: sessionCardsMap.get(u.id) ?? 0,
     fileFindings: findingMap.get(u.id) ?? 0,
     viewings: viewingMap.get(u.id) ?? 0,
     deals: dealMap.get(u.id) ?? 0,
@@ -88,12 +96,13 @@ export async function GET(req: NextRequest) {
       files: t.files + r.files,
       appraisals: t.appraisals + r.appraisals,
       advertised: t.advertised + r.advertised,
+      sessionCards: t.sessionCards + r.sessionCards,
       fileFindings: t.fileFindings + r.fileFindings,
       viewings: t.viewings + r.viewings,
       deals: t.deals + r.deals,
       overdue: t.overdue + r.overdue,
     }),
-    { files: 0, appraisals: 0, advertised: 0, fileFindings: 0, viewings: 0, deals: 0, overdue: 0 }
+    { files: 0, appraisals: 0, advertised: 0, sessionCards: 0, fileFindings: 0, viewings: 0, deals: 0, overdue: 0 }
   );
 
   return NextResponse.json(serializeBigInt({ range, since, users: rows, totals }));
