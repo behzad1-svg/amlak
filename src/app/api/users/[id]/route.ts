@@ -45,12 +45,13 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
   if (d.role !== undefined) data.role = d.role;
   if (d.active !== undefined) data.active = d.active;
   if (d.permissions !== undefined) data.permissions = sanitizePermissions(d.permissions);
+  if (d.isContractManager !== undefined) data.isContractManager = d.isContractManager;
   if (d.password) data.passwordHash = await hashPassword(d.password);
 
   const user = await prisma.user.update({
     where: { id },
     data,
-    select: { id: true, name: true, phone: true, role: true, active: true, createdAt: true, permissions: true },
+    select: { id: true, name: true, phone: true, role: true, active: true, createdAt: true, permissions: true, isContractManager: true },
   });
 
   // Invalidate sessions when password/role/active changes
@@ -75,6 +76,7 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
       active: user.active,
       passwordReset: Boolean(d.password),
       permissionsChanged: d.permissions !== undefined,
+      contractManagerChanged: d.isContractManager !== undefined,
     } as never,
   });
 

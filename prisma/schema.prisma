@@ -137,6 +137,7 @@ model User {
   passwordHash String
   role         UserRole @default(AGENT)
   active       Boolean  @default(true)
+  isContractManager Boolean @default(false)
   permissions  Json     @default("{}")
   tokenVersion Int      @default(1)
   createdAt    DateTime @default(now())
@@ -159,6 +160,8 @@ model User {
   transfersTo    CustomerTransfer[] @relation("TransferTo")
   transfersBy    CustomerTransfer[] @relation("TransferBy")
   sessionCards   SessionCard[]      @relation("SessionCardAdvisor")
+  cooperatingSessionCards SessionCard[] @relation("SessionCardCooperatingAdvisor")
+  contractManagedSessionCards SessionCard[] @relation("SessionCardContractManager")
 }
 
 model Customer {
@@ -391,10 +394,17 @@ model SessionCard {
   property           Property?         @relation(fields: [propertyId], references: [id])
   advisorId          String
   advisor            User              @relation("SessionCardAdvisor", fields: [advisorId], references: [id])
+  cooperatingAdvisorId String?
+  cooperatingAdvisor   User?             @relation("SessionCardCooperatingAdvisor", fields: [cooperatingAdvisorId], references: [id])
+  contractManagerId    String?
+  contractManager      User?             @relation("SessionCardContractManager", fields: [contractManagerId], references: [id])
   scheduledAt        DateTime
   cashAmountToman    BigInt?
+  depositAmountToman BigInt?
+  rentAmountToman    BigInt?
   intent             String?
   sellerShiriniToman BigInt?
+  depositPaid        Boolean?
   commissionToman    BigInt?
   paymentTerms       String?
   notes              String?
@@ -404,6 +414,8 @@ model SessionCard {
   updatedAt          DateTime          @updatedAt
 
   @@index([advisorId])
+  @@index([cooperatingAdvisorId])
+  @@index([contractManagerId])
   @@index([status, scheduledAt])
   @@index([customerId])
 }

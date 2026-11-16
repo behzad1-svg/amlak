@@ -13,18 +13,18 @@ export async function GET() {
   if (session.user.role === "OWNER") {
     const users = await prisma.user.findMany({
       orderBy: { createdAt: "desc" },
-      select: { id: true, name: true, phone: true, role: true, active: true, createdAt: true, permissions: true },
+      select: { id: true, name: true, phone: true, role: true, active: true, createdAt: true, permissions: true, isContractManager: true },
     });
     return NextResponse.json(serializeBigInt(users));
   }
 
   const users = await prisma.user.findMany({
     where: { active: true },
-    select: { id: true, name: true, role: true },
+    select: { id: true, name: true, role: true, isContractManager: true },
   });
   const self = await prisma.user.findUnique({
     where: { id: session.user.id },
-    select: { id: true, name: true, phone: true, role: true, active: true, createdAt: true, permissions: true },
+    select: { id: true, name: true, phone: true, role: true, active: true, createdAt: true, permissions: true, isContractManager: true },
   });
   const merged = users.map((u) => (u.id === self?.id ? (self as unknown as typeof u) : u));
   return NextResponse.json(serializeBigInt(merged));
@@ -56,7 +56,7 @@ export async function POST(req: NextRequest) {
       passwordHash: await hashPassword(d.password),
       role: d.role ?? "AGENT",
     },
-    select: { id: true, name: true, phone: true, role: true, active: true, createdAt: true, permissions: true },
+    select: { id: true, name: true, phone: true, role: true, active: true, createdAt: true, permissions: true, isContractManager: true },
   });
 
   await createAuditLog({

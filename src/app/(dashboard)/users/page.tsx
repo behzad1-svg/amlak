@@ -9,7 +9,7 @@ import { useRole } from "@/hooks/useRole";
 import { apiFetch, apiJson, errorMessage } from "@/lib/api";
 import { PERMISSIONS, hasPermission } from "@/lib/permissions";
 
-type ManagedUser = { id: string; name: string; phone: string; role: string; active: boolean; createdAt: string; permissions?: Record<string, boolean> };
+type ManagedUser = { id: string; name: string; phone: string; role: string; active: boolean; createdAt: string; permissions?: Record<string, boolean>; isContractManager?: boolean };
 
 export default function UsersPage() {
   const { role, loading: roleLoading } = useRole();
@@ -190,6 +190,18 @@ export default function UsersPage() {
                     })}
                   </div>
                   {u.role === "OWNER" && <p className="text-[11px] text-zinc-400 mt-1">مدیر همه دسترسی‌ها را دارد.</p>}
+                </div>
+                <div className="mt-2">
+                  <label className="flex items-center gap-1 text-[13px]">
+                    <input
+                      type="checkbox"
+                      checked={u.isContractManager ?? false}
+                      disabled={userBusy}
+                      onChange={(e) => void patchUser(u.id, { isContractManager: e.target.checked }, "مدیر قرارداد به‌روز شد")}
+                    />
+                    مدیر قرارداد
+                  </label>
+                  <p className="text-[11px] text-zinc-400 mt-1">مدیر قرارداد فقط در کشوی مدیر قرارداد کارت جلسه دیده می‌شود و اعلان کارت جلسه را می‌گیرد؛ دسترسی دیگری نمی‌دهد.</p>
                 </div>
                 {pwFor === u.id && (
                   <div className="mt-2 flex flex-col gap-2 sm:flex-row">

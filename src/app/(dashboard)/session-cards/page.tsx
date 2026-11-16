@@ -52,7 +52,11 @@ type SessionCardRow = {
   cashAmountToman: string | null;
   intent: string | null;
   sellerShiriniToman: string | null;
-  commissionToman: string | null;
+  cooperatingAdvisor: { id: string; name: string } | null;
+  contractManager: { id: string; name: string } | null;
+  depositPaid: boolean | null;
+  depositAmountToman: string | null;
+  rentAmountToman: string | null;
   paymentTerms: string | null;
   notes: string | null;
   status: string;
@@ -75,16 +79,22 @@ export default function SessionCardsPage() {
 
   const [customerOptions, setCustomerOptions] = useState<SearchOption[]>([]);
   const [propertyOptions, setPropertyOptions] = useState<SearchOption[]>([]);
+  const [advisorOptions, setAdvisorOptions] = useState<SearchOption[]>([]);
+  const [contractManagerOptions, setContractManagerOptions] = useState<SearchOption[]>([]);
 
   const [customerId, setCustomerId] = useState("");
   const [propertyId, setPropertyId] = useState("");
   const [dateIso, setDateIso] = useState<string | null>(null);
   const [time, setTime] = useState("12:00");
   const [cash, setCash] = useState("");
+  const [depositAmount, setDepositAmount] = useState("");
+  const [rentAmount, setRentAmount] = useState("");
   const [intent, setIntent] = useState("");
   const [intentOther, setIntentOther] = useState("");
   const [shirini, setShirini] = useState("");
-  const [commission, setCommission] = useState("");
+  const [depositPaid, setDepositPaid] = useState("");
+  const [cooperatingAdvisorId, setCooperatingAdvisorId] = useState("");
+  const [contractManagerId, setContractManagerId] = useState("");
   const [paymentTerms, setPaymentTerms] = useState("");
   const [notes, setNotes] = useState("");
   const [saving, setSaving] = useState(false);
@@ -118,14 +128,18 @@ export default function SessionCardsPage() {
 
   async function loadOptions() {
     try {
-      const [c, p] = await Promise.all([
+      const [c, p, u] = await Promise.all([
         apiJson<unknown>("/api/customers?limit=200"),
         apiJson<unknown>("/api/properties?limit=200"),
+        apiJson<unknown>("/api/users"),
       ]);
       const customers = (Array.isArray(c) ? c : (c as { customers?: unknown[] }).customers ?? []) as { id: string; name: string; phone?: string }[];
       const properties = (Array.isArray(p) ? p : (p as { properties?: unknown[] }).properties ?? []) as { id: string; title: string; code?: string | null }[];
+      const users = (Array.isArray(u) ? u : []) as { id: string; name: string; role?: string; active?: boolean; isContractManager?: boolean }[];
       setCustomerOptions(customers.map((x) => ({ id: x.id, label: x.name, sub: x.phone })));
       setPropertyOptions(properties.map((x) => ({ id: x.id, label: x.code ? `${x.code} — ${x.title}` : x.title })));
+      setAdvisorOptions(users.filter((x) => x.role === "AGENT" && x.active !== false).map((x) => ({ id: x.id, label: x.name })));
+      setContractManagerOptions(users.filter((x) => x.isContractManager && x.active !== false).map((x) => ({ id: x.id, label: x.name })));
     } catch (e) {
       setActionError(errorMessage(e));
     }
@@ -134,7 +148,7 @@ export default function SessionCardsPage() {
   function openForm() {
     setShowForm(true);
     setActionError("");
-    if (customerOptions.length === 0 && propertyOptions.length === 0) loadOptions();
+    if (customerOptions.length === 0 || advisorOptions.length === 0) loadOptions();
   }
 
   function resetForm() {
@@ -143,10 +157,14 @@ export default function SessionCardsPage() {
     setDateIso(null);
     setTime("12:00");
     setCash("");
+    setDepositAmount("");
+    setRentAmount("");
     setIntent("");
     setIntentOther("");
     setShirini("");
-    setCommission("");
+    setDepositPaid("");
+    setCooperatingAdvisorId("");
+    setContractManagerId("");
     setPaymentTerms("");
     setNotes("");
   }
@@ -166,6 +184,7 @@ export default function SessionCardsPage() {
     const at = new Date(dateIso);
     at.setHours(Number.isNaN(hh) ? 12 : hh, Number.isNaN(mm) ? 0 : mm, 0, 0);
     const finalIntent = intent === "سایر" ? intentOther.trim() : intent;
+    const isRent = intent === "رهن" || intent === "اجاره";
     setSaving(true);
     try {
       await apiJson("/api/session-cards", {
@@ -175,17 +194,21 @@ export default function SessionCardsPage() {
           customerId,
           propertyId: propertyId || null,
           scheduledAt: at.toISOString(),
-          cashAmountToman: cash || null,
+          cashAmountToman: isRent ? null : cash || null,
+          depositAmountToman: isRent ? depositAmount || null : null,
+          rentAmountToman: isRent ? rentAmount || null : null,
           intent: finalIntent || null,
           sellerShiriniToman: shirini || null,
-          commissionToman: commission || null,
+          cooperatingAdvisorId: cooperatingAdvisorId || null,
+          contractManagerId: contractManagerId || null,
+          depositPaid: depositPaid === "paid" ? true : depositPaid === "unpaid" ? false : null,
           paymentTerms: paymentTerms.trim() || null,
           notes: notes.trim() || null,
         }),
       });
       resetForm();
       setShowForm(false);
-      setActionOk("کارت جلسه ثبت شد و اعلان برای مدیر رفت.");
+      setActionOk("کارت جلسه ثبت شد و اعلان رفت.");
       load();
       // نشان کارت جلسه در سایدبار از لی‌اوت سروری می‌آید؛ بدون رفرش، عددش کهنه می‌ماند.
       router.refresh();
@@ -265,7 +288,7 @@ export default function SessionCardsPage() {
             <div className="space-y-4">
               <p className="text-[13px] leading-6 text-[var(--ink-2)]">
                 پیش از قرارداد، شرایط جلسه را اینجا بنویسید تا مدیر پیش از جلسه همه اطلاعات را داشته باشد؛
-                به‌محض ثبت، اعلان کارت جلسه برای مدیر می‌رود.
+                به‌محض ثبت، اعلان کارت جلسه برای مدیر می‌رود؛ اگر مشاور همکار یا مدیر قرارداد انتخاب شده باشد، برای آن‌ها هم می‌رود.
               </p>
               <SearchSelect label="مشتری *" required value={customerId} onChange={setCustomerId} options={customerOptions} placeholder="مشتری را جستجو و انتخاب کنید..." />
               <SearchSelect label="فایل / ملک" value={propertyId} onChange={setPropertyId} options={propertyOptions} placeholder="فایل را جستجو و انتخاب کنید..." />
@@ -279,7 +302,14 @@ export default function SessionCardsPage() {
                   <Input id="sc-time" type="time" value={time} onChange={(e) => setTime(e.target.value)} className="mt-1" dir="ltr" />
                 </div>
               </div>
-              <MoneyInput label="پول نقد مشتری (تومان)" value={cash} onChange={setCash} placeholder="مثلاً ۵٬۰۰۰٬۰۰۰٬۰۰۰" />
+              {(intent === "رهن" || intent === "اجاره") ? (
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                  <MoneyInput label="مبلغ رهن (تومان)" value={depositAmount} onChange={setDepositAmount} placeholder="مثلاً ۵۰۰٬۰۰۰٬۰۰۰" />
+                  <MoneyInput label="اجاره ماهانه (تومان)" value={rentAmount} onChange={setRentAmount} placeholder="مثلاً ۲۰٬۰۰۰٬۰۰۰" />
+                </div>
+              ) : (
+                <MoneyInput label="پول نقد مشتری (تومان)" value={cash} onChange={setCash} placeholder="مثلاً ۵٬۰۰۰٬۰۰۰٬۰۰۰" />
+              )}
               <div>
                 <Label htmlFor="sc-intent">قصد مشتری</Label>
                 <Select id="sc-intent" value={intent} onChange={(e) => setIntent(e.target.value)} className="mt-1">
@@ -294,7 +324,34 @@ export default function SessionCardsPage() {
               </div>
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                 <MoneyInput label="شیرینی مالک (تومان)" value={shirini} onChange={setShirini} placeholder="اختیاری" />
-                <MoneyInput label="دستمزد / کمیسیون (تومان)" value={commission} onChange={setCommission} placeholder="اختیاری" />
+                <div>
+                  <Label htmlFor="sc-deposit">بیعانه</Label>
+                  <Select id="sc-deposit" value={depositPaid} onChange={(e) => setDepositPaid(e.target.value)} className="mt-1">
+                    <option value="">انتخاب کنید</option>
+                    <option value="paid">پرداخت شده</option>
+                    <option value="unpaid">پرداخت نشده</option>
+                  </Select>
+                </div>
+              </div>
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                <div>
+                  <Label htmlFor="sc-coop">مشاور همکار (تعاون)</Label>
+                  <Select id="sc-coop" value={cooperatingAdvisorId} onChange={(e) => setCooperatingAdvisorId(e.target.value)} className="mt-1">
+                    <option value="">انتخاب کنید</option>
+                    {advisorOptions.map((o) => (
+                      <option key={o.id} value={o.id}>{o.label}</option>
+                    ))}
+                  </Select>
+                </div>
+                <div>
+                  <Label htmlFor="sc-cm">مدیر قرارداد</Label>
+                  <Select id="sc-cm" value={contractManagerId} onChange={(e) => setContractManagerId(e.target.value)} className="mt-1">
+                    <option value="">انتخاب کنید</option>
+                    {contractManagerOptions.map((o) => (
+                      <option key={o.id} value={o.id}>{o.label}</option>
+                    ))}
+                  </Select>
+                </div>
               </div>
               <div>
                 <Label htmlFor="sc-pay">شرایط پرداخت</Label>
@@ -350,8 +407,12 @@ export default function SessionCardsPage() {
                 {expanded && (
                   <div className="mt-3 space-y-2 border-t border-[var(--line)] pt-3 text-[13px]">
                     {c.cashAmountToman && <p>پول نقد مشتری: <b>{formatToman(c.cashAmountToman)}</b></p>}
+                    {c.depositAmountToman && <p>مبلغ رهن: <b>{formatToman(c.depositAmountToman)}</b></p>}
+                    {c.rentAmountToman && <p>اجاره ماهانه: <b>{formatToman(c.rentAmountToman)}</b></p>}
                     {c.sellerShiriniToman && <p>شیرینی مالک: <b>{formatToman(c.sellerShiriniToman)}</b></p>}
-                    {c.commissionToman && <p>دستمزد / کمیسیون: <b>{formatToman(c.commissionToman)}</b></p>}
+                    {c.depositPaid !== null && c.depositPaid !== undefined && <p>بیعانه: <b>{c.depositPaid ? "پرداخت شده" : "پرداخت نشده"}</b></p>}
+                    {c.cooperatingAdvisor && <p>تعاون با: <b>{c.cooperatingAdvisor.name}</b></p>}
+                    {c.contractManager && <p>مدیر قرارداد: <b>{c.contractManager.name}</b></p>}
                     {c.paymentTerms && <p>شرایط پرداخت: {c.paymentTerms}</p>}
                     {c.notes && <p className="whitespace-pre-wrap">توضیح شرایط جلسه: {c.notes}</p>}
                     {c.managerNote && <p className="rounded-lg bg-[var(--paper-2)] px-3 py-2">نظر مدیر: {c.managerNote}</p>}

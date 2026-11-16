@@ -11,6 +11,8 @@ const CARD_INCLUDE = {
   customer: { select: { id: true, name: true, phone: true } },
   property: { select: { id: true, title: true, code: true, owner: { select: { id: true, name: true } } } },
   advisor: { select: { id: true, name: true } },
+  cooperatingAdvisor: { select: { id: true, name: true } },
+  contractManager: { select: { id: true, name: true } },
 };
 
 export async function GET(req: NextRequest) {
@@ -26,8 +28,10 @@ export async function GET(req: NextRequest) {
   const limit = Math.min(200, Math.max(1, parseInt(searchParams.get("limit") ?? "100")));
   const where: Record<string, unknown> = {};
   if (status) where.status = status;
-  // مدیر همه کارت‌ها را می‌بیند؛ مشاور فقط کارت‌های خودش را
-  if (session.user.role !== "OWNER") where.advisorId = session.user.id;
+  // مدیر همه کارت‌ها را می‌بیند؛ مشاور کارت‌های خودش و کارت‌هایی که در آن‌ها مشاور همکار است را
+  if (session.user.role !== "OWNER") {
+    where.OR = [{ advisorId: session.user.id }, { cooperatingAdvisorId: session.user.id }];
+  }
   const cards = await prisma.sessionCard.findMany({
     where,
     include: CARD_INCLUDE,
@@ -70,16 +74,40 @@ export async function POST(req: NextRequest) {
     }
   }
 
+  // اعتبارسنجی مشاور همکار و مدیر قرارداد
+  let cooperatingAdvisor = null;
+  if (d.cooperatingAdvisorId) {
+    cooperatingAdvisor = await prisma.user.findUnique({
+      where: { id: d.cooperatingAdvisorId },
+      select: { id: true, active: true },
+    });
+    if (!cooperatingAdvisor || !cooperatingAdvisor.active)
+      return NextResponse.json({ error: "مشاور همکار معتبر نیست" }, { status: 400 });
+  }
+  let contractManager = null;
+  if (d.contractManagerId) {
+    contractManager = await prisma.user.findUnique({
+      where: { id: d.contractManagerId },
+      select: { id: true, active: true, isContractManager: true },
+    });
+    if (!contractManager || !contractManager.active || !contractManager.isContractManager)
+      return NextResponse.json({ error: "مدیر قرارداد معتبر نیست" }, { status: 400 });
+  }
+
   const card = await prisma.sessionCard.create({
     data: {
       customerId: d.customerId,
       propertyId: d.propertyId || null,
       advisorId: session.user.id,
+      cooperatingAdvisorId: d.cooperatingAdvisorId || null,
+      contractManagerId: d.contractManagerId || null,
       scheduledAt,
       cashAmountToman: d.cashAmountToman ? BigInt(d.cashAmountToman) : null,
+      depositAmountToman: d.depositAmountToman ? BigInt(d.depositAmountToman) : null,
+      rentAmountToman: d.rentAmountToman ? BigInt(d.rentAmountToman) : null,
       intent: d.intent || null,
       sellerShiriniToman: d.sellerShiriniToman ? BigInt(d.sellerShiriniToman) : null,
-      commissionToman: d.commissionToman ? BigInt(d.commissionToman) : null,
+      depositPaid: d.depositPaid ?? null,
       paymentTerms: d.paymentTerms || null,
       notes: d.notes || null,
     },
@@ -92,13 +120,14 @@ export async function POST(req: NextRequest) {
     entityId: card.id,
     newValue: { customerId: d.customerId, propertyId: d.propertyId ?? null, scheduledAt: d.scheduledAt } as never,
   });
-  // اعلان فوری HIGH برای همه مدیرها — همان لحظه در فهرست اعلان‌ها و نشان دیده می‌شود
+  // اعلان فوری HIGH برای همه مدیرها + مشاور همکار + مدیر قرارداد انتخاب‌شده
   const owners = await prisma.user.findMany({ where: { role: "OWNER", active: true }, select: { id: true } });
-  if (owners.length > 0) {
+  const recipientIds = [...new Set([...owners.map((o) => o.id), cooperatingAdvisor?.id, contractManager?.id].filter(Boolean))] as string[];
+  if (recipientIds.length > 0) {
     const fileLabel = property ? (property.code ? `${property.code} — ${property.title}` : property.title) : "بدون فایل";
     await prisma.notification.createMany({
-      data: owners.map((o) => ({
-        userId: o.id,
+      data: recipientIds.map((userId) => ({
+        userId,
         type: "SESSION_CARD" as never,
         priority: "HIGH" as never,
         relatedType: "SessionCard",

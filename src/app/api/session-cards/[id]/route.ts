@@ -9,6 +9,8 @@ const CARD_INCLUDE = {
   customer: { select: { id: true, name: true, phone: true } },
   property: { select: { id: true, title: true, code: true, owner: { select: { id: true, name: true } } } },
   advisor: { select: { id: true, name: true } },
+  cooperatingAdvisor: { select: { id: true, name: true } },
+  contractManager: { select: { id: true, name: true } },
 };
 
 export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
