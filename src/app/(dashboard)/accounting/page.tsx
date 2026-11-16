@@ -656,6 +656,12 @@ export default function AccountingPage() {
   // مبنای پیش‌نمایش سهم‌بندی در فرم ویرایش: کمیسیون + هر دو شیرینی منهای تخفیف (خالی یعنی صفر)
   const editSplitBase = (Number(editAmount) || 0) + (Number(editSellerShirini) || 0) + (Number(editBuyerShirini) || 0) - (Number(editDiscount) || 0);
 
+  // جمع ناخالص (کمیسیون + هر دو شیرینی) و خطای زنده تخفیف: تخفیف بیشتر از جمع ناخالص
+  // همان خطای سرور است، ولی همان‌جا در فرم نشان داده می‌شود و ذخیره قفل می‌شود؛
+  // چون از state مشتق شده، با برگشتن تخفیف به حد مجاز خودش پاک می‌شود.
+  const editGross = (Number(editAmount) || 0) + (Number(editSellerShirini) || 0) + (Number(editBuyerShirini) || 0);
+  const editDiscountOverGross = (Number(editDiscount) || 0) > editGross;
+
   // نرخ مالیات ارزش افزوده از خلاصه می‌آید؛ تا پیش از بارگذاری، پیش‌فرض
   const taxRate = summary?.taxRatePct ?? DEFAULT_TAX_RATE_PCT;
 
@@ -1173,6 +1179,9 @@ export default function AccountingPage() {
                   placeholder="مثلا ۲۰۰۰۰۰۰"
                   hint="اختیاری — خالی یعنی صفر؛ از مبنای تقسیم کم می‌شود ولی از مالیات کم نمی‌شود"
                 />
+                {editDiscountOverGross && (
+                  <p className="text-[12px] text-red-700">تخفیف نمی‌تواند بیشتر از جمع کمیسیون و شیرینی باشد</p>
+                )}
                 <p className="text-[11px] text-[var(--ink-3)]">
                   {editingDeal.property.dealType === "SALE"
                     ? "مبلغ از روی درصد × قیمت فروش حساب می‌شود؛ می‌توانید دستی هم عوضش کنید."
@@ -1181,7 +1190,7 @@ export default function AccountingPage() {
                 <p className="text-[11px] text-[var(--ink-3)]">
                   شیرینی با کمیسیون جمع می‌شود و با همان سهم‌بندی تقسیم می‌شود؛ درصد کمیسیون فقط مبلغ کمیسیون را از روی قیمت حساب می‌کند.
                 </p>
-                {(editSplitBase > 0 || editTax > 0) && (
+                {(editSplitBase > 0 || editTax > 0) && !editDiscountOverGross && (
                   <div className="rounded-[12px] border border-[var(--line)] bg-[var(--paper-2)] p-3 text-[13px] space-y-1">
                     <div>مالیات ارزش افزوده ({toFaDigits(String(taxRate))}٪): {formatToman(editTax)}</div>
                     <div className="font-bold">جمع دریافتی از مشتری: {formatToman(editSplitBase + editTax)}</div>
@@ -1311,7 +1320,7 @@ export default function AccountingPage() {
                 )}
                 {editError && <div className="rounded-lg bg-red-50 px-3 py-2 text-sm text-red-700">{editError}</div>}
                 <div className="flex gap-2 pt-1">
-                  <Button type="submit" disabled={editSaving}>
+                  <Button type="submit" disabled={editSaving || editDiscountOverGross}>
                     {editSaving ? "در حال ذخیره..." : "ذخیره"}
                   </Button>
                   <Button type="button" variant="ghost" onClick={() => setEditingDeal(null)} disabled={editSaving}>
