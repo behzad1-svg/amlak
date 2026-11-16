@@ -28,9 +28,9 @@ export async function GET(req: NextRequest) {
   const limit = Math.min(200, Math.max(1, parseInt(searchParams.get("limit") ?? "100")));
   const where: Record<string, unknown> = {};
   if (status) where.status = status;
-  // مدیر همه کارت‌ها را می‌بیند؛ مشاور کارت‌های خودش و کارت‌هایی که در آن‌ها مشاور همکار است را
+  // مدیر همه کارت‌ها را می‌بیند؛ مشاور کارت‌های خودش، کارت‌هایی که در آن‌ها مشاور همکار است و کارت‌هایی که مدیر قراردادشان است را
   if (session.user.role !== "OWNER") {
-    where.OR = [{ advisorId: session.user.id }, { cooperatingAdvisorId: session.user.id }];
+    where.OR = [{ advisorId: session.user.id }, { cooperatingAdvisorId: session.user.id }, { contractManagerId: session.user.id }];
   }
   const cards = await prisma.sessionCard.findMany({
     where,
