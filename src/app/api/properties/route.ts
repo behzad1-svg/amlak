@@ -137,7 +137,7 @@ export async function GET(req: NextRequest) {
     if (landSizeMax) land.lte = parseFloat(landSizeMax);
     and.push({ landSizeSqm: land });
   }
-  if (listedById && session.user.role === "OWNER") and.push({ listedById });
+  if (listedById) and.push({ listedById });
   if (hasElevator) and.push({ hasElevator: true });
   if (hasParking) and.push({ hasParking: true });
   if (hasStorage) and.push({ hasStorage: true });

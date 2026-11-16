@@ -154,7 +154,7 @@ export default function SessionCardsPage() {
     const params = new URLSearchParams({ limit: "100" });
     if (propSearch.trim()) params.set("search", propSearch.trim());
     if (propDealType) params.set("dealType", propDealType);
-    if (propAdvisorId && isOwner) params.set("listedById", propAdvisorId);
+    if (propAdvisorId) params.set("listedById", propAdvisorId);
     try {
       const d = await apiJson<{ properties?: { id: string; title: string; code?: string | null }[]; total?: number } | { id: string; title: string; code?: string | null }[]>(`/api/properties?${params.toString()}`);
       const list = (Array.isArray(d) ? d : d.properties ?? []) as { id: string; title: string; code?: string | null }[];
@@ -171,7 +171,7 @@ export default function SessionCardsPage() {
     } catch (e) {
       setActionError(errorMessage(e));
     }
-  }, [propSearch, propDealType, propAdvisorId, isOwner]);
+  }, [propSearch, propDealType, propAdvisorId]);
 
   useEffect(() => {
     propertyIdRef.current = propertyId;
@@ -337,14 +337,12 @@ export default function SessionCardsPage() {
                   <option value="SALE">فروش</option>
                   <option value="RENT">رهن و اجاره</option>
                 </Select>
-                {isOwner && (
-                  <Select value={propAdvisorId} onChange={(e) => setPropAdvisorId(e.target.value)} aria-label="مشاور">
-                    <option value="">همه مشاورها</option>
-                    {fileAdvisorOptions.map((o) => (
-                      <option key={o.id} value={o.id}>{o.label}</option>
-                    ))}
-                  </Select>
-                )}
+                <Select value={propAdvisorId} onChange={(e) => setPropAdvisorId(e.target.value)} aria-label="مشاور">
+                  <option value="">همه مشاورها</option>
+                  {fileAdvisorOptions.map((o) => (
+                    <option key={o.id} value={o.id}>{o.label}</option>
+                  ))}
+                </Select>
               </div>
               <SearchSelect label="فایل / ملک" value={propertyId} onChange={setPropertyId} options={propertyOptions} placeholder="فایل را جستجو و انتخاب کنید..." onSearchChange={setPropSearch} />
               {propertyTotal !== null && propertyTotal > propertyOptions.length && (
