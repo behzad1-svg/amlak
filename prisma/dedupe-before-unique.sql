@@ -1,14 +1,17 @@
 -- Dedupe before unique constraints (run via prisma db execute / migrate)
--- 1) Customer.phone: keep earliest row per phone; suffix later duplicates then soft-delete them
+-- 1) Customer (phone, type): keep earliest ACTIVE row per (phone, type); suffix later
+--    active duplicates then soft-delete them. Rows already soft-deleted never
+--    conflict with the partial unique index, so they are left alone.
 
 WITH ranked AS (
-  SELECT id, phone,
-         ROW_NUMBER() OVER (PARTITION BY phone ORDER BY "createdAt" ASC, id ASC) AS rn
+  SELECT id, phone, type,
+         ROW_NUMBER() OVER (PARTITION BY phone, type ORDER BY "createdAt" ASC, id ASC) AS rn
   FROM "Customer"
+  WHERE "deletedAt" IS NULL
 )
 UPDATE "Customer" c
 SET phone = c.phone || '-dup' || substr(c.id, length(c.id) - 5),
-    "deletedAt" = COALESCE(c."deletedAt", NOW())
+    "deletedAt" = NOW()
 FROM ranked r
 WHERE c.id = r.id AND r.rn > 1;
 

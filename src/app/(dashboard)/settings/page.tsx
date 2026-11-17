@@ -10,6 +10,7 @@ import { Input, Label, NumberInput, PasswordInput } from "@/components/ui/Input"
 import { PageError, PageSkeleton } from "@/components/ui/LoadState";
 import { useRole } from "@/hooks/useRole";
 import { apiFetch, apiJson, errorMessage } from "@/lib/api";
+import { toFaDigits } from "@/lib/utils";
 
 export default function SettingsPage() {
   const router = useRouter();
@@ -59,7 +60,7 @@ export default function SettingsPage() {
     load();
   }, []);
 
-  async function save(nextRegions?: string[], nextTypes?: typeof types, nextTags?: string[], nextTaxRate?: string) {
+  async function save(nextRegions?: string[], nextTypes?: typeof types, nextTags?: string[], nextTaxRate?: string): Promise<boolean> {
     setSaving(true);
     setMsg("");
     setErr("");
@@ -70,6 +71,35 @@ export default function SettingsPage() {
         body: JSON.stringify({ regions: nextRegions ?? regions, propertyTypes: nextTypes ?? types, customerTags: nextTags ?? tags, ...(Number.isFinite(Number(nextTaxRate ?? taxRate)) && Number(nextTaxRate ?? taxRate) >= 0 && Number(nextTaxRate ?? taxRate) <= 100 ? { taxRate: Number(nextTaxRate ?? taxRate) } : {}) }),
       });
       flash("ذخیره شد");
+      return true;
+    } catch (e) {
+      flash("", errorMessage(e));
+      return false;
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  // تغییر کد نوع ملک — همهٔ فایل‌ها و ترجیح مشتریان با کد قدیمی تراکنشی آپدیت می‌شوند
+  async function renameType(t: { value: string; label: string }) {
+    const input = window.prompt(`کد جدید برای نوع «${t.label}» (فقط حروف بزرگ انگلیسی و _):`, t.value);
+    if (input == null) return;
+    const code = input.trim().toUpperCase();
+    if (!code || code === t.value) return;
+    if (!/^[A-Z_]+$/.test(code)) {
+      flash("", "کد جدید فقط حروف بزرگ انگلیسی و _ می‌تواند باشد");
+      return;
+    }
+    setSaving(true);
+    try {
+      const d = await apiJson<{ ok: boolean; renamed?: { from: string; to: string; properties: number; customers: number } }>("/api/settings", {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ renamePropertyType: { from: t.value, to: code } }),
+      });
+      setTypes(types.map((x) => (x.value === t.value ? { ...x, value: code } : x)));
+      const n = d.renamed;
+      flash(`کد نوع به «${code}» تغییر کرد${n ? ` — ${toFaDigits(String(n.properties))} فایل و ${toFaDigits(String(n.customers))} ترجیح مشتری به‌روز شد` : ""}`);
     } catch (e) {
       flash("", errorMessage(e));
     } finally {
@@ -156,7 +186,8 @@ export default function SettingsPage() {
                 {types.map((t) => (
                   <span key={t.value} className="inline-flex items-center gap-1 rounded-full border bg-zinc-50 px-3 py-1 text-sm">
                     {t.label} <span className="text-xs text-zinc-400">({t.value})</span>
-                    <button type="button" onClick={() => { const next = types.filter((x) => x.value !== t.value); setTypes(next); save(undefined, next); }} className="mr-1 text-zinc-400 hover:text-red-600">×</button>
+                    <button type="button" title="تغییر کد نوع" onClick={() => void renameType(t)} className="mr-1 text-zinc-400 hover:text-[var(--sea)]">✎</button>
+                    <button type="button" onClick={() => { void (async () => { const next = types.filter((x) => x.value !== t.value); if (await save(undefined, next)) setTypes(next); })(); }} className="mr-1 text-zinc-400 hover:text-red-600">×</button>
                   </span>
                 ))}
               </div>

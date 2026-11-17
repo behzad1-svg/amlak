@@ -266,6 +266,12 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
     if (d.status !== "CANCELED") data.canceledAt = null;
   }
 
+  // تکمیل معامله یعنی تاریخ قرارداد — اگر خالی است، همین لحظه مهر می‌خورد
+  // (گزارش عملکرد معامله‌های تکمیل‌شده را با contractAt می‌سنجد، نه createdAt)
+  if (nextStatus === "COMPLETED" && existing.status !== "COMPLETED" && d.contractAt === undefined && !existing.contractAt) {
+    data.contractAt = new Date();
+  }
+
   const deal = await prisma.$transaction(async (tx) => {
     const updated = await tx.deal.update({ where: { id }, data });
 

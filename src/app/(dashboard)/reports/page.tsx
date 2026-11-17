@@ -12,6 +12,7 @@ type PerfRow = {
   id: string;
   name: string;
   role: string;
+  active: boolean;
   files: number;
   appraisals: number;
   advertised: number;
@@ -51,7 +52,7 @@ function BarChart({ title, rows, valueKey, color }: { title: string; rows: PerfR
         <div className="space-y-2.5">
           {sorted.map((r) => (
             <div key={r.id} className="flex items-center gap-2 text-[13px]">
-              <span className="w-28 shrink-0 truncate font-medium">{r.name}{r.role === "OWNER" ? " (مدیر)" : ""}</span>
+              <span className="w-28 shrink-0 truncate font-medium">{r.name}{r.role === "OWNER" ? " (مدیر)" : ""}{r.active === false ? " (غیرفعال)" : ""}</span>
               <div className="h-5 flex-1 overflow-hidden rounded-full bg-[var(--paper-2)]">
                 <div className={`h-full rounded-full ${color}`} style={{ width: `${Math.max(r[valueKey] > 0 ? 4 : 0, (r[valueKey] / max) * 100)}%` }} />
               </div>
@@ -84,12 +85,14 @@ export default function ReportsPage() {
     }
   }, []);
 
+  // گزارش فقط بعد از مشخص شدن نقش و فقط برای مدیر فراخوانی می‌شود —
+  // وگرنه هر مشاور در هر بازدید یک ۴۰۳ اضافی می‌زد
   useEffect(() => {
+    if (roleLoading || !isOwner) return;
     void (async () => {
       await load(range);
     })();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [range]);
+  }, [range, roleLoading, isOwner, load]);
 
   if (roleLoading) return <PageSkeleton rows={4} />;
   if (!isOwner) return <p className="p-6 text-[var(--ink-2)]">این صفحه فقط برای مدیر است.</p>;
@@ -157,7 +160,7 @@ export default function ReportsPage() {
               <tbody>
                 {data.users.map((u) => (
                   <tr key={u.id} className="border-b last:border-0">
-                    <td className="py-2.5 pr-2 font-medium text-right">{u.name} {u.role === "OWNER" ? "(مدیر)" : ""}</td>
+                    <td className="py-2.5 pr-2 font-medium text-right">{u.name} {u.role === "OWNER" ? "(مدیر)" : ""}{u.active === false ? " (غیرفعال)" : ""}</td>
                     <td className="text-center">{toFaDigits(String(u.files))}</td>
                     <td className="text-center font-bold text-[var(--sea)]">{toFaDigits(String(u.appraisals))}</td>
                     <td className="text-center font-bold text-violet-700">{toFaDigits(String(u.advertised))}</td>

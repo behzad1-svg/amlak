@@ -3,19 +3,15 @@
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { getSessionFromCookies } from "@/lib/auth";
+import { createAuditLog } from "@/lib/audit";
+import { toCsv } from "@/lib/csv";
 
-function csvCell(v: unknown): string {
-  const s = v == null ? "" : String(v);
-  return `"${s.replace(/"/g, '""')}"`;
-}
+// حداکثر ردیف در هر خروجی — اگر داده بیشتر بود، نام فایل می‌گوید ناقص است
+const MAX_EXPORT_ROWS = 5000;
 
-function toCsv(rows: string[][]): string {
-  // BOM برای باز شدن درست در Excel
-  return "\uFEFF" + rows.map((r) => r.map(csvCell).join(",")).join("\r\n");
-}
-
-function fileName(kind: string): string {
+function fileName(kind: string, total: number, returned: number): string {
   const d = new Date().toISOString().slice(0, 10);
+  if (total > returned) return `saj-${kind}-${d}-partial-${returned}-of-${total}.csv`;
   return `saj-${kind}-${d}.csv`;
 }
 
@@ -29,10 +25,21 @@ export async function GET(req: NextRequest) {
   const headers = { "Content-Type": "text/csv; charset=utf-8" };
 
   if (kind === "customers") {
-    const customers = await prisma.customer.findMany({
-      take: 5000,
-      orderBy: { createdAt: "desc" },
-      include: { assignedAgent: { select: { name: true } } },
+    const [customers, total] = await Promise.all([
+      prisma.customer.findMany({
+        where: { deletedAt: null },
+        take: MAX_EXPORT_ROWS,
+        orderBy: { createdAt: "desc" },
+        include: { assignedAgent: { select: { name: true } } },
+      }),
+      prisma.customer.count({ where: { deletedAt: null } }),
+    ]);
+    await createAuditLog({
+      actorId: session.user.id,
+      action: "DATA_EXPORTED",
+      entityType: "Export",
+      entityId: "customers",
+      newValue: { kind: "customers", rows: customers.length, total },
     });
     const rows: string[][] = [
       ["id", "name", "phone", "type", "stage", "temperature", "source", "preferredType", "preferredDealType", "preferredArea", "preferredAreas", "preferredBeds", "preferredSizeMin", "preferredSizeMax", "budgetMin", "budgetMax", "budgetMaxMonthly", "nextFollowUpAt", "needsManagerReview", "assignedAgent", "createdAt"],
@@ -46,15 +53,31 @@ export async function GET(req: NextRequest) {
       ]),
     ];
     return new NextResponse(toCsv(rows), {
-      headers: { ...headers, "Content-Disposition": `attachment; filename="${fileName("customers")}"` },
+      headers: {
+        ...headers,
+        "Content-Disposition": `attachment; filename="${fileName("customers", total, customers.length)}"`,
+        "X-Export-Total": String(total),
+        ...(total > customers.length ? { "X-Export-Truncated": "true" } : {}),
+      },
     });
   }
 
   if (kind === "properties") {
-    const properties = await prisma.property.findMany({
-      take: 5000,
-      orderBy: { createdAt: "desc" },
-      include: { owner: { select: { name: true } }, listedBy: { select: { name: true } } },
+    const [properties, total] = await Promise.all([
+      prisma.property.findMany({
+        where: { deletedAt: null },
+        take: MAX_EXPORT_ROWS,
+        orderBy: { createdAt: "desc" },
+        include: { owner: { select: { name: true } }, listedBy: { select: { name: true } } },
+      }),
+      prisma.property.count({ where: { deletedAt: null } }),
+    ]);
+    await createAuditLog({
+      actorId: session.user.id,
+      action: "DATA_EXPORTED",
+      entityType: "Export",
+      entityId: "properties",
+      newValue: { kind: "properties", rows: properties.length, total },
     });
     const rows: string[][] = [
       ["code", "title", "type", "dealType", "status", "region", "address", "salePriceToman", "depositToman", "monthlyRentToman", "sizeSqm", "landSizeSqm", "beds", "floor", "totalFloors", "visibility", "owner", "listedBy", "isAppraised", "createdAt"],
@@ -66,7 +89,12 @@ export async function GET(req: NextRequest) {
       ]),
     ];
     return new NextResponse(toCsv(rows), {
-      headers: { ...headers, "Content-Disposition": `attachment; filename="${fileName("properties")}"` },
+      headers: {
+        ...headers,
+        "Content-Disposition": `attachment; filename="${fileName("properties", total, properties.length)}"`,
+        "X-Export-Total": String(total),
+        ...(total > properties.length ? { "X-Export-Truncated": "true" } : {}),
+      },
     });
   }
 

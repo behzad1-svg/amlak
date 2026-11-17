@@ -3,7 +3,7 @@ import { prisma } from "@/lib/prisma";
 import { verifyPassword, signToken } from "@/lib/auth";
 import { COOKIE_NAME, authCookieOptions } from "@/lib/jwt";
 import { loginSchema } from "@/lib/validation";
-import { checkRateLimitDb, clearRateLimitDb, recordRateLimitDb, rateLimitForKey } from "@/lib/rateLimitDb";
+import { checkRateLimitDb, cleanupExpiredRateLimitDb, clearRateLimitDb, recordRateLimitDb, rateLimitForKey } from "@/lib/rateLimitDb";
 import { clientIpFromHeaders } from "@/lib/clientIp";
 import { serializeBigInt } from "@/lib/utils";
 
@@ -86,6 +86,8 @@ export async function POST(req: NextRequest) {
 
   // ورود موفق: شمارندهٔ خطاهای همان پنجره پاک می‌شود تا چند خطای قدیمی باعث 429 نشوند
   await clearRateLimitDb(`login:phone:${phone}`, ...(ip ? [`login:ip:${ip}`] : []));
+  // پاک‌سازی فرصت‌طلبانهٔ ردیف‌های منقضی — خرابی‌اش ورود را خراب نمی‌کند
+  void cleanupExpiredRateLimitDb();
 
   const res = NextResponse.json(serializeBigInt({ user: { id: user.id, name: user.name, phone: user.phone, role: user.role } }));
   res.cookies.set(COOKIE_NAME, token, authCookieOptions());

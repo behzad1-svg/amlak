@@ -85,6 +85,17 @@ export async function recordRateLimitDb(key: string): Promise<number> {
   }
 }
 
+/** پاک‌سازی دوره‌ای ردیف‌های منقضی‌شدهٔ جدول — فرصت‌طلبانه روی ورود موفق صدا می‌شود
+ *  تا جدول با کلیدهای مرده بی‌مرز رشد نکند (هر کلید یک ردیف دارد، ولی کلیدهای
+ *  ناموفقِ همیشگی برای همیشه می‌ماندند). */
+export async function cleanupExpiredRateLimitDb(): Promise<void> {
+  try {
+    await prisma.rateLimitHit.deleteMany({ where: { windowStart: { lt: new Date(Date.now() - WINDOW_MS) } } });
+  } catch (e) {
+    console.error("[rate-limit] DB cleanup failed:", e instanceof Error ? e.message : "");
+  }
+}
+
 /** پاک‌کردن شمارندهٔ تلاش‌های ناموفق — بعد از ورود موفق صدا می‌شود. */
 export async function clearRateLimitDb(...keys: string[]): Promise<void> {
   for (const key of keys) mem.delete(key);

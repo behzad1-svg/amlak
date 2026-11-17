@@ -1,4 +1,5 @@
 import { prisma } from "./prisma";
+import { toEnDigits } from "./utils";
 
 const SEQ_KEY = "propertyCodeSeq";
 
@@ -9,7 +10,8 @@ function formatCode(n: number): string {
 /**
  * کد بعدی فایل:
  * 1) ensure ردیف شمارنده
- * 2) increment اتمیک در Postgres (ردیف قفل می‌شود — race نمی‌ماند)
+ * 2) increment اتمیک در Postgres با UPDATE ... RETURNING (ردیف قفل می‌شود و
+ *    مقدار تازه در همان دستور برمی‌گردد — race نمی‌ماند)
  * 3) اگر Property.code یکتا رد شد (P2002)، شماره بعدی
  */
 export async function nextPropertyCode(): Promise<string> {
@@ -21,15 +23,17 @@ export async function nextPropertyCode(): Promise<string> {
         create: { key: SEQ_KEY, value: "0" },
       });
 
-      await prisma.$executeRaw`
+      // تخصیص اتمیک: UPDATE ... RETURNING مقدار افزایش‌یافته را در همان دستور
+      // برمی‌گرداند — خواندن جداگانه با findUnique می‌توانست همان مقدار را
+      // به دو درخواست هم‌زمان بدهد و روی Property.code یکتا برخورد کند
+      const rows = await prisma.$queryRaw<{ value: string }[]>`
         UPDATE "AppSetting"
         SET value = (COALESCE(value, '0')::bigint + 1)::text,
             "updatedAt" = NOW()
         WHERE key = ${SEQ_KEY}
+        RETURNING value
       `;
-
-      const row = await prisma.appSetting.findUnique({ where: { key: SEQ_KEY } });
-      const n = Number(row?.value ?? "1");
+      const n = Number(rows[0]?.value ?? "1");
       return formatCode(Number.isFinite(n) && n > 0 ? n : 1);
     } catch (e) {
       const errCode = (e as { code?: string }).code;
@@ -43,5 +47,5 @@ export async function nextPropertyCode(): Promise<string> {
 }
 
 export function normalizePropertyCode(raw: string): string {
-  return raw.trim().toUpperCase().replace(/\s+/g, "");
+  return toEnDigits(raw).trim().toUpperCase().replace(/\s+/g, "");
 }

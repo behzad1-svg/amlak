@@ -222,8 +222,10 @@ model Customer {
   @@index([name])
   @@index([assignedAgentId, deletedAt, stage])
   @@index([nextFollowUpAt])
-  @@unique([phone, type])
-  // یک شماره در هر دسته (مالک / مشتری) یک بار — یکتایی کلی در API کنترل می‌شود
+  @@index([deletedAt, createdAt])
+  // یک شماره در هر دسته (مالک / مشتری) یک بار برای رکوردهای فعال —
+  // یکتایی با partial unique index در دیتابیس است (prisma/partial-unique-customer-phone.sql)؛
+  // db push نمی‌تواند partial index بسازد، پس @@unique اینجا نیست
 }
 
 model CustomerTransfer {
@@ -333,6 +335,9 @@ model Property {
   @@index([dealType, status])
   @@index([region, type, dealType, status, deletedAt])
   @@index([source])
+  @@index([ownerId])
+  @@index([appraisedById])
+  @@index([deletedAt, createdAt])
 }
 
 model PropertyAccess {
@@ -349,7 +354,6 @@ model PropertyAccess {
   revokedAt   DateTime?
 
   @@unique([propertyId, userId])
-  @@index([propertyId, userId])
   @@index([revokedAt, expiresAt])
 }
 
@@ -386,6 +390,8 @@ model Viewing {
 
   @@index([agentId])
   @@index([propertyId])
+  @@index([customerId])
+  @@index([status, startAt])
 }
 
 /// کارت جلسه — هماهنگی پیش از قرارداد بین مشاور و مدیر؛
@@ -422,6 +428,7 @@ model SessionCard {
   @@index([contractManagerId])
   @@index([status, scheduledAt])
   @@index([customerId])
+  @@index([propertyId])
 }
 
 enum DealStatus {
@@ -444,6 +451,7 @@ model Deal {
   agentId    String
   agent      User       @relation("DealAgent", fields: [agentId], references: [id])
   shares     DealShare[]
+  cashboxEntries CashboxEntry[]
 
   status      DealStatus @default(PENDING)
   contractAt  DateTime?
@@ -475,6 +483,7 @@ model DealShare {
   id        String   @id @default(cuid())
   dealId    String
   deal      Deal     @relation(fields: [dealId], references: [id], onDelete: Cascade)
+  cashboxEntries CashboxEntry[]
   userId    String?
   user      User?    @relation("DealShareUser", fields: [userId], references: [id], onDelete: SetNull)
   name      String
@@ -499,7 +508,9 @@ model CashboxEntry {
   createdBy   User        @relation("CashboxCreatedBy", fields: [createdById], references: [id])
   createdAt   DateTime    @default(now())
   dealId      String?
+  deal        Deal?      @relation(fields: [dealId], references: [id], onDelete: SetNull)
   shareId     String?
+  share       DealShare? @relation(fields: [shareId], references: [id], onDelete: SetNull)
 
   @@index([occurredAt])
   @@index([createdById])

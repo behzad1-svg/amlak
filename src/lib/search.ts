@@ -19,13 +19,14 @@ export function normalizePersianTerm(term: string): string {
 }
 
 // گونه‌های جستجو برای یک عبارت: خود عبارت + بدون نیم فاصله + با یک نیم فاصله
-// در هر جای ممکن (فقط برای عبارت‌های کوتاه، تا OR خیلی بزرگ نشود)
+// در هر جای ممکن — فقط برای عبارت‌های کوتاه (≤ ۸ کاراکتر)؛ عبارت بلند ۱۶ گونه
+// × چند فیلد انفجار ILIKE می‌سازد و با رشد داده کند می‌شود
 export function persianSearchVariants(term: string): string[] {
   const raw = term.trim();
   if (!raw) return [];
   const stripped = normalizePersianTerm(raw);
   const set = new Set<string>([raw, stripped]);
-  if (stripped.length > 1 && stripped.length <= 15) {
+  if (stripped.length > 1 && stripped.length <= 8) {
     for (let i = 1; i < stripped.length; i++) {
       set.add(stripped.slice(0, i) + ZWNJ + stripped.slice(i));
     }

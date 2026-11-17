@@ -137,7 +137,12 @@ export default function UsersPage() {
                 <div className="mt-2 flex flex-wrap items-center gap-2">
                   <Select
                     value={u.role}
-                    onChange={(e) => void patchUser(u.id, { role: e.target.value }, "نقش تغییر کرد")}
+                    onChange={(e) => {
+                      const nextRole = e.target.value;
+                      if (nextRole === u.role) return;
+                      if (!confirm(`نقش ${u.name} به «${nextRole === "OWNER" ? "مدیر" : "مشاور"}» تغییر کند؟ این یعنی دسترسی کامل به همهٔ بخش‌های مدیر.`)) return;
+                      void patchUser(u.id, { role: nextRole }, "نقش تغییر کرد");
+                    }}
                     disabled={userBusy}
                     className="w-28 text-[13px]"
                     aria-label="نقش کاربر"

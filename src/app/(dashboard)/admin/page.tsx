@@ -82,6 +82,7 @@ export default function AdminPage() {
   const [msg, setMsg] = useState("");
   const [err, setErr] = useState("");
   const [selectedAgent, setSelectedAgent] = useState<TeamStat | null>(null);
+  const [downloadingBackup, setDownloadingBackup] = useState(false);
   const [agentActivities, setAgentActivities] = useState<ActivityRow[]>([]);
   const [loadingActs, setLoadingActs] = useState(false);
 
@@ -117,6 +118,20 @@ export default function AdminPage() {
     // eslint-disable-next-line react-hooks/set-state-in-effect
     load();
   }, [load]);
+
+  // دانلود پشتیبان از طریق <a> رویداد تکمیل ندارد — دکمه چند ثانیه غیرفعال می‌ماند
+  // تا کلیک دوباره pg_dump تازه‌ای نسازد (سرور هم بکاپ هم‌زمان را رد می‌کند)
+  const downloadBackup = () => {
+    if (downloadingBackup) return;
+    setDownloadingBackup(true);
+    const a = document.createElement("a");
+    a.href = "/api/admin/backup";
+    a.download = "";
+    document.body.appendChild(a);
+    a.click();
+    a.remove();
+    setTimeout(() => setDownloadingBackup(false), 5000);
+  };
 
   async function openAgentStats(a: TeamStat) {
     setSelectedAgent(a);
@@ -254,9 +269,9 @@ export default function AdminPage() {
             <a href="/api/admin/export?kind=properties" className="inline-flex min-h-10 items-center justify-center gap-1.5 rounded-[12px] border border-[var(--line)] bg-white px-4 py-2 text-[13.5px] font-medium text-[var(--ink-2)] hover:bg-[var(--paper-2)]">
               دانلود CSV فایل‌ها
             </a>
-            <a href="/api/admin/backup" className="inline-flex min-h-10 items-center justify-center gap-1.5 rounded-[12px] border border-[var(--line)] bg-white px-4 py-2 text-[13.5px] font-medium text-[var(--ink-2)] hover:bg-[var(--paper-2)]">
-              دانلود پشتیبان کامل دیتابیس
-            </a>
+            <Button variant="outline" onClick={downloadBackup} disabled={downloadingBackup}>
+              {downloadingBackup ? "در حال دانلود پشتیبان..." : "دانلود پشتیبان کامل دیتابیس"}
+            </Button>
           </div>
         </Card>
 

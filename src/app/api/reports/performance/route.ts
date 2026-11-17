@@ -6,8 +6,11 @@ import { serializeBigInt } from "@/lib/utils";
 /**
  * گزارش عملکرد مشاوران — فقط مدیر.
  * GET /api/reports/performance?range=7|30|90 (پیش‌فرض ۳۰ روز)
- * به‌ازای هر کاربر فعال: فایل ثبت‌شده، کارشناسی، آگهی، کارت جلسه، فایل‌یابی،
- * بازدید (غیر از لغوشده)، قرارداد (معامله قطعی) و پیگیری عقب‌افتادهٔ جاری.
+ * به‌ازای هر کاربر فعال — به‌علاوهٔ کاربران غیرفعالی که در همین بازه فعالیتی
+ * داشته‌اند (تا سابقه‌شان از جدول و جمع کل ناپدید نشود): فایل ثبت‌شده، کارشناسی،
+ * آگهی، کارت جلسه، فایل‌یابی، بازدید (غیر از لغوشده)، قرارداد (معامله قطعی) و
+ * پیگیری عقب‌افتادهٔ جاری. «قرارداد» با تاریخ قرارداد (contractAt) سنجیده می‌شود؛
+ * برای معامله‌های قدیمیِ بدون contractAt، تاریخ ثبت (createdAt) ملاک است.
  */
 export async function GET(req: NextRequest) {
   const session = await getSessionFromCookies();
@@ -21,7 +24,7 @@ export async function GET(req: NextRequest) {
   const since = new Date(Date.now() - range * 24 * 60 * 60 * 1000);
   const now = new Date();
 
-  const [users, files, appraisals, advertised, sessionCards, fileFindings, viewings, deals, overdue] = await Promise.all([
+  const [activeUsers, files, appraisals, advertised, sessionCards, fileFindings, viewings, deals, overdue] = await Promise.all([
     prisma.user.findMany({ where: { active: true }, select: { id: true, name: true, role: true }, orderBy: { name: "asc" } }),
     prisma.property.groupBy({
       by: ["listedById"],
@@ -57,12 +60,13 @@ export async function GET(req: NextRequest) {
     }),
     prisma.deal.groupBy({
       by: ["agentId"],
-      where: { status: "COMPLETED", createdAt: { gte: since } },
+      // تاریخ قرارداد ملاک است؛ معامله‌های قدیمیِ بدون contractAt با createdAt می‌آیند
+      where: { status: "COMPLETED", OR: [{ contractAt: { gte: since } }, { contractAt: null, createdAt: { gte: since } }] },
       _count: true,
     }),
     prisma.customer.groupBy({
       by: ["assignedAgentId"],
-      where: { deletedAt: null, stage: { not: "LOST" }, nextFollowUpAt: { lt: now } },
+      where: { deletedAt: null, stage: { notIn: ["LOST", "FAILED", "WON", "CONTRACT"] }, nextFollowUpAt: { lt: now } },
       _count: true,
     }),
   ]);
@@ -77,10 +81,23 @@ export async function GET(req: NextRequest) {
   const dealMap = new Map(deals.map((r) => [r.agentId, r._count]));
   const overdueMap = new Map(overdue.map((r) => [r.assignedAgentId, r._count]));
 
+  // کاربران غیرفعالِ دارای فعالیت در بازه هم ردیف می‌گیرند — وگرنه سابقه‌شان ناپدید می‌شود
+  const activeIds = new Set(activeUsers.map((u) => u.id));
+  const groupByMaps = [filesMap, appraisalMap, advertisedMap, sessionCardsMap, findingMap, viewingMap, dealMap, overdueMap];
+  const missingIds = [...new Set(groupByMaps.flatMap((m) => [...m.keys()]))].filter((id) => !activeIds.has(id));
+  const inactiveUsers =
+    missingIds.length > 0
+      ? await prisma.user.findMany({ where: { id: { in: missingIds } }, select: { id: true, name: true, role: true }, orderBy: { name: "asc" } })
+      : [];
+  const users = [...activeUsers.map((u) => ({ ...u, active: true })), ...inactiveUsers.map((u) => ({ ...u, active: false }))].sort((a, b) =>
+    a.name.localeCompare(b.name, "fa")
+  );
+
   const rows = users.map((u) => ({
     id: u.id,
     name: u.name,
     role: u.role,
+    active: u.active,
     files: filesMap.get(u.id) ?? 0,
     appraisals: appraisalMap.get(u.id) ?? 0,
     advertised: advertisedMap.get(u.id) ?? 0,
