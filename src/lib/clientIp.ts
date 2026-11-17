@@ -1,17 +1,11 @@
 /**
- * IP واقعی مشتری از هدرها — فقط وقتی پشت reverse-proxy معتبر هستیم
- * (TRUSTED_PROXY=true)؛ در غیر این صورت null تا سطل IP فعال نشود.
- * هدر خالی ("") هم مثل نبودن هدر است و به هدر بعدی می‌رسد.
+ * Real client IP — read ONLY from X-Real-IP. Caddy (trusted_proxies limited
+ * to the WCDN ranges) puts the validated client IP there; X-Forwarded-For
+ * is never read (its first entry is forgeable). Null unless behind a
+ * trusted reverse proxy (TRUSTED_PROXY=true).
  */
 export function clientIpFromHeaders(headers: { get(name: string): string | null }): string | null {
   if (process.env.TRUSTED_PROXY !== "true") return null;
-  // Caddy appends the real client IP last, so take the last non-empty entry;
-  // a spoofed first entry is ignored. Single-proxy topology only.
-  const parts = headers
-    .get("x-forwarded-for")
-    ?.split(",")
-    .map((s) => s.trim())
-    .filter((s) => s.length > 0);
-  const last = parts && parts.length > 0 ? parts[parts.length - 1] : null;
-  return last || headers.get("x-real-ip") || null;
+  const ip = headers.get("x-real-ip")?.trim();
+  return ip && ip.length > 0 ? ip : null;
 }

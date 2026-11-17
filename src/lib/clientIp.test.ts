@@ -13,46 +13,34 @@ describe("clientIpFromHeaders", () => {
 
   it("returns null when TRUSTED_PROXY is not true", () => {
     vi.stubEnv("TRUSTED_PROXY", "false");
-    expect(clientIpFromHeaders(headers({ "x-forwarded-for": "1.2.3.4" }))).toBe(null);
+    expect(clientIpFromHeaders(headers({ "x-real-ip": "1.2.3.4" }))).toBe(null);
   });
 
   it("returns null when TRUSTED_PROXY is unset", () => {
     vi.stubEnv("TRUSTED_PROXY", "");
-    expect(clientIpFromHeaders(headers({ "x-forwarded-for": "1.2.3.4" }))).toBe(null);
+    expect(clientIpFromHeaders(headers({ "x-real-ip": "1.2.3.4" }))).toBe(null);
   });
 
-  it("returns the last XFF entry (Caddy appends the real IP last)", () => {
-    vi.stubEnv("TRUSTED_PROXY", "true");
-    expect(clientIpFromHeaders(headers({ "x-forwarded-for": "1.2.3.4, 5.6.7.8" }))).toBe("5.6.7.8");
-  });
-
-  it("trims whitespace around the last XFF entry", () => {
-    vi.stubEnv("TRUSTED_PROXY", "true");
-    expect(clientIpFromHeaders(headers({ "x-forwarded-for": "  9.9.9.9  , 1.1.1.1" }))).toBe("1.1.1.1");
-  });
-
-  it("ignores a spoofed first XFF entry", () => {
-    vi.stubEnv("TRUSTED_PROXY", "true");
-    expect(clientIpFromHeaders(headers({ "x-forwarded-for": "203.0.113.9, 198.51.100.7" }))).toBe("198.51.100.7");
-  });
-
-  it("empty XFF falls through to x-real-ip", () => {
+  it("reads x-real-ip only and ignores x-forwarded-for", () => {
     vi.stubEnv("TRUSTED_PROXY", "true");
     expect(
-      clientIpFromHeaders(headers({ "x-forwarded-for": "", "x-real-ip": "2.3.4.5" }))
-    ).toBe("2.3.4.5");
+      clientIpFromHeaders(headers({ "x-forwarded-for": "1.2.3.4, 5.6.7.8", "x-real-ip": "9.9.9.9" }))
+    ).toBe("9.9.9.9");
   });
 
-  it("whitespace-only XFF falls through to x-real-ip", () => {
+  it("ignores a forged x-forwarded-for chain when x-real-ip is missing", () => {
     vi.stubEnv("TRUSTED_PROXY", "true");
-    expect(
-      clientIpFromHeaders(headers({ "x-forwarded-for": "   ", "x-real-ip": "2.3.4.5" }))
-    ).toBe("2.3.4.5");
+    expect(clientIpFromHeaders(headers({ "x-forwarded-for": "203.0.113.9, 198.51.100.7" }))).toBe(null);
   });
 
-  it("falls back to x-real-ip when XFF is missing", () => {
+  it("trims whitespace around x-real-ip", () => {
     vi.stubEnv("TRUSTED_PROXY", "true");
-    expect(clientIpFromHeaders(headers({ "x-real-ip": "3.4.5.6" }))).toBe("3.4.5.6");
+    expect(clientIpFromHeaders(headers({ "x-real-ip": "  2.3.4.5  " }))).toBe("2.3.4.5");
+  });
+
+  it("returns null when x-real-ip is empty", () => {
+    vi.stubEnv("TRUSTED_PROXY", "true");
+    expect(clientIpFromHeaders(headers({ "x-forwarded-for": "1.2.3.4", "x-real-ip": "" }))).toBe(null);
   });
 
   it("returns null when both headers are missing", () => {
