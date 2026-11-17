@@ -2,6 +2,7 @@
 import { useState, useMemo } from "react";
 import { ChevronLeft, ChevronRight } from "lucide-react";
 import { toJalali, jalaliToGregorian, getJalaliDaysInMonth, isValidJalaliDate } from "@/lib/jalali";
+import { isJalaliHoliday } from "@/lib/holidays";
 import { cn, toFaDigits } from "@/lib/utils";
 import { Modal } from "@/components/ui/Modal";
 
@@ -134,7 +135,7 @@ export function JalaliDatePicker({
               <button type="button" onClick={nextMonth} aria-label="ماه بعد" className="rounded-[10px] p-1.5 hover:bg-[var(--paper-2)]"><ChevronLeft className="h-4 w-4" /></button>
             </div>
             <div className="grid grid-cols-7 gap-1 text-center">
-              {WEEKDAYS.map((w) => <span key={w} className="py-1 text-[11px] font-medium text-[var(--ink-3)]">{w}</span>)}
+              {WEEKDAYS.map((w, i) => <span key={w} className={cn("py-1 text-[11px] font-medium text-[var(--ink-3)]", i === 6 && "text-red-600")}>{w}</span>)}
               {cells.map((d, i) =>
                 d === null ? <span key={`e-${i}`} /> : (
                   <button
@@ -143,7 +144,9 @@ export function JalaliDatePicker({
                     onClick={() => pickDay(d)}
                     aria-label={toFaDigits(`${d} ${MONTH_NAMES[view.jm - 1]} ${view.jy}`)}
                     className={cn("min-h-10 rounded-[10px] py-1.5 text-[13px] hover:bg-[var(--paper-2)]",
-                      selected && selected.jy === view.jy && selected.jm === view.jm && selected.jd === d && "bg-[var(--pomegranate)] text-white hover:bg-[var(--pomegranate)]"
+                      selected && selected.jy === view.jy && selected.jm === view.jm && selected.jd === d
+                        ? "bg-[var(--pomegranate)] text-white hover:bg-[var(--pomegranate)]"
+                        : isJalaliHoliday(view.jy, view.jm, d) && "text-red-600"
                     )}
                   >
                     {toFaDigits(String(d))}
