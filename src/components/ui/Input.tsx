@@ -49,6 +49,7 @@ export function PhoneInput({ className, onChange, ...props }: React.InputHTMLAtt
       className={cn(fieldBase, "text-right font-mono", className)}
       inputMode="numeric"
       dir="ltr"
+      maxLength={11}
       onChange={(e) => {
         // ارقام فارسی/عربی اول به لاتین تبدیل می‌شوند، بعد فیلتر — onBeforeInput
         // مسدودکننده حذف شد چون ارقام فارسی را پیش از رسیدن به onChange بلاک می‌کرد

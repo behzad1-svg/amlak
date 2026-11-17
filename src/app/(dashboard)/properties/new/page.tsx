@@ -203,7 +203,7 @@ export default function NewPropertyPage() {
     const name = newOwner.name.trim();
     const phone = newOwner.phone.trim();
     if (!name) { setNewOwnerMsg("نام مالک را وارد کنید"); return; }
-    if (!/^[0-9]{10,15}$/.test(phone)) { setNewOwnerMsg("شماره باید ۱۰ تا ۱۵ رقم باشد"); return; }
+    if (!/^[0-9]{11}$/.test(phone)) { setNewOwnerMsg("شماره باید ۱۱ رقم باشد"); return; }
     if (!newOwner.source) { setNewOwnerMsg("شیوه آشنایی را انتخاب کنید"); return; }
     setNewOwnerBusy(true);
     const pickExisting = async (): Promise<boolean> => {

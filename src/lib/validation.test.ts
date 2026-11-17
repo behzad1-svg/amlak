@@ -109,6 +109,8 @@ describe("userCreateSchema", () => {
     expect(userCreateSchema.safeParse({ ...valid, phone: "0917" }).success).toBe(false);
     expect(userCreateSchema.safeParse({ ...valid, phone: "0917abc0001" }).success).toBe(false);
     expect(userCreateSchema.safeParse({ ...valid, phone: "0917000000112345" }).success).toBe(false);
+    expect(userCreateSchema.safeParse({ ...valid, phone: "0917000000" }).success).toBe(false);
+    expect(userCreateSchema.safeParse({ ...valid, phone: "091700000011" }).success).toBe(false);
   });
 
   it("rejects weak passwords", () => {
@@ -147,6 +149,7 @@ describe("customerCreateSchema", () => {
   it("rejects an unknown type and a bad phone", () => {
     expect(customerCreateSchema.safeParse({ ...valid, type: "FOO" }).success).toBe(false);
     expect(customerCreateSchema.safeParse({ ...valid, phone: "123" }).success).toBe(false);
+    expect(customerCreateSchema.safeParse({ ...valid, phone: "091700009999" }).success).toBe(false);
   });
 
   it("rejects out-of-range preferences", () => {

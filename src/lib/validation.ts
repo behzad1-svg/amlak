@@ -46,7 +46,7 @@ export const loginSchema = z.object({
   password: z.string().min(1, "رمز عبور الزامی است"),
 });
 
-const phoneSchema = z.string().regex(/^[0-9]{10,15}$/, "شماره تماس فقط عدد و ۱۰ تا ۱۵ رقم");
+const phoneSchema = z.string().regex(/^[0-9]{11}$/, "شماره تماس باید ۱۱ رقم باشد");
 const passwordSchema = z
   .string()
   .min(12, "رمز عبور باید حداقل ۱۲ کاراکتر باشد")
@@ -95,7 +95,7 @@ export function budgetStringToBigInt(value: string | null | undefined): bigint |
 
 export const customerCreateSchema = z.object({
   name: z.string().min(1, "نام و نام خانوادگی الزامی است").max(200),
-  phone: z.string().regex(/^[0-9]{10,15}$/, "شماره تماس فقط عدد و ۱۰ تا ۱۵ رقم"),
+  phone: z.string().regex(/^[0-9]{11}$/, "شماره تماس باید ۱۱ رقم باشد"),
   type: z.enum(["BUYER", "SELLER", "TENANT", "OWNER"]),
   stage: z.enum(["NEW", "INITIAL_CONTACT", "QUALIFIED", "VIEWING", "CONTRACT", "WON", "FAILED", "LOST"]).optional(),
   temperature: z.enum(["HOT", "WARM", "COLD"]).optional(),
