@@ -3,7 +3,7 @@
 // (خواندن، باز کردن مورد مرتبط). «تماس گرفتم» مال ردیف‌های پیگیری است
 // و برای تطبیق در صفحه اعلان‌ها هم نبود.
 "use client";
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
 import { Header } from "@/components/layout/Header";
@@ -30,6 +30,102 @@ type NotificationRow = {
   relatedId: string | null;
   relatedType: string | null;
 };
+
+type MatchItem = {
+  id: string;
+  kind: "Property" | "Customer";
+  label: string;
+  sub: string | null;
+  score: number;
+  reasons: string[];
+};
+
+// Dropdown of live matches next to the view button: matched files for a
+// customer card, matched customers for a property card. Fetched lazily
+// from /api/matching when opened, so the list never shows deleted items.
+function MatchDropdown({ relatedType, relatedId }: { relatedType: string; relatedId: string }) {
+  const [open, setOpen] = useState(false);
+  const [items, setItems] = useState<MatchItem[] | null>(null);
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState("");
+  const ref = useRef<HTMLDivElement>(null);
+  const isCustomer = relatedType === "Customer";
+  const label = isCustomer ? "فایل\u200Cهای تطبیق\u200Cخورده" : "مشتری\u200Cهای تطبیق\u200Cخورده";
+
+  async function toggle() {
+    if (open) {
+      setOpen(false);
+      return;
+    }
+    setOpen(true);
+    if (items !== null) return;
+    setLoading(true);
+    setError("");
+    try {
+      const q = isCustomer ? `customerId=${relatedId}` : `propertyId=${relatedId}`;
+      const d = await apiJson<{ matches?: MatchItem[] }>(`/api/matching?${q}`);
+      setItems(d.matches ?? []);
+    } catch (e) {
+      setError(errorMessage(e));
+    } finally {
+      setLoading(false);
+    }
+  }
+
+  useEffect(() => {
+    if (!open) return;
+    function onDoc(e: MouseEvent) {
+      if (ref.current && !ref.current.contains(e.target as Node)) setOpen(false);
+    }
+    function onKey(e: KeyboardEvent) {
+      if (e.key === "Escape") setOpen(false);
+    }
+    document.addEventListener("mousedown", onDoc);
+    document.addEventListener("keydown", onKey);
+    return () => {
+      document.removeEventListener("mousedown", onDoc);
+      document.removeEventListener("keydown", onKey);
+    };
+  }, [open]);
+
+  return (
+    <div ref={ref} className="relative inline-block">
+      <button
+        type="button"
+        onClick={toggle}
+        aria-expanded={open}
+        className="rounded-md border border-amber-300 bg-white px-2 py-1 text-xs font-medium text-amber-800 hover:bg-amber-50"
+      >
+        {label} ▾
+      </button>
+      {open && (
+        <div className="absolute right-0 z-40 mt-1 max-h-80 w-72 overflow-auto rounded-lg border border-[var(--line)] bg-white shadow-lg">
+          {loading && <p className="px-3 py-2 text-xs text-zinc-400">در حال بارگذاری…</p>}
+          {error && <p className="px-3 py-2 text-xs text-red-600" role="alert">{error}</p>}
+          {!loading && !error && items !== null && items.length === 0 && (
+            <p className="px-3 py-2 text-xs text-zinc-400">تطبیقی نیست</p>
+          )}
+          {!loading && !error && items?.map((m) => (
+            <Link
+              key={m.id}
+              href={m.kind === "Property" ? `/properties/${m.id}` : `/customers/${m.id}`}
+              onClick={() => setOpen(false)}
+              className="block border-b border-[var(--line)] px-3 py-2 last:border-0 hover:bg-amber-50"
+            >
+              <span className="flex items-center justify-between gap-2 text-xs font-medium text-[var(--ink)]">
+                <span className="truncate">{m.label}{m.sub ? ` · ${m.sub}` : ""}</span>
+                <span className="shrink-0 rounded bg-amber-100 px-1.5 py-0.5 text-amber-800">{m.score}٪</span>
+              </span>
+              {m.reasons.length > 0 && (
+                <span className="mt-0.5 block truncate text-[11px] text-zinc-400">{m.reasons.join("، ")}</span>
+              )}
+            </Link>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
 
 export default function MatchingPage() {
   const router = useRouter();
@@ -109,12 +205,17 @@ export default function MatchingPage() {
                 <p className="text-sm break-words">{n.message}</p>
                 <p className="text-xs text-zinc-400 mt-1">{formatDate(n.createdAt)}</p>
                 {n.relatedId && n.relatedType && (
-                  <Link
-                    href={n.relatedType === "Property" ? `/properties/${n.relatedId}` : n.relatedType === "Customer" ? `/customers/${n.relatedId}` : "/viewings"}
-                    className="mt-2 inline-block rounded-md border border-amber-300 bg-white px-2 py-1 text-xs font-medium text-amber-800 hover:bg-amber-50"
-                  >
-                    {n.relatedType === "Property" ? "مشاهده فایل" : n.relatedType === "Customer" ? "مشاهده مشتری" : "مشاهده بازدیدها"}
-                  </Link>
+                  <div className="mt-2 flex flex-wrap items-center gap-2">
+                    <Link
+                      href={n.relatedType === "Property" ? `/properties/${n.relatedId}` : n.relatedType === "Customer" ? `/customers/${n.relatedId}` : "/viewings"}
+                      className="inline-block rounded-md border border-amber-300 bg-white px-2 py-1 text-xs font-medium text-amber-800 hover:bg-amber-50"
+                    >
+                      {n.relatedType === "Property" ? "مشاهده فایل" : n.relatedType === "Customer" ? "مشاهده مشتری" : "مشاهده بازدیدها"}
+                    </Link>
+                    {(n.relatedType === "Customer" || n.relatedType === "Property") && (
+                      <MatchDropdown relatedType={n.relatedType} relatedId={n.relatedId} />
+                    )}
+                  </div>
                 )}
               </div>
               <div className="flex shrink-0 flex-col gap-2">

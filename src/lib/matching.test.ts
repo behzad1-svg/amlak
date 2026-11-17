@@ -1,5 +1,5 @@
-import { describe, expect, it } from "vitest";
-import { budgetScore, rentBudgetScore, scorePair } from "./matching";
+import { describe, expect, it, vi } from "vitest";
+import { budgetScore, deleteMatchNotificationsForSource, rentBudgetScore, scorePair } from "./matching";
 
 describe("budgetScore", () => {
   it("treats a zero cap as no cap instead of throwing", () => {
@@ -96,5 +96,21 @@ describe("scorePair with zero budgets", () => {
       beds: 2,
     };
     expect(scorePair(cust, prop)).toBeNull();
+  });
+});
+
+describe("deleteMatchNotificationsForSource", () => {
+  it("deletes only MATCH_SUGGESTION notifications for the given source", async () => {
+    const deleteMany = vi.fn().mockResolvedValue({ count: 2 });
+    const db = { notification: { deleteMany } };
+    await deleteMatchNotificationsForSource(db as never, "property", "prop-1");
+    expect(deleteMany).toHaveBeenCalledTimes(1);
+    expect(deleteMany).toHaveBeenCalledWith({
+      where: { type: "MATCH_SUGGESTION", relatedType: "Property", relatedId: "prop-1" },
+    });
+    await deleteMatchNotificationsForSource(db as never, "customer", "cust-1");
+    expect(deleteMany).toHaveBeenLastCalledWith({
+      where: { type: "MATCH_SUGGESTION", relatedType: "Customer", relatedId: "cust-1" },
+    });
   });
 });

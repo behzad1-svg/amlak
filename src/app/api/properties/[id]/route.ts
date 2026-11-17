@@ -4,7 +4,7 @@ import { getSessionFromCookies } from "@/lib/auth";
 import { propertyUpdateSchema } from "@/lib/validation";
 import { serializeBigInt } from "@/lib/utils";
 import { hasRestrictedAccess, maskPropertyForTeam, syncPropertyAccess } from "@/lib/access";
-import { runMatchingForProperty } from "@/lib/matching";
+import { deleteMatchNotificationsForSource, runMatchingForProperty } from "@/lib/matching";
 import { createAuditLog } from "@/lib/audit";
 import { hasPermission } from "@/lib/permissions";
 
@@ -33,7 +33,11 @@ export async function GET(_req: NextRequest, { params }: { params: Promise<{ id:
       },
     },
   });
-  if (!property || property.deletedAt) return NextResponse.json({ error: "یافت نشد" }, { status: 404 });
+  if (!property) return NextResponse.json({ error: "یافت نشد" }, { status: 404 });
+  if (property.deletedAt) {
+    const allowed = await canViewProperty(session.user, property);
+    return NextResponse.json({ error: allowed ? "این فایل حذف شده است" : "یافت نشد" }, { status: 404 });
+  }
   const allowed = await canViewProperty(session.user, property);
   if (!allowed) return NextResponse.json({ error: "دسترسی ندارید" }, { status: 403 });
 
@@ -179,5 +183,10 @@ export async function DELETE(_req: NextRequest, { params }: { params: Promise<{ 
   if (!existing || existing.deletedAt) return NextResponse.json({ error: "یافت نشد" }, { status: 404 });
   await prisma.property.update({ where: { id }, data: { deletedAt: new Date() } });
   await createAuditLog({ actorId: session.user.id, action: "PROPERTY_DELETED", entityType: "Property", entityId: id });
+  try {
+    await deleteMatchNotificationsForSource(prisma as never, "property", id);
+  } catch (e) {
+    console.error("[matching] deleteMatchNotificationsForSource failed for", id, e instanceof Error ? e.message : e);
+  }
   return NextResponse.json({ ok: true });
 }

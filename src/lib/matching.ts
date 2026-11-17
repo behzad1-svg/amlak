@@ -228,7 +228,7 @@ export async function findMatchesForCustomer(customerId: string): Promise<MatchR
     where,
     select: {
       id: true, listedById: true, title: true, dealType: true, type: true, region: true,
-      salePriceToman: true, depositToman: true, monthlyRentToman: true, sizeSqm: true, beds: true,
+      salePriceToman: true, depositToman: true, monthlyRentToman: true, sizeSqm: true, beds: true, visibility: true, isOfficeFile: true,
     },
   });
 
@@ -389,6 +389,28 @@ export async function createMatchNotifications(
       relatedId: r.relatedId,
       message: r.message,
     })),
+  });
+}
+
+type NotificationDeleter = {
+  notification: {
+    deleteMany: (args: unknown) => Promise<unknown>;
+  };
+};
+
+/** Delete the match notifications of a file/customer when it is soft-deleted:
+ *  the suggestion is meaningless then and its link would 404. */
+export async function deleteMatchNotificationsForSource(
+  db: NotificationDeleter,
+  sourceType: "customer" | "property",
+  sourceId: string
+) {
+  await db.notification.deleteMany({
+    where: {
+      type: "MATCH_SUGGESTION",
+      relatedType: sourceType === "customer" ? "Customer" : "Property",
+      relatedId: sourceId,
+    },
   });
 }
 

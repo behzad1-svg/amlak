@@ -4,7 +4,7 @@ import { getSessionFromCookies } from "@/lib/auth";
 import { budgetStringToBigInt, customerUpdateSchema } from "@/lib/validation";
 import { serializeBigInt } from "@/lib/utils";
 import { canAccessCustomer } from "@/lib/access";
-import { runMatchingForCustomer } from "@/lib/matching";
+import { deleteMatchNotificationsForSource, runMatchingForCustomer } from "@/lib/matching";
 import { createAuditLog } from "@/lib/audit";
 
 export async function GET(_req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
@@ -28,7 +28,11 @@ export async function GET(_req: NextRequest, { params }: { params: Promise<{ id:
       },
     },
   });
-  if (!customer || customer.deletedAt) return NextResponse.json({ error: "یافت نشد" }, { status: 404 });
+  if (!customer) return NextResponse.json({ error: "یافت نشد" }, { status: 404 });
+  if (customer.deletedAt) {
+    const allowed = canAccessCustomer(session.user, customer);
+    return NextResponse.json({ error: allowed ? "این مشتری حذف شده است" : "یافت نشد" }, { status: 404 });
+  }
   if (!canAccessCustomer(session.user, customer)) return NextResponse.json({ error: "دسترسی ندارید" }, { status: 403 });
   return NextResponse.json(serializeBigInt(customer));
 }
@@ -180,5 +184,10 @@ export async function DELETE(_req: NextRequest, { params }: { params: Promise<{ 
   if (!existing || existing.deletedAt) return NextResponse.json({ error: "یافت نشد" }, { status: 404 });
   await prisma.customer.update({ where: { id }, data: { deletedAt: new Date() } });
   await createAuditLog({ actorId: session.user.id, action: "CUSTOMER_DELETED", entityType: "Customer", entityId: id });
+  try {
+    await deleteMatchNotificationsForSource(prisma as never, "customer", id);
+  } catch (e) {
+    console.error("[matching] deleteMatchNotificationsForSource failed for", id, e instanceof Error ? e.message : e);
+  }
   return NextResponse.json({ ok: true });
 }
