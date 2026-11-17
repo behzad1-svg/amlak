@@ -70,7 +70,7 @@ export async function PATCH(req: NextRequest) {
     const newValues = new Set((body.propertyTypes as { value: string }[]).map((t) => t.value));
     for (const t of current) {
       if (newValues.has(t.value)) continue;
-      const used = await prisma.property.count({ where: { type: t.value } });
+      const used = await prisma.property.count({ where: { type: t.value, deletedAt: null } });
       if (used > 0) {
         return NextResponse.json(
           { error: `نوع «${t.label}» روی ${toFaDigits(String(used))} فایل استفاده شده است و نمی‌توان آن را حذف کرد — اول نوع آن فایل‌ها را عوض کنید یا کد نوع را تغییر نام دهید` },
