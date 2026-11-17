@@ -93,7 +93,7 @@ export function DashboardShell({
             <Menu className="h-4 w-4" />
           </button>
           <span className="text-[13px] font-extrabold tracking-tight">املاک ساج</span>
-          <span className="hidden sm:inline text-[11px] tracking-widest text-[var(--ink-3)]">بوشهر · SAJ</span>
+          <span className="hidden sm:inline text-[11px] text-[var(--ink-3)]">بوشهر · SAJ</span>
           <span className="mr-auto hidden sm:inline text-[12px] text-[var(--ink-3)]">سامانه CRM بنگاه</span>
         </div>
         <div className="flex-1 bg-[var(--paper)]">{children}</div>

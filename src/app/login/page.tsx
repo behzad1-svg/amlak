@@ -31,7 +31,7 @@ export default function LoginPage() {
         <div className="w-full max-w-[420px]">
           <div className="mb-8">
             <Image src="/saj-logo.png" alt="املاک ساج — مشاور املاک" width={1379} height={611} className="h-auto w-[220px]" priority />
-            <div className="mt-2 text-[11px] tracking-widest text-[var(--ink-3)]">بوشهر · SAJ REAL ESTATE</div>
+            <div className="mt-2 text-[11px] text-[var(--ink-3)]">بوشهر · SAJ REAL ESTATE</div>
           </div>
 
           <div className="rounded-[var(--radius-xl)] border border-[var(--line)] bg-white p-6 sm:p-7 shadow-[0_8px_24px_rgba(22,26,36,0.06)]">
@@ -52,7 +52,7 @@ export default function LoginPage() {
               <Button type="submit" disabled={loading} className="w-full mt-2">{loading ? "در حال ورود..." : "ورود"}</Button>
             </form>
 
-            <p className="mt-6 text-center text-[11px] tracking-widest text-[var(--ink-3)]">بوشهر — سامانه CRM املاک ساج</p>
+            <p className="mt-6 text-center text-[11px] text-[var(--ink-3)]">بوشهر — سامانه CRM املاک ساج</p>
           </div>
 
           <p className="mt-6 text-center text-[12px] leading-5 text-[var(--ink-3)]">پیگیری منظم · تطبیق هوشمند · دسترسی کنترل‌شده</p>
@@ -66,7 +66,7 @@ export default function LoginPage() {
         <div className="absolute -bottom-24 -right-24 h-[380px] w-[380px] rounded-full bg-[var(--sea)] opacity-20 blur-3xl" />
         <div className="relative flex flex-1 flex-col p-10">
           <div className="mt-auto">
-            <div className="inline-flex items-center gap-2 rounded-full border border-white/15 bg-white/10 px-3 py-1.5 text-[11px] tracking-widest">سامانه CRM · املاک ساج بوشهر</div>
+            <div className="inline-flex items-center gap-2 rounded-full border border-white/15 bg-white/10 px-3 py-1.5 text-[11px]">سامانه CRM · املاک ساج بوشهر</div>
             <h2 className="mt-6 text-[34px] font-extrabold leading-[1.1] tracking-tight">
               هر پیگیری،
               <br />
@@ -77,15 +77,15 @@ export default function LoginPage() {
             </p>
             <div className="mt-8 grid grid-cols-3 gap-3">
               <div className="rounded-[14px] border border-white/10 bg-white/5 p-3">
-                <div className="text-[11px] tracking-widest text-white/60">پیگیری</div>
+                <div className="text-[11px] text-white/60">پیگیری</div>
                 <div className="mt-1 text-[13px] font-bold">عقب‌افتاده = قرمز</div>
               </div>
               <div className="rounded-[14px] border border-white/10 bg-white/5 p-3">
-                <div className="text-[11px] tracking-widest text-white/60">تطبیق</div>
+                <div className="text-[11px] text-white/60">تطبیق</div>
                 <div className="mt-1 text-[13px] font-bold">دو طرفه · ≥۷۰٪</div>
               </div>
               <div className="rounded-[14px] border border-white/10 bg-white/5 p-3">
-                <div className="text-[11px] tracking-widest text-white/60">دسترسی</div>
+                <div className="text-[11px] text-white/60">دسترسی</div>
                 <div className="mt-1 text-[13px] font-bold">موقت · کنترل‌شده</div>
               </div>
             </div>
