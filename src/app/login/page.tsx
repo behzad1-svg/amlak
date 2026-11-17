@@ -3,6 +3,7 @@ import { Suspense, useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { Label, PasswordInput, PhoneInput } from "@/components/ui/Input";
 import { Button } from "@/components/ui/Button";
+import { ThemeToggle } from "@/components/ThemeToggle";
 import Image from "next/image";
 
 function LoginForm() {
@@ -31,7 +32,10 @@ function LoginForm() {
   }
 
   return (
-    <div className="min-h-screen bg-[var(--paper)] flex">
+    <div className="relative min-h-screen bg-[var(--paper)] flex">
+      <div className="absolute left-4 top-4 z-10">
+        <ThemeToggle />
+      </div>
       {/* Right — form */}
       <div className="flex flex-1 items-center justify-center p-6 lg:p-10">
         <div className="w-full max-w-[420px]">

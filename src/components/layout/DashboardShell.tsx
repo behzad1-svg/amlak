@@ -3,6 +3,7 @@ import { useState, useEffect, createContext } from "react";
 import { Menu } from "lucide-react";
 import { Sidebar } from "./Sidebar";
 import { SidebarMini } from "./SidebarMini";
+import { ThemeToggle } from "@/components/ThemeToggle";
 
 /** نقش کاربر — layout سرور آن را می‌دهد تا صفحات نیازی به فراخوانی /api/auth/me نداشته باشند (نقد ۸) */
 export const RoleContext = createContext<string | null>(null);
@@ -95,6 +96,7 @@ export function DashboardShell({
           <span className="text-[13px] font-extrabold tracking-tight">املاک ساج</span>
           <span className="hidden sm:inline text-[11px] text-[var(--ink-3)]">بوشهر · SAJ</span>
           <span className="mr-auto hidden sm:inline text-[12px] text-[var(--ink-3)]">سامانه CRM بنگاه</span>
+          <ThemeToggle />
         </div>
         <div className="flex-1 bg-[var(--paper)]">{children}</div>
       </div>

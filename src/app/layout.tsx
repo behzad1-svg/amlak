@@ -32,10 +32,16 @@ export const viewport: Viewport = {
 
 export default function RootLayout({ children }: { children: React.ReactNode }) {
   return (
-    <html lang="fa" dir="rtl" className={`h-full ${vazir.variable}`}>
+    <html lang="fa" dir="rtl" className={`h-full ${vazir.variable}`} suppressHydrationWarning>
       <head>
         {/* Next 16 فقط mobile-web-app-capable را می سازد؛ نسخهٔ قدیمی را برای iOS قدیمی دستی می گذاریم */}
         <meta name="apple-mobile-web-app-capable" content="yes" />
+        {/* تم ذخیره شده را پیش از اولین رندر اعمال می کند تا چشمک تم رخ ندهد (کلید: saj-theme — src/lib/theme.ts) */}
+        <script
+          dangerouslySetInnerHTML={{
+            __html: `(function(){try{var t=localStorage.getItem("saj-theme");if(t==="dark"){document.documentElement.setAttribute("data-theme","dark");}}catch(e){}})();`,
+          }}
+        />
       </head>
       <body className="min-h-full flex flex-col bg-[var(--paper)] text-[var(--ink)] font-[var(--font-vazir)] antialiased">
         <SwRegister />
