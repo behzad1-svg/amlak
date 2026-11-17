@@ -13,6 +13,7 @@ import { PageError, PageSkeleton } from "@/components/ui/LoadState";
 import { Input, Select, Textarea, Label } from "@/components/ui/Input";
 import { MoneyInput } from "@/components/ui/MoneyInput";
 import { SearchSelect, type SearchOption } from "@/components/ui/SearchSelect";
+import { MultiOptionPicker } from "@/components/ui/MultiOptionPicker";
 import { apiFetch, apiJson, errorMessage } from "@/lib/api";
 import { formatDateTime, formatToman, toFaDigits } from "@/lib/utils";
 import { useRole } from "@/hooks/useRole";
@@ -52,7 +53,7 @@ type SessionCardRow = {
   cashAmountToman: string | null;
   intent: string | null;
   sellerShiriniToman: string | null;
-  cooperatingAdvisor: { id: string; name: string } | null;
+  coAdvisors: { user: { id: string; name: string } }[];
   contractManager: { id: string; name: string } | null;
   depositPaid: boolean | null;
   depositAmountToman: string | null;
@@ -106,7 +107,7 @@ export default function SessionCardsPage() {
   const [intentOther, setIntentOther] = useState("");
   const [shirini, setShirini] = useState("");
   const [depositPaid, setDepositPaid] = useState("");
-  const [cooperatingAdvisorId, setCooperatingAdvisorId] = useState("");
+  const [cooperatingAdvisorIds, setCooperatingAdvisorIds] = useState<string[]>([]);
   const [contractManagerId, setContractManagerId] = useState("");
   const [paymentTerms, setPaymentTerms] = useState("");
   const [notes, setNotes] = useState("");
@@ -259,7 +260,7 @@ export default function SessionCardsPage() {
     }
     setShirini(card.sellerShiriniToman ?? "");
     setDepositPaid(card.depositPaid === true ? "paid" : card.depositPaid === false ? "unpaid" : "");
-    setCooperatingAdvisorId(card.cooperatingAdvisor?.id ?? "");
+    setCooperatingAdvisorIds(card.coAdvisors.map((a) => a.user.id));
     setContractManagerId(card.contractManager?.id ?? "");
     setPaymentTerms(card.paymentTerms ?? "");
     setNotes(card.notes ?? "");
@@ -297,7 +298,7 @@ export default function SessionCardsPage() {
     setIntentOther("");
     setShirini("");
     setDepositPaid("");
-    setCooperatingAdvisorId("");
+    setCooperatingAdvisorIds([]);
     setContractManagerId("");
     setPaymentTerms("");
     setNotes("");
@@ -328,7 +329,7 @@ export default function SessionCardsPage() {
       rentAmountToman: isRent ? rentAmount || null : null,
       intent: finalIntent || null,
       sellerShiriniToman: shirini || null,
-      cooperatingAdvisorId: cooperatingAdvisorId || null,
+      cooperatingAdvisorIds,
       contractManagerId: contractManagerId || null,
       depositPaid: depositPaid === "paid" ? true : depositPaid === "unpaid" ? false : null,
       paymentTerms: paymentTerms.trim() || null,
@@ -540,12 +541,18 @@ export default function SessionCardsPage() {
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                 <div>
                   <Label htmlFor="sc-coop">مشاور همکار (تعاون)</Label>
-                  <Select id="sc-coop" value={cooperatingAdvisorId} onChange={(e) => setCooperatingAdvisorId(e.target.value)} className="mt-1">
-                    <option value="">انتخاب کنید</option>
-                    {advisorOptions.map((o) => (
-                      <option key={o.id} value={o.id}>{o.label}</option>
-                    ))}
-                  </Select>
+                  <div className="mt-1">
+                    <MultiOptionPicker
+                      id="sc-coop"
+                      options={advisorOptions.filter((o) => o.id !== myId)}
+                      value={cooperatingAdvisorIds}
+                      onChange={setCooperatingAdvisorIds}
+                      max={3}
+                      addLabel="+ افزودن مشاور همکار"
+                      searchPlaceholder="جستجوی مشاور..."
+                      maxNote="حداکثر ۳ مشاور همکار"
+                    />
+                  </div>
                 </div>
                 <div>
                   <Label htmlFor="sc-cm">مدیر قرارداد</Label>
@@ -615,7 +622,7 @@ export default function SessionCardsPage() {
                     {c.rentAmountToman && <p>اجاره ماهانه: <b>{formatToman(c.rentAmountToman)}</b></p>}
                     {c.sellerShiriniToman && <p>شیرینی مالک: <b>{formatToman(c.sellerShiriniToman)}</b></p>}
                     {c.depositPaid !== null && c.depositPaid !== undefined && <p>بیعانه: <b>{c.depositPaid ? "پرداخت شده" : "پرداخت نشده"}</b></p>}
-                    {c.cooperatingAdvisor && <p>تعاون با: <b>{c.cooperatingAdvisor.name}</b></p>}
+                    {c.coAdvisors.length > 0 && <p>تعاون با: <b>{c.coAdvisors.map((a) => a.user.name).join("، ")}</b></p>}
                     {c.contractManager && <p>مدیر قرارداد: <b>{c.contractManager.name}</b></p>}
                     {c.paymentTerms && <p>شرایط پرداخت: {c.paymentTerms}</p>}
                     {c.notes && <p className="whitespace-pre-wrap">توضیح شرایط جلسه: {c.notes}</p>}

@@ -322,6 +322,21 @@ describe("sessionCardCreateSchema", () => {
       }).success,
     ).toBe(false);
   });
+
+  it("accepts up to 3 cooperating advisors and rejects a 4th", () => {
+    const base = { customerId: "c1", scheduledAt: "2026-11-16T10:00" };
+    expect(
+      sessionCardCreateSchema.safeParse({ ...base, cooperatingAdvisorIds: [] }).success,
+    ).toBe(true);
+    expect(
+      sessionCardCreateSchema.safeParse({ ...base, cooperatingAdvisorIds: ["a", "b", "c"] })
+        .success,
+    ).toBe(true);
+    expect(
+      sessionCardCreateSchema.safeParse({ ...base, cooperatingAdvisorIds: ["a", "b", "c", "d"] })
+        .success,
+    ).toBe(false);
+  });
 });
 
 describe("customerTransferSchema", () => {

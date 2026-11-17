@@ -163,6 +163,7 @@ model User {
   transfersBy    CustomerTransfer[] @relation("TransferBy")
   sessionCards   SessionCard[]      @relation("SessionCardAdvisor")
   cooperatingSessionCards SessionCard[] @relation("SessionCardCooperatingAdvisor")
+  sessionCardCoAdvising SessionCardCoAdvisor[] @relation("SessionCardCoAdvisorUser")
   contractManagedSessionCards SessionCard[] @relation("SessionCardContractManager")
 }
 
@@ -406,6 +407,7 @@ model SessionCard {
   advisor            User              @relation("SessionCardAdvisor", fields: [advisorId], references: [id])
   cooperatingAdvisorId String?
   cooperatingAdvisor   User?             @relation("SessionCardCooperatingAdvisor", fields: [cooperatingAdvisorId], references: [id])
+  coAdvisors           SessionCardCoAdvisor[]
   contractManagerId    String?
   contractManager      User?             @relation("SessionCardContractManager", fields: [contractManagerId], references: [id])
   scheduledAt        DateTime
@@ -429,6 +431,19 @@ model SessionCard {
   @@index([status, scheduledAt])
   @@index([customerId])
   @@index([propertyId])
+}
+
+model SessionCardCoAdvisor {
+  id            String      @id @default(cuid())
+  sessionCardId String
+  sessionCard   SessionCard @relation(fields: [sessionCardId], references: [id], onDelete: Cascade)
+  userId        String
+  user          User        @relation("SessionCardCoAdvisorUser", fields: [userId], references: [id], onDelete: Cascade)
+  createdAt     DateTime    @default(now())
+
+  @@unique([sessionCardId, userId])
+  @@index([sessionCardId])
+  @@index([userId])
 }
 
 enum DealStatus {

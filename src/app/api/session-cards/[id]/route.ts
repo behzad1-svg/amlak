@@ -5,12 +5,13 @@ import { sessionCardUpdateSchema } from "@/lib/validation";
 import { serializeBigInt } from "@/lib/utils";
 import { createAuditLog } from "@/lib/audit";
 import { canAccessCustomer, hasRestrictedAccess } from "@/lib/access";
+import { normalizeCoAdvisorIds } from "@/lib/sessionCards";
 
 const CARD_INCLUDE = {
   customer: { select: { id: true, name: true, phone: true } },
   property: { select: { id: true, title: true, code: true, owner: { select: { id: true, name: true } } } },
   advisor: { select: { id: true, name: true } },
-  cooperatingAdvisor: { select: { id: true, name: true } },
+  coAdvisors: { select: { user: { select: { id: true, name: true } } }, orderBy: { createdAt: "asc" as const } },
   contractManager: { select: { id: true, name: true } },
 };
 
@@ -37,7 +38,7 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
     "rentAmountToman",
     "intent",
     "sellerShiriniToman",
-    "cooperatingAdvisorId",
+    "cooperatingAdvisorIds",
     "contractManagerId",
     "depositPaid",
     "paymentTerms",
@@ -79,9 +80,17 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
         }
       }
     }
-    if (d.cooperatingAdvisorId !== undefined && d.cooperatingAdvisorId) {
-      const coop = await prisma.user.findUnique({ where: { id: d.cooperatingAdvisorId }, select: { id: true, active: true } });
-      if (!coop || !coop.active) return NextResponse.json({ error: "مشاور همکار معتبر نیست" }, { status: 400 });
+    const cooperatingAdvisorIds =
+      d.cooperatingAdvisorIds !== undefined
+        ? normalizeCoAdvisorIds(d.cooperatingAdvisorIds, existing.advisorId)
+        : undefined;
+    if (cooperatingAdvisorIds !== undefined && cooperatingAdvisorIds.length > 0) {
+      const coops = await prisma.user.findMany({
+        where: { id: { in: cooperatingAdvisorIds }, active: true },
+        select: { id: true },
+      });
+      if (coops.length !== cooperatingAdvisorIds.length)
+        return NextResponse.json({ error: "مشاور همکار معتبر نیست" }, { status: 400 });
     }
     if (d.contractManagerId !== undefined && d.contractManagerId) {
       const cm = await prisma.user.findUnique({
@@ -100,7 +109,8 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
     if (d.rentAmountToman !== undefined) data.rentAmountToman = d.rentAmountToman ? BigInt(d.rentAmountToman) : null;
     if (d.intent !== undefined) data.intent = d.intent || null;
     if (d.sellerShiriniToman !== undefined) data.sellerShiriniToman = d.sellerShiriniToman ? BigInt(d.sellerShiriniToman) : null;
-    if (d.cooperatingAdvisorId !== undefined) data.cooperatingAdvisorId = d.cooperatingAdvisorId || null;
+    if (cooperatingAdvisorIds !== undefined)
+      data.coAdvisors = { deleteMany: {}, create: cooperatingAdvisorIds.map((userId) => ({ userId })) };
     if (d.contractManagerId !== undefined) data.contractManagerId = d.contractManagerId || null;
     if (d.depositPaid !== undefined) data.depositPaid = d.depositPaid ?? null;
     if (d.paymentTerms !== undefined) data.paymentTerms = d.paymentTerms || null;
