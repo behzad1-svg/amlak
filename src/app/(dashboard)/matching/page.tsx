@@ -65,7 +65,8 @@ export default function MatchingPage() {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ markAllRead: true, type: "MATCH_SUGGESTION" }),
       });
-      load();
+      // آپدیت خوش‌بینانهٔ لیست محلی — load() دوباره کل صفحه را اسکلتون می‌کرد
+      setList((prev) => prev.map((n) => ({ ...n, read: true })));
       // بج تطبیق در سایدبار از لی‌اوت سروری می‌آید؛ بدون رفرش، عددش کهنه می‌ماند.
       router.refresh();
     } catch (e) {
@@ -81,7 +82,8 @@ export default function MatchingPage() {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ id }),
       });
-      load();
+      // آپدیت خوش‌بینانهٔ لیست محلی — load() دوباره کل صفحه را اسکلتون می‌کرد
+      setList((prev) => prev.map((n) => (n.id === id ? { ...n, read: true } : n)));
       // بج تطبیق در سایدبار از لی‌اوت سروری می‌آید؛ بدون رفرش، عددش کهنه می‌ماند.
       router.refresh();
     } catch (e) {

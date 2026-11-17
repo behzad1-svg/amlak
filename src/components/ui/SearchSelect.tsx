@@ -1,5 +1,6 @@
 "use client";
 import { useEffect, useId, useMemo, useRef, useState } from "react";
+import { filterSearchOptions } from "@/lib/optionSearch";
 
 export type SearchOption = { id: string; label: string; sub?: string };
 
@@ -44,14 +45,8 @@ export function SearchSelect({
     // جستجوی سمت سرور: گزینه‌ها از قبل فیلترشده‌اند؛ فیلتر دوبارهٔ کاربر فقط
     // موقع تأخیر واکشی، «موردی یافت نشد» اشتباه نشان می‌داد
     if (onSearchChange) return options;
-    const query = q.trim().toLowerCase();
-    if (!query) return options;
-    return options.filter(
-      (o) =>
-        o.label.toLowerCase().includes(query) ||
-        (o.sub && o.sub.toLowerCase().includes(query)) ||
-        o.id.toLowerCase().includes(query)
-    );
+    // فیلتر سمت کاربر با نرمال‌سازی فارسی/عربی و ارقام (ي/ك، ۰-۹)
+    return filterSearchOptions(options, q);
   }, [options, q, onSearchChange]);
 
   useEffect(() => {

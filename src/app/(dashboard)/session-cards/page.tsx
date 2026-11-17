@@ -84,6 +84,7 @@ export default function SessionCardsPage() {
   const [contractManagerOptions, setContractManagerOptions] = useState<SearchOption[]>([]);
   const [propertyTotal, setPropertyTotal] = useState<number | null>(null);
   const [propSearch, setPropSearch] = useState("");
+  const [custSearch, setCustSearch] = useState("");
   const [propDealType, setPropDealType] = useState("");
   const [propAdvisorId, setPropAdvisorId] = useState("");
   const [propPriceMin, setPropPriceMin] = useState("");
@@ -92,6 +93,7 @@ export default function SessionCardsPage() {
   const [propRentMax, setPropRentMax] = useState("");
   const [fileAdvisorOptions, setFileAdvisorOptions] = useState<SearchOption[]>([]);
   const propertyIdRef = useRef("");
+  const customerIdRef = useRef("");
 
   const [customerId, setCustomerId] = useState("");
   const [propertyId, setPropertyId] = useState("");
@@ -139,13 +141,8 @@ export default function SessionCardsPage() {
 
   async function loadOptions() {
     try {
-      const [c, u] = await Promise.all([
-        apiJson<unknown>("/api/customers?limit=200"),
-        apiJson<unknown>("/api/users"),
-      ]);
-      const customers = (Array.isArray(c) ? c : (c as { customers?: unknown[] }).customers ?? []) as { id: string; name: string; phone?: string }[];
+      const u = await apiJson<unknown>("/api/users");
       const users = (Array.isArray(u) ? u : []) as { id: string; name: string; role?: string; active?: boolean; isContractManager?: boolean }[];
-      setCustomerOptions(customers.map((x) => ({ id: x.id, label: x.name, sub: x.phone })));
       setAdvisorOptions(users.filter((x) => x.role === "AGENT" && x.active !== false).map((x) => ({ id: x.id, label: x.name })));
       setContractManagerOptions(users.filter((x) => x.isContractManager && x.active !== false).map((x) => ({ id: x.id, label: x.name })));
       setFileAdvisorOptions(users.map((x) => ({ id: x.id, label: x.name })));
@@ -153,6 +150,27 @@ export default function SessionCardsPage() {
       setActionError(errorMessage(e));
     }
   }
+
+  // جستجوی مشتری — سمت سرور (نام/شماره)، تا سقف ۱۰۰ تایی لیست
+  const loadCustomerOptions = useCallback(async () => {
+    const params = new URLSearchParams({ limit: "100" });
+    if (custSearch.trim()) params.set("search", custSearch.trim());
+    try {
+      const d = await apiJson<{ customers?: { id: string; name: string; phone?: string }[] } | { id: string; name: string; phone?: string }[]>(`/api/customers?${params.toString()}`);
+      const list = (Array.isArray(d) ? d : d.customers ?? []) as { id: string; name: string; phone?: string }[];
+      const opts = list.map((x) => ({ id: x.id, label: x.name, sub: x.phone }));
+      // مشتری انتخاب‌شده را نگه دار — حتی اگر با فیلتر تازه در لیست نباشد، برچسبش ناپدید نشود
+      setCustomerOptions((prev) => {
+        const selId = customerIdRef.current;
+        if (!selId) return opts;
+        const sel = prev.find((o) => o.id === selId);
+        if (sel && !opts.some((o) => o.id === sel.id)) return [...opts, sel];
+        return opts;
+      });
+    } catch (e) {
+      setActionError(errorMessage(e));
+    }
+  }, [custSearch]);
 
   // جستجوی فایل — سمت سرور (عنوان/کد + نوع معامله + مشاور)، تا سقف ۱۰۰ تایی لیست، گزینه‌های ناسازگار را پنهان نکند
   const loadPropertyOptions = useCallback(async () => {
@@ -187,6 +205,10 @@ export default function SessionCardsPage() {
   }, [propertyId]);
 
   useEffect(() => {
+    customerIdRef.current = customerId;
+  }, [customerId]);
+
+  useEffect(() => {
     if (!showForm) return;
     const t = setTimeout(() => {
       loadPropertyOptions();
@@ -194,10 +216,18 @@ export default function SessionCardsPage() {
     return () => clearTimeout(t);
   }, [showForm, propSearch, propDealType, propAdvisorId, propPriceMin, propPriceMax, propRentMin, propRentMax, loadPropertyOptions]);
 
+  useEffect(() => {
+    if (!showForm) return;
+    const t = setTimeout(() => {
+      loadCustomerOptions();
+    }, custSearch.trim() ? 280 : 0);
+    return () => clearTimeout(t);
+  }, [showForm, custSearch, loadCustomerOptions]);
+
   function openForm() {
     setShowForm(true);
     setActionError("");
-    if (customerOptions.length === 0 || advisorOptions.length === 0) loadOptions();
+    if (advisorOptions.length === 0) loadOptions();
   }
 
   function closeForm() {
@@ -234,6 +264,7 @@ export default function SessionCardsPage() {
     setPaymentTerms(card.paymentTerms ?? "");
     setNotes(card.notes ?? "");
     setPropSearch("");
+    setCustSearch("");
     setPropDealType("");
     setPropAdvisorId("");
     // مشتری و فایل انتخاب شده را در گزینه‌ها نگه دار تا برچسب آن‌ها ناپدید نشود
@@ -251,7 +282,7 @@ export default function SessionCardsPage() {
     }
     setShowForm(true);
     setActionError("");
-    if (customerOptions.length === 0 || advisorOptions.length === 0) loadOptions();
+    if (advisorOptions.length === 0) loadOptions();
   }
 
   function resetForm() {
@@ -407,7 +438,7 @@ export default function SessionCardsPage() {
                   ? "در حال ویرایش کارت جلسه."
                   : "پیش از قرارداد، شرایط جلسه را اینجا بنویسید تا مدیر پیش از جلسه همه اطلاعات را داشته باشد؛ به‌محض ثبت، اعلان کارت جلسه برای مدیر می‌رود؛ اگر مشاور همکار یا مدیر قرارداد انتخاب شده باشد، برای آن‌ها هم می‌رود."}
               </p>
-              <SearchSelect label="مشتری *" required value={customerId} onChange={setCustomerId} options={customerOptions} placeholder="مشتری را جستجو و انتخاب کنید..." />
+              <SearchSelect label="مشتری *" required value={customerId} onChange={setCustomerId} options={customerOptions} placeholder="مشتری را جستجو و انتخاب کنید..." onSearchChange={setCustSearch} />
               <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
                 <Select value={propDealType} onChange={(e) => setPropDealType(e.target.value)} aria-label="نوع معامله">
                   <option value="">همه معاملات</option>

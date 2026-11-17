@@ -22,7 +22,9 @@ export function DashboardShell({
   pendingSessionCardCount?: number;
   children: React.ReactNode;
 }) {
-  const [mode, setMode] = useState<"full" | "mini" | "hidden">("full");
+  // حالت اولیه "hidden" است تا در اولین رندر موبایل، کشو باز دیده نشود؛
+  // افکت زیر روی دسکتاپ آن را "full" می‌کند
+  const [mode, setMode] = useState<"full" | "mini" | "hidden">("hidden");
   const [isDesktop, setIsDesktop] = useState(false);
 
   useEffect(() => {

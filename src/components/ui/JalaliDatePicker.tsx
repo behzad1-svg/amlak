@@ -12,6 +12,15 @@ function getWeekdayOffset(jy: number, jm: number): number {
   return (d.getDay() + 1) % 7;
 }
 
+// بازهٔ سال‌ها برای انتخابگر سریع سال (تاریخ‌های دور مثل سال تولد)
+function jalaliYearOptions(): number[] {
+  const now = toJalali(new Date());
+  const current = now ? now.jy : 1404;
+  const years: number[] = [];
+  for (let y = 1300; y <= current + 2; y++) years.push(y);
+  return years;
+}
+
 function getInitialView(value: string | null) {
   if (value) {
     const j = toJalali(value);
@@ -37,6 +46,7 @@ export function JalaliDatePicker({
   const [view, setView] = useState(() => getInitialView(value));
 
   const selected = useMemo(() => (value ? toJalali(value) : null), [value]);
+  const yearOptions = useMemo(() => jalaliYearOptions(), []);
 
   // نقد ۱۰ — Escape تقویم را می‌بندد
   useEffect(() => {
@@ -62,6 +72,16 @@ export function JalaliDatePicker({
   function pickDay(jd: number) {
     if (!isValidJalaliDate(view.jy, view.jm, jd)) return;
     const d = jalaliToGregorian(view.jy, view.jm, jd);
+    d.setHours(12, 0, 0, 0);
+    onChange(d.toISOString());
+    setOpen(false);
+  }
+
+  function goToday() {
+    const now = toJalali(new Date());
+    if (!now) return;
+    setView({ jy: now.jy, jm: now.jm });
+    const d = jalaliToGregorian(now.jy, now.jm, now.jd);
     d.setHours(12, 0, 0, 0);
     onChange(d.toISOString());
     setOpen(false);
@@ -100,7 +120,19 @@ export function JalaliDatePicker({
           <div role="dialog" aria-label="انتخاب تاریخ" className="absolute z-40 mt-2 w-72 rounded-[16px] border border-[var(--line)] bg-white p-3 shadow-[0_8px_24px_rgba(22,26,36,0.12)] right-0">
             <div className="flex items-center justify-between mb-3">
               <button type="button" onClick={prevMonth} aria-label="ماه قبل" className="rounded-[10px] p-1.5 hover:bg-[var(--paper-2)]"><ChevronRight className="h-4 w-4" /></button>
-              <span className="text-[13px] font-bold">{MONTH_NAMES[view.jm - 1]} {toFaDigits(String(view.jy))}</span>
+              <span className="flex items-center gap-1.5 text-[13px] font-bold">
+                {MONTH_NAMES[view.jm - 1]}
+                <select
+                  value={view.jy}
+                  onChange={(e) => setView((v) => ({ ...v, jy: Number(e.target.value) }))}
+                  aria-label="سال"
+                  className="rounded-[8px] border border-[var(--line)] bg-white px-1 py-0.5 text-[13px] font-bold outline-none"
+                >
+                  {yearOptions.map((y) => (
+                    <option key={y} value={y}>{toFaDigits(String(y))}</option>
+                  ))}
+                </select>
+              </span>
               <button type="button" onClick={nextMonth} aria-label="ماه بعد" className="rounded-[10px] p-1.5 hover:bg-[var(--paper-2)]"><ChevronLeft className="h-4 w-4" /></button>
             </div>
             <div className="grid grid-cols-7 gap-1 text-center">
@@ -121,6 +153,9 @@ export function JalaliDatePicker({
                 )
               )}
             </div>
+            <button type="button" onClick={goToday} className="mt-3 w-full rounded-[10px] border border-[var(--line)] bg-[var(--paper-2)] px-3 py-1.5 text-[12.5px] font-bold hover:bg-[var(--paper)]">
+              امروز
+            </button>
           </div>
         </>
       )}

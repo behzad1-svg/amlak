@@ -1,5 +1,5 @@
 "use client";
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import Link from "next/link";
 import { Header } from "@/components/layout/Header";
 import { Button } from "@/components/ui/Button";
@@ -94,7 +94,10 @@ export default function PropertiesPage() {
   const { isOwner } = useRole();
 
   // نقد ۱ و ۳ — بارگذاری با کمک‌کنندهٔ مرکزی + صفحه‌بندی صادقانه (۱۰۰ ردیف در هر صفحه)
+  // پاسخ‌های کهنه نادیده گرفته می‌شوند (مسابقهٔ فیلتر)
+  const requestIdRef = useRef(0);
   const load = useCallback(async (pageNum = 1, append = false) => {
+    const myRequestId = ++requestIdRef.current;
     const params = new URLSearchParams();
     if (filters.search.trim()) params.set("search", filters.search.trim());
     selectedRegions.forEach((r) => params.append("regions", r));
@@ -131,16 +134,20 @@ export default function PropertiesPage() {
     }
     try {
       const d = await apiJson<{ properties?: Property[]; total?: number } | Property[]>(`/api/properties?${params.toString()}`);
+      if (requestIdRef.current !== myRequestId) return;
       const items = Array.isArray(d) ? d : d.properties ?? [];
       setList((prev) => (append ? [...prev, ...items] : items));
       setTotal(Array.isArray(d) ? d.length : d.total ?? items.length);
       setPage(pageNum);
     } catch (e) {
+      if (requestIdRef.current !== myRequestId) return;
       if (append) setMsg(errorMessage(e));
       else setLoadError(errorMessage(e));
     } finally {
-      setLoading(false);
-      setLoadingMore(false);
+      if (requestIdRef.current === myRequestId) {
+        setLoading(false);
+        setLoadingMore(false);
+      }
     }
   }, [filters, selectedRegions]);
 

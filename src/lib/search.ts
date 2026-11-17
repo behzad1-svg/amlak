@@ -13,9 +13,9 @@ function stripZwnj(s: string): string {
   return s.replace(/\u200C/g, "");
 }
 
-// ي عربی → ی فارسی، ك عربی → ک فارسی؛ نیم فاصله‌ها حذف می‌شوند
+// ي/ى عربی → ی فارسی، ك عربی → ک فارسی؛ نیم فاصله‌ها حذف می‌شوند
 export function normalizePersianTerm(term: string): string {
-  return stripZwnj(term).replace(/ي/g, "ی").replace(/ك/g, "ک").trim();
+  return stripZwnj(term).replace(/ي/g, "ی").replace(/ى/g, "ی").replace(/ك/g, "ک").trim();
 }
 
 // گونه‌های جستجو برای یک عبارت: خود عبارت + بدون نیم فاصله + با یک نیم فاصله

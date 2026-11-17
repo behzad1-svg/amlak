@@ -22,6 +22,7 @@ const JalaliDatePicker = dynamic(
 import { formatDate, toEnDigits } from "@/lib/utils";
 import { MoneyText } from "@/components/ui/MoneyText";
 import { formatTomanWithWords } from "@/lib/money";
+import { calcPerMetre, calcTotal } from "@/lib/pricePerSqm";
 import {
   PROPERTY_TYPE_LABELS,
   DEAL_TYPE_LABELS,
@@ -336,19 +337,16 @@ export default function PropertyDetailPage() {
     const clean = toEnDigits(v).replace(/[^0-9]/g, "");
     setForm((f) => ({ ...f, salePriceToman: clean }));
     lastPriceField.current = "total";
-    if (clean !== "" && detailBaseSize) {
-      const n = Math.round(Number(clean) / detailBaseSize);
-      if (Number.isFinite(n) && n > 0) setPricePerSqm(String(n));
-    }
+    // پاک شدن قیمت کل → متری هم پاک می‌شود ("" یعنی پاک کن، null یعنی دست نزن)
+    const next = calcPerMetre(clean, detailBaseSize ?? 0);
+    if (next !== null) setPricePerSqm(next);
   }
   function onEditPerMetre(v: string) {
     const clean = toEnDigits(v).replace(/[^0-9]/g, "");
     setPricePerSqm(clean);
     lastPriceField.current = "perMetre";
-    if (clean !== "" && detailBaseSize) {
-      const n = Math.round(Number(clean) * detailBaseSize);
-      if (Number.isFinite(n) && n > 0) setForm((f) => ({ ...f, salePriceToman: String(n) }));
-    }
+    const next = calcTotal(clean, detailBaseSize ?? 0);
+    if (next !== null) setForm((f) => ({ ...f, salePriceToman: next }));
   }
   const typeLabel = PROPERTY_TYPE_LABELS[p.type] ?? p.type;
   const canManageAccess = isOwner || p.listedBy?.id === meId;

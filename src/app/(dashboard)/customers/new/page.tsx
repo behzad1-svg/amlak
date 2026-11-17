@@ -61,7 +61,11 @@ export default function NewCustomerPage() {
   // هشدار شماره تکراری — با ۳۰۰ میلی‌ثانیه تأخیر، فقط وقتی شماره کامل است
   useEffect(() => {
     const phone = form.phone.trim();
-    if (!/^[0-9]{10,15}$/.test(phone)) return;
+    if (!/^[0-9]{10,15}$/.test(phone)) {
+      // شماره ناقص/پاک‌شده → بنر کهنهٔ «شماره تکراری» پاک شود (با تأخیر صفر تا setState همگام در افکت نباشد)
+      const t = setTimeout(() => setDup(null), 0);
+      return () => clearTimeout(t);
+    }
     let cancelled = false;
     const t = setTimeout(() => {
       apiJson<{ customers?: { id: string; name: string; phone: string }[] }>(`/api/customers?search=${encodeURIComponent(phone)}&limit=100&category=${form.type === "OWNER" ? "owners" : "customers"}`)
@@ -150,9 +154,10 @@ export default function NewCustomerPage() {
               onChange={(e) => {
                 const t = e.target.value;
                 upd("type", t);
-                // پیشنهاد خودکار نوع معامله بر اساس نقش
+                // پیشنهاد خودکار نوع معامله بر اساس نقش؛ با خروج از TENANT اجارهٔ ماهانه پاک می‌شود
                 if (t === "TENANT") upd("preferredDealType", "RENT");
-                if (t === "BUYER" && !form.preferredDealType) upd("preferredDealType", "SALE");
+                if (t === "BUYER") upd("preferredDealType", "SALE");
+                if (t !== "TENANT") upd("budgetMaxMonthly", "");
               }}
               className="mt-1"
             >

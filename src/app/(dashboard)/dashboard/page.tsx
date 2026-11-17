@@ -33,14 +33,14 @@ export default async function DashboardPage() {
         {/* Stats strip — شمارنده‌ها تعداد واقعی‌اند، نه طول لیست بریده‌شده */}
         <div className="grid grid-cols-2 lg:grid-cols-3 gap-3">
           <div className="rounded-[16px] border border-[var(--pomegranate-line)] bg-[var(--pomegranate-soft)] p-4">
-            <div className="text-[11px] tracking-widest text-[var(--pomegranate)]">عقب‌افتاده</div>
+            <div className="text-[11px] text-[var(--pomegranate)]">عقب‌افتاده</div>
             <div className="mt-1 flex items-baseline gap-2">
               <span className="text-[28px] font-extrabold leading-none tracking-tight text-[var(--pomegranate)]">{data.overdueTotal}</span>
               <span className="text-[12px] text-[var(--pomegranate)]/70">مورد</span>
             </div>
           </div>
           <div className="rounded-[16px] border border-[var(--line)] bg-white p-4">
-            <div className="text-[11px] tracking-widest text-[var(--ink-3)]">پیگیری امروز</div>
+            <div className="text-[11px] text-[var(--ink-3)]">پیگیری امروز</div>
             <div className="mt-1 flex items-baseline gap-2">
               <span className="text-[28px] font-extrabold leading-none tracking-tight">{data.todayTotal}</span>
               <span className="text-[12px] text-[var(--ink-3)]">مورد</span>
@@ -48,7 +48,7 @@ export default async function DashboardPage() {
             <div className="mt-2 text-[12px] leading-5 text-[var(--ink-3)]">تا پایان امروز</div>
           </div>
           <div className="rounded-[16px] border border-[var(--line)] bg-white p-4">
-            <div className="text-[11px] tracking-widest text-[var(--ink-3)]">نیاز به بررسی</div>
+            <div className="text-[11px] text-[var(--ink-3)]">نیاز به بررسی</div>
             <div className="mt-1 flex items-baseline gap-2">
               <span className="text-[28px] font-extrabold leading-none tracking-tight">{data.needsReviewTotal}</span>
               <span className="text-[12px] text-[var(--ink-3)]">مورد</span>
@@ -184,12 +184,12 @@ export default async function DashboardPage() {
             <div className="px-4 py-3 border-b border-[var(--line)] flex items-center gap-2">
               <span className="flex h-7 w-7 items-center justify-center rounded-[10px] bg-[var(--ink)] text-white"><Users className="h-4 w-4" /></span>
               <span className="text-[13px] font-extrabold">وضعیت تیم</span>
-              <span className="mr-auto text-[11px] tracking-widest text-[var(--ink-3)]">هفتگی · ماهانه · آگهی هفته · کارت جلسه هفته</span>
+              <span className="mr-auto text-[11px] text-[var(--ink-3)]">هفتگی · ماهانه · آگهی هفته · کارت جلسه هفته</span>
             </div>
             <div className="overflow-x-auto">
               <table className="w-full text-[13px]">
                 <thead>
-                  <tr className="bg-[var(--paper-2)] text-[11px] tracking-widest text-[var(--ink-3)]">
+                  <tr className="bg-[var(--paper-2)] text-[11px] text-[var(--ink-3)]">
                     <th className="py-2.5 pr-4 text-right font-medium">مشاور</th>
                     <th className="py-2.5 text-center font-medium">عقب‌افتاده</th>
                     <th className="py-2.5 text-center font-medium">هفتگی</th>

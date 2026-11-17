@@ -1,7 +1,7 @@
 "use client";
 import { useState } from "react";
 import { Eye, EyeOff } from "lucide-react";
-import { cn } from "@/lib/utils";
+import { cn, toEnDigits } from "@/lib/utils";
 
 const fieldBase =
   "min-w-0 w-full rounded-[12px] border border-[var(--line)] bg-white px-3 py-2.5 text-[13.5px] text-[var(--ink)] placeholder:text-[var(--ink-3)]/60 outline-none transition-colors focus:border-[var(--pomegranate)] focus:ring-2 focus:ring-[var(--pomegranate-soft)]";
@@ -46,15 +46,13 @@ export function Label({ className, ...props }: React.LabelHTMLAttributes<HTMLLab
 export function PhoneInput({ className, onChange, ...props }: React.InputHTMLAttributes<HTMLInputElement>) {
   return (
     <input
-      className={cn(fieldBase, className)}
+      className={cn(fieldBase, "text-right font-mono", className)}
       inputMode="numeric"
       dir="ltr"
-      onBeforeInput={(e: React.FormEvent<HTMLInputElement> & { data?: string }) => {
-        const data = (e.nativeEvent as InputEvent).data;
-        if (data && /[^0-9]/.test(data)) e.preventDefault();
-      }}
       onChange={(e) => {
-        const filtered = e.target.value.replace(/[^0-9]/g, "");
+        // ارقام فارسی/عربی اول به لاتین تبدیل می‌شوند، بعد فیلتر — onBeforeInput
+        // مسدودکننده حذف شد چون ارقام فارسی را پیش از رسیدن به onChange بلاک می‌کرد
+        const filtered = toEnDigits(e.target.value).replace(/[^0-9]/g, "");
         if (filtered !== e.target.value) e.target.value = filtered;
         onChange?.(e);
       }}
@@ -66,19 +64,15 @@ export function PhoneInput({ className, onChange, ...props }: React.InputHTMLAtt
 export function NumberInput({ className, onChange, allowDecimal, ...props }: React.InputHTMLAttributes<HTMLInputElement> & { allowDecimal?: boolean }) {
   return (
     <input
-      className={cn(fieldBase, className)}
+      className={cn(fieldBase, "text-right font-mono", className)}
       inputMode={allowDecimal ? "decimal" : "numeric"}
       dir="ltr"
-      onBeforeInput={(e: React.FormEvent<HTMLInputElement> & { data?: string }) => {
-        const data = (e.nativeEvent as InputEvent).data;
-        if (!data) return;
-        if (allowDecimal ? /[^0-9.٫]/.test(data) : /[^0-9]/.test(data)) e.preventDefault();
-      }}
       onChange={(e) => {
-        let filtered = e.target.value;
+        // ارقام فارسی/عربی اول به لاتین تبدیل می‌شوند (۰٫۲۵ → 0.25)؛ ممیز فارسی ٫ و ،
+        // به نقطه تبدیل می‌شود؛ حداکثر ۲ رقم اعشار
+        let filtered = toEnDigits(e.target.value);
         if (allowDecimal) {
-          // اعشار قبول می‌کند (۰٫۲۵)؛ ممیز فارسی ٫ به نقطه تبدیل می‌شود؛ حداکثر ۲ رقم اعشار
-          filtered = filtered.replace(/٫/g, ".").replace(/[^0-9.]/g, "");
+          filtered = filtered.replace(/٫|،/g, ".").replace(/[^0-9.]/g, "");
           const dot = filtered.indexOf(".");
           if (dot !== -1) filtered = filtered.slice(0, dot + 1) + filtered.slice(dot + 1).replace(/\./g, "").slice(0, 2);
         } else {

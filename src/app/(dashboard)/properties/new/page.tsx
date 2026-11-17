@@ -1,5 +1,5 @@
 "use client";
-import { useState, useEffect, useId, useRef } from "react";
+import { useState, useEffect, useId, useRef, useCallback } from "react";
 import { useRouter } from "next/navigation";
 import { Header } from "@/components/layout/Header";
 import { Input, NumberInput, Select, Label, Textarea } from "@/components/ui/Input";
@@ -7,6 +7,7 @@ import { Button } from "@/components/ui/Button";
 import { SearchSelect } from "@/components/ui/SearchSelect";
 import { apiFetch, apiJson, errorMessage } from "@/lib/api";
 import { formatTomanWithWords } from "@/lib/money";
+import { calcPerMetre, calcTotal } from "@/lib/pricePerSqm";
 import { CUSTOMER_SOURCE_LABELS, CUSTOMER_SOURCE_OPTIONS } from "@/lib/constants";
 
 type Flags = {
@@ -80,6 +81,8 @@ function Num({
 export default function NewPropertyPage() {
   const router = useRouter();
   const [owners, setOwners] = useState<{ id: string; name: string; phone?: string }[]>([]);
+  const [ownerSearch, setOwnerSearch] = useState("");
+  const ownerIdRef = useRef("");
   const [regions, setRegions] = useState<string[]>([]);
   const [propertyTypes, setPropertyTypes] = useState<{ value: string; label: string }[]>([]);
   const [form, setForm] = useState<Record<string, string>>({
@@ -119,18 +122,15 @@ export default function NewPropertyPage() {
   function onSalePrice(v: string) {
     upd("salePriceToman", v);
     lastPriceField.current = "total";
-    if (v !== "" && baseSizeNum > 0) {
-      const n = Math.round(Number(v) / baseSizeNum);
-      if (Number.isFinite(n) && n > 0) upd("pricePerSqm", String(n));
-    }
+    // پاک شدن قیمت کل → متری هم پاک می‌شود ("" یعنی پاک کن، null یعنی دست نزن)
+    const next = calcPerMetre(v, baseSizeNum);
+    if (next !== null) upd("pricePerSqm", next);
   }
   function onPerMetre(v: string) {
     upd("pricePerSqm", v);
     lastPriceField.current = "perMetre";
-    if (v !== "" && baseSizeNum > 0) {
-      const n = Math.round(Number(v) * baseSizeNum);
-      if (Number.isFinite(n) && n > 0) upd("salePriceToman", String(n));
-    }
+    const next = calcTotal(v, baseSizeNum);
+    if (next !== null) upd("salePriceToman", next);
   }
   // با عوض شدن متراژ مبنا (تغییر متراژ یا نوع ملک)، قیمتِ آخرین‌بار دستی‌واردشده
   // ثابت می‌ماند و دیگری دوباره محاسبه می‌شود
@@ -150,13 +150,33 @@ export default function NewPropertyPage() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [baseSizeNum]);
 
+  // جستجوی مالک — سمت سرور (سقف ۱۰۰ تایی API؛ مالک انتخاب‌شده در لیست می‌ماند)
   useEffect(() => {
-    apiJson<{ customers?: { id: string; name: string; phone?: string }[] } | { id: string; name: string; phone?: string }[]>("/api/customers?showLost=true&limit=200&category=owners")
-      .then((d) => {
-        const list = Array.isArray(d) ? d : d?.customers ?? [];
-        setOwners(list);
-      })
-      .catch(() => {});
+    ownerIdRef.current = form.ownerId;
+  }, [form.ownerId]);
+  const loadOwnerOptions = useCallback(async () => {
+    try {
+      const params = new URLSearchParams({ limit: "100", category: "owners", showLost: "true" });
+      if (ownerSearch.trim()) params.set("search", ownerSearch.trim());
+      const d = await apiJson<{ customers?: { id: string; name: string; phone?: string }[] } | { id: string; name: string; phone?: string }[]>(`/api/customers?${params.toString()}`);
+      const list = Array.isArray(d) ? d : d?.customers ?? [];
+      setOwners((prev) => {
+        const selId = ownerIdRef.current;
+        if (!selId) return list;
+        const sel = prev.find((o) => o.id === selId);
+        if (sel && !list.some((o) => o.id === sel.id)) return [...list, sel];
+        return list;
+      });
+    } catch {
+      // جستجوی مالک اختیاری است؛ خطا نادیده گرفته می‌شود
+    }
+  }, [ownerSearch]);
+  useEffect(() => {
+    const t = setTimeout(() => { void loadOwnerOptions(); }, ownerSearch.trim() ? 280 : 0);
+    return () => clearTimeout(t);
+  }, [ownerSearch, loadOwnerOptions]);
+
+  useEffect(() => {
     apiJson<{ regions?: string[]; propertyTypes?: { value: string; label: string }[] }>("/api/settings")
       .then((d) => {
         if (d.regions) setRegions(d.regions);
@@ -365,6 +385,7 @@ export default function NewPropertyPage() {
                 required
                 value={form.ownerId}
                 onChange={(id) => upd("ownerId", id)}
+                onSearchChange={setOwnerSearch}
                 options={owners.map((o) => ({ id: o.id, label: o.name, sub: o.phone }))}
                 placeholder="جستجوی مالک (نام یا شماره)..."
                 emptyText="مشتری/مالکی با این عبارت نیست"

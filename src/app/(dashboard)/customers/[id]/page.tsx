@@ -275,7 +275,11 @@ export default function CustomerDetailPage() {
   useEffect(() => {
     if (!editing || !c) return;
     const phone = form.phone.trim();
-    if (!/^[0-9]{10,15}$/.test(phone) || phone === c.phone) return;
+    if (!/^[0-9]{10,15}$/.test(phone) || phone === c.phone) {
+      // شماره ناقص/بدون تغییر → بنر کهنهٔ «شماره تکراری» پاک شود (با تأخیر صفر تا setState همگام در افکت نباشد)
+      const t = setTimeout(() => setDup(null), 0);
+      return () => clearTimeout(t);
+    }
     let cancelled = false;
     const t = setTimeout(() => {
       apiJson<{ customers?: { id: string; name: string; phone: string }[] }>(`/api/customers?search=${encodeURIComponent(phone)}&limit=100&category=${form.type === "OWNER" ? "owners" : "customers"}`)
@@ -468,26 +472,29 @@ export default function CustomerDetailPage() {
       }
     }
 
-    // ۲) یادداشت/دلیل مشتری — مرحله مستقیم عوض نمی‌شود؛ WON از مسیر معامله می‌آید
-    const body: Record<string, unknown> = {};
-    if (payload.stage === "WON") {
-      body.notes = payload.notes || null;
-      body.nextFollowUpAt = null;
-    } else {
-      body.stage = payload.stage;
-      body.lostReasonCategory = payload.lostReasonCategory || "OTHER";
-      body.lostReasonDetail = payload.lostReasonDetail || null;
-      body.nextFollowUpAt = null;
-    }
+    // ۲) یادداشت/دلیل مشتری — برای WON با فایل، مرحله و nextFollowUpAt از مسیر معامله
+    // می‌آیند (POST /api/deals) و PATCH جداگانه زائد است؛ بدون فایل، PATCH نگه داشته می‌شود
+    if (!(payload.stage === "WON" && payload.propertyId)) {
+      const body: Record<string, unknown> = {};
+      if (payload.stage === "WON") {
+        body.notes = payload.notes || null;
+        body.nextFollowUpAt = null;
+      } else {
+        body.stage = payload.stage;
+        body.lostReasonCategory = payload.lostReasonCategory || "OTHER";
+        body.lostReasonDetail = payload.lostReasonDetail || null;
+        body.nextFollowUpAt = null;
+      }
 
-    try {
-      await apiFetch(`/api/customers/${id}`, {
-        method: "PATCH",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(body),
-      });
-    } catch (e) {
-      throw new Error(errorMessage(e));
+      try {
+        await apiFetch(`/api/customers/${id}`, {
+          method: "PATCH",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify(body),
+        });
+      } catch (e) {
+        throw new Error(errorMessage(e));
+      }
     }
 
     // ۳) یادداشت در تایم‌لاین فعالیت

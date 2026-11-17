@@ -415,7 +415,7 @@ export default function CustomersPage() {
               className={`w-[276px] shrink-0 rounded-[16px] border p-3 ${STAGE_ACCENT[stage] ?? "border-[var(--line)] bg-white"}`}
             >
               <div className="flex items-center justify-between">
-                <h3 className="text-[12px] font-extrabold tracking-widest text-[var(--ink-2)]">
+                <h3 className="text-[12px] font-extrabold text-[var(--ink-2)]">
                   {CUSTOMER_STAGE_LABELS[stage] ?? stage}
                 </h3>
                 <span className="rounded-full bg-white border border-[var(--line)] px-2 py-0.5 text-[11px] font-bold">{toFaDigits(String(shownForColumn))}</span>

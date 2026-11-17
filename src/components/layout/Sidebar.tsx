@@ -29,7 +29,7 @@ export function Sidebar({ role, userName, unreadCount, unreadMatchCount, pending
           <Image src="/saj-logo-mark.png" alt="املاک ساج" width={1331} height={464} className="h-9 w-auto" />
           <div className="leading-none">
             <div className="text-[14px] font-extrabold tracking-tight text-[var(--ink)]">املاک ساج</div>
-            <div className="mt-0.5 text-[11px] font-medium tracking-widest text-[var(--ink-3)]">بوشهر · SAJ</div>
+            <div className="mt-0.5 text-[11px] font-medium text-[var(--ink-3)]">بوشهر · SAJ</div>
           </div>
         </div>
         {onClose && (
@@ -39,7 +39,7 @@ export function Sidebar({ role, userName, unreadCount, unreadMatchCount, pending
 
       <div className="px-3 pt-3">
         <div className="rounded-[12px] border border-[var(--line)] bg-[var(--paper-2)] px-3 py-2.5">
-          <div className="text-[11px] font-medium tracking-widest text-[var(--ink-3)]">سامانه مدیریت</div>
+          <div className="text-[11px] font-medium text-[var(--ink-3)]">سامانه مدیریت</div>
           <div className="mt-1 text-[12px] leading-5 text-[var(--ink-2)]">پیگیری منظم · تطبیق هوشمند</div>
         </div>
       </div>
@@ -74,7 +74,7 @@ export function Sidebar({ role, userName, unreadCount, unreadMatchCount, pending
         {role === "OWNER" && (
           <>
             <div className="pt-2">
-              <div className="px-3 pb-1 text-[11px] font-medium tracking-widest text-[var(--ink-3)]">مدیریت</div>
+              <div className="px-3 pb-1 text-[11px] font-medium text-[var(--ink-3)]">مدیریت</div>
             </div>
             <Link
               href="/admin"
