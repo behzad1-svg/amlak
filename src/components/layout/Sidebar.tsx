@@ -26,7 +26,7 @@ export function Sidebar({ role, userName, unreadCount, unreadMatchCount, pending
     <div className="flex flex-1 flex-col bg-white">
       <div className="flex h-[64px] items-center justify-between border-b border-[var(--line)] px-5 shrink-0">
         <div className="flex items-center gap-3">
-          <Image src="/saj-logo-mark.png" alt="املاک ساج" width={1331} height={464} className="h-9 w-auto" />
+          <Image src="/saj-logo-mark.png" alt="املاک ساج" width={1331} height={464} className="saj-logo h-9 w-auto" />
           <div className="leading-none">
             <div className="text-[14px] font-extrabold tracking-tight text-[var(--ink)]">املاک ساج</div>
             <div className="mt-0.5 text-[11px] font-medium text-[var(--ink-3)]">بوشهر · SAJ</div>

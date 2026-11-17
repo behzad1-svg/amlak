@@ -40,7 +40,7 @@ function LoginForm() {
       <div className="flex flex-1 items-center justify-center p-6 lg:p-10">
         <div className="w-full max-w-[420px]">
           <div className="mb-8">
-            <Image src="/saj-logo.png" alt="املاک ساج — مشاور املاک" width={1379} height={611} className="h-auto w-[220px]" priority />
+            <Image src="/saj-logo.png" alt="املاک ساج — مشاور املاک" width={1379} height={611} className="saj-logo h-auto w-[220px]" priority />
             <div className="mt-2 text-[11px] text-[var(--ink-3)]">بوشهر · SAJ REAL ESTATE</div>
           </div>
 

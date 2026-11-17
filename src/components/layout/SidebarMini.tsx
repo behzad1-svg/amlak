@@ -19,7 +19,7 @@ export function SidebarMini({ role, userName, unreadCount, unreadMatchCount, pen
   const pathname = usePathname();
   return (
     <div className="flex flex-1 flex-col items-center bg-white py-3">
-      <Image src="/saj-logo-mark.png" alt="املاک ساج" width={1331} height={464} className="h-9 w-auto" />
+      <Image src="/saj-logo-mark.png" alt="املاک ساج" width={1331} height={464} className="saj-logo h-9 w-auto" />
       <button onClick={onExpand} className="mt-3 rounded-[10px] border border-[var(--line)] bg-white p-1.5 hover:bg-[var(--paper-2)]" aria-label="باز کردن منو">
         <PanelLeftOpen className="h-4 w-4" />
       </button>

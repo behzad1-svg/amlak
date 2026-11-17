@@ -135,3 +135,44 @@ body {
 [data-theme="dark"] .border-\[\#C9D8E8\],
 [data-theme="dark"] .border-\[\#C7D8EE\] { border-color: #2A3A52; }
 
+/* کارت مشتری بر اساس نوع — مالک/فروشنده بنفش کم رنگ بود و در تاریک سفید می ماند */
+[data-theme="dark"] .bg-\[\#F3EEFB\] { background-color: #241D33; }
+[data-theme="dark"] .border-\[\#D5C6F0\] { border-color: #3A2F52; }
+[data-theme="dark"] .bg-\[\#E4D8F7\] { background-color: #2E2545; }
+[data-theme="dark"] .border-\[\#C0A9E8\] { border-color: #4A3A6E; }
+[data-theme="dark"] .text-\[\#6B4FA1\] { color: #C4B5FD; }
+/* برچسب خریدار/مستاجر — هماهنگی با کارت آبی که از قبل تیره می شد */
+[data-theme="dark"] .bg-\[\#D8E5FA\] { background-color: #1A2338; }
+[data-theme="dark"] .border-\[\#A8C4EA\] { border-color: #2A3A52; }
+[data-theme="dark"] .text-\[\#2F5D8A\] { color: #8FB4D9; }
+
+/* کارت فایل بر اساس نوع ملک — همه ی رنگ های کم رنگ در تاریک تیره می شوند */
+[data-theme="dark"] .bg-\[\#E9F7EF\] { background-color: #12261F; }
+[data-theme="dark"] .border-\[\#B7E4C7\] { border-color: #1E3D31; }
+[data-theme="dark"] .bg-\[\#FFF8E1\] { background-color: #2A2110; }
+[data-theme="dark"] .bg-\[\#FFF1E6\] { background-color: #2A1D12; }
+[data-theme="dark"] .border-\[\#F5C9A8\] { border-color: #4A2E1A; }
+[data-theme="dark"] .bg-\[\#F5EFE3\] { background-color: #241F16; }
+[data-theme="dark"] .border-\[\#DCC9A8\] { border-color: #453A24; }
+[data-theme="dark"] .bg-\[\#FDF0F3\] { background-color: #2B1A1E; }
+[data-theme="dark"] .border-\[\#F2C6D2\] { border-color: #5A2A33; }
+
+/* برچسب نوع ملک — هم خانواده با رنگ کارت */
+[data-theme="dark"] .bg-\[\#CDEEDB\] { background-color: #173327; }
+[data-theme="dark"] .border-\[\#9BD8B4\] { border-color: #24503C; }
+[data-theme="dark"] .text-\[\#1E7A46\] { color: #6FD3A7; }
+[data-theme="dark"] .bg-\[\#FCEFC7\] { background-color: #372B13; }
+[data-theme="dark"] .border-\[\#EBCB85\] { border-color: #5C4A1F; }
+[data-theme="dark"] .text-\[\#8A6D1B\] { color: #E3B341; }
+[data-theme="dark"] .bg-\[\#FFE0C7\] { background-color: #33220F; }
+[data-theme="dark"] .border-\[\#EFB27E\] { border-color: #5A3A1E; }
+[data-theme="dark"] .text-\[\#9A5A1E\] { color: #E8A56B; }
+[data-theme="dark"] .bg-\[\#EDE3CC\] { background-color: #2A2415; }
+[data-theme="dark"] .border-\[\#CBB27F\] { border-color: #4A3F22; }
+[data-theme="dark"] .text-\[\#7A5C2E\] { color: #D9B96A; }
+[data-theme="dark"] .bg-\[\#FAD9E2\] { background-color: #3A2026; }
+[data-theme="dark"] .border-\[\#EFA9BC\] { border-color: #5A2A33; }
+[data-theme="dark"] .text-\[\#A13A5C\] { color: #F2A0AB; }
+
+/* لوگوی ساج مشکی روی شفاف است — در تم تاریک معکوس می شود تا روی پس زمینه ی تیره دیده شود */
+[data-theme="dark"] .saj-logo { filter: invert(1); }
