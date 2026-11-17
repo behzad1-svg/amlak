@@ -4,6 +4,7 @@ import { useRouter } from "next/navigation";
 import { Header } from "@/components/layout/Header";
 import { PhoneInput, Select, Label, Textarea } from "@/components/ui/Input";
 import { Button } from "@/components/ui/Button";
+import { MultiRegionPicker } from "@/components/ui/MultiRegionPicker";
 import dynamic from "next/dynamic";
 import { Input } from "@/components/ui/Input";
 import { MoneyInput } from "@/components/ui/MoneyInput";
@@ -18,24 +19,6 @@ const JalaliDatePicker = dynamic(
   { ssr: false, loading: () => <div className="h-10 rounded-[12px] border border-[var(--line)] bg-[var(--paper-2)] animate-pulse" /> }
 );
 
-function MultiRegionChips({ regions, value, onChange }: { regions: string[]; value: string[]; onChange: (v: string[]) => void }) {
-  return (
-    <div>
-      <div className="flex flex-wrap gap-1.5 mb-2 min-h-[28px]">
-        {value.length === 0 ? <span className="text-[12px] text-[var(--ink-3)]">هیچ منطقه‌ای انتخاب نشده</span> : value.map((r) => (
-          <span key={r} className="inline-flex items-center gap-1 rounded-full border border-[var(--line)] bg-[var(--paper-2)] px-2.5 py-1 text-[12px]">
-            {r}
-            <button type="button" onClick={() => onChange(value.filter((x) => x !== r))} className="text-[var(--ink-3)] hover:text-red-600">×</button>
-          </span>
-        ))}
-      </div>
-      <Select value="" onChange={(e) => { const v = e.target.value; if (v && !value.includes(v)) onChange([...value, v]); }} className="mt-1">
-        <option value="">افزودن منطقه...</option>
-        {regions.filter((r) => !value.includes(r)).map((r) => <option key={r} value={r}>{r}</option>)}
-      </Select>
-    </div>
-  );
-}
 
 export default function NewCustomerPage() {
   const router = useRouter();
@@ -244,7 +227,7 @@ export default function NewCustomerPage() {
 
           <div className="md:col-span-2">
             <Label>مناطق موردنظر (چندتایی)</Label>
-            <div className="mt-1"><MultiRegionChips regions={regions} value={areas} onChange={setAreas} /></div>
+            <div className="mt-1"><MultiRegionPicker regions={regions} value={areas} onChange={setAreas} /></div>
           </div>
           <div className="md:col-span-2"><Label htmlFor="f-description">توضیحات</Label><Textarea id="f-description" value={form.description} onChange={(e) => upd("description", e.target.value)} placeholder="توضیحات کلی درباره مشتری..." rows={3} className="mt-1" /></div>
           <div><Label htmlFor="f-nextFollowUpAt">پیگیری بعدی (شمسی)</Label><div className="mt-1"><JalaliDatePicker id="f-nextFollowUpAt" value={form.nextFollowUpAt || null} onChange={(v) => upd("nextFollowUpAt", v ?? "")} placeholder="انتخاب تاریخ" /></div></div>

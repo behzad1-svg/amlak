@@ -12,6 +12,7 @@ import { formatDate, toFaDigits } from "@/lib/utils";
 import { MoneyText } from "@/components/ui/MoneyText";
 import { MoneyInput } from "@/components/ui/MoneyInput";
 import { SearchSelect, type SearchOption } from "@/components/ui/SearchSelect";
+import { MultiRegionPicker } from "@/components/ui/MultiRegionPicker";
 import { PageError, PageSkeleton } from "@/components/ui/LoadState";
 import { apiFetch, apiJson, errorMessage } from "@/lib/api";
 
@@ -630,7 +631,7 @@ export default function CustomerDetailPage() {
                 </Select>
               </div>
               <div><Label htmlFor="f-preferredType">نوع ملک موردنظر</Label><Select id="f-preferredType" value={form.preferredType} onChange={(e) => setForm({ ...form, preferredType: e.target.value })} className="mt-1"><option value="">—</option>{propertyTypes.map((pt) => <option key={pt.value} value={pt.value}>{pt.label}</option>)}</Select></div>
-              <div className="md:col-span-2"><Label htmlFor="f-addRegion">مناطق موردنظر (چندتایی)</Label><div className="mt-1 flex flex-wrap gap-1.5 mb-2">{form.preferredAreas.map((a: string) => <span key={a} className="inline-flex items-center gap-1 rounded-full border border-[var(--line)] bg-[var(--paper-2)] px-2.5 py-1 text-[12px]">{a}<button type="button" onClick={() => { const arr = form.preferredAreas.filter((x: string) => x !== a); setForm({ ...form, preferredAreas: arr }); }} className="text-[var(--ink-3)] hover:text-red-600">×</button></span>)}<select id="f-addRegion" value="" onChange={(e) => { const v = e.target.value; if (!v) return; const arr = form.preferredAreas; if (!arr.includes(v)) setForm({ ...form, preferredAreas: [...arr, v] }); e.target.value = ""; }} className="rounded-full border border-dashed border-[var(--line-2)] bg-white px-3 py-1 text-[12px]"><option value="">+ افزودن منطقه</option>{regions.filter((r) => !form.preferredAreas.includes(r)).map((r) => <option key={r} value={r}>{r}</option>)}</select></div></div>
+              <div className="md:col-span-2"><Label htmlFor="f-addRegion">مناطق موردنظر (چندتایی)</Label><div className="mt-1"><MultiRegionPicker id="f-addRegion" regions={regions} value={form.preferredAreas} onChange={(v) => setForm({ ...form, preferredAreas: v })} /></div></div>
               <div><Label htmlFor="f-preferredBeds">تعداد خواب</Label><Input id="f-preferredBeds" inputMode="numeric" dir="ltr" value={form.preferredBeds} onChange={(e) => setForm({ ...form, preferredBeds: e.target.value.replace(/[^0-9]/g, "") })} placeholder="مثلا ۲" className="mt-1" /></div>
               <div><Label htmlFor="f-preferredSizeMin">متراژ از</Label><Input id="f-preferredSizeMin" inputMode="numeric" dir="ltr" value={form.preferredSizeMin} onChange={(e) => setForm({ ...form, preferredSizeMin: e.target.value.replace(/[^0-9]/g, "") })} placeholder="80" className="mt-1" /></div>
               <div><Label htmlFor="f-preferredSizeMax">متراژ تا</Label><Input id="f-preferredSizeMax" inputMode="numeric" dir="ltr" value={form.preferredSizeMax} onChange={(e) => setForm({ ...form, preferredSizeMax: e.target.value.replace(/[^0-9]/g, "") })} placeholder="120" className="mt-1" /></div>
