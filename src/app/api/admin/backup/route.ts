@@ -90,6 +90,8 @@ export async function GET() {
   const queue: Buffer[] = [];
   let streamEnded = false;
   let streamError: Error | null = null;
+  // کد خروج pg_dump - بستن نهایی استریم تا معلوم شدن آن به تعویق می افتد
+  let childExitCode: number | null = null;
   let ctrl: ReadableStreamDefaultController<Uint8Array> | null = null;
   let gateResolve: ((ok: boolean) => void) | null = null;
   function pump() {
@@ -101,7 +103,12 @@ export async function GET() {
       ctrl.enqueue(chunk);
     }
     if (streamError) ctrl.error(streamError);
-    else if (streamEnded) ctrl.close();
+    // بستن نهایی فقط وقتی pg_dump با کد ۰ تمام شده باشد؛ اگر وسط کار مرده،
+    // دانلود باید «ناموفق» دیده شود تا فایل ناقص به عنوان پشتیبان سالم ذخیره نشود
+    else if (streamEnded && childExitCode !== null) {
+      if (childExitCode === 0) ctrl.close();
+      else ctrl.error(new Error("pg_dump ناموفق بود"));
+    }
   }
   child.stdout.on("data", (chunk: Buffer) => {
     queue.push(chunk);
@@ -171,6 +178,8 @@ export async function GET() {
 
   child.once("close", (code) => {
     clearTimeout(timeout);
+    childExitCode = code ?? -1;
+    pump();
     if (code === 0) finish(true);
     else finish(false, timedOut ? "زمان پشتیبان‌گیری تمام شد" : stderr.slice(0, 500) || "pg_dump ناموفق بود");
   });

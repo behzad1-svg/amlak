@@ -43,6 +43,30 @@ export function Label({ className, ...props }: React.LabelHTMLAttributes<HTMLLab
   return <label className={cn("text-[12.5px] font-medium text-[var(--ink-2)]", className)} {...props} />;
 }
 
+/** پس از فیلتر کردن مقدار ورودی، مکان نما را به جای درستش برگردان
+ * (ویرایش وسط متن نباید مکان نما را به انتها بپراند). */
+function keepCaret(input: HTMLInputElement, before: string, after: string) {
+  const start = input.selectionStart ?? before.length;
+  const end = input.selectionEnd ?? before.length;
+  const shift = (pos: number) => {
+    let j = 0;
+    let removed = 0;
+    for (let i = 0; i < Math.min(pos, before.length); i++) {
+      if (j < after.length && before[i] === after[j]) j++;
+      else removed++;
+    }
+    return Math.max(0, pos - removed);
+  };
+  const newStart = shift(start);
+  const newEnd = shift(end);
+  input.value = after;
+  try {
+    input.setSelectionRange(newStart, newEnd);
+  } catch {
+    // ورودی هایی که انتخاب متن ندارند
+  }
+}
+
 export function PhoneInput({ className, onChange, ...props }: React.InputHTMLAttributes<HTMLInputElement>) {
   return (
     <input
@@ -53,8 +77,9 @@ export function PhoneInput({ className, onChange, ...props }: React.InputHTMLAtt
       onChange={(e) => {
         // ارقام فارسی/عربی اول به لاتین تبدیل می‌شوند، بعد فیلتر — onBeforeInput
         // مسدودکننده حذف شد چون ارقام فارسی را پیش از رسیدن به onChange بلاک می‌کرد
-        const filtered = toEnDigits(e.target.value).replace(/[^0-9]/g, "");
-        if (filtered !== e.target.value) e.target.value = filtered;
+        const converted = toEnDigits(e.target.value);
+        const filtered = converted.replace(/[^0-9]/g, "");
+        if (filtered !== e.target.value) keepCaret(e.target, converted, filtered);
         onChange?.(e);
       }}
       {...props}
@@ -71,7 +96,8 @@ export function NumberInput({ className, onChange, allowDecimal, ...props }: Rea
       onChange={(e) => {
         // ارقام فارسی/عربی اول به لاتین تبدیل می‌شوند (۰٫۲۵ → 0.25)؛ ممیز فارسی ٫ و ،
         // به نقطه تبدیل می‌شود؛ حداکثر ۲ رقم اعشار
-        let filtered = toEnDigits(e.target.value);
+        const converted = toEnDigits(e.target.value);
+        let filtered = converted;
         if (allowDecimal) {
           filtered = filtered.replace(/٫|،/g, ".").replace(/[^0-9.]/g, "");
           const dot = filtered.indexOf(".");
@@ -79,7 +105,7 @@ export function NumberInput({ className, onChange, allowDecimal, ...props }: Rea
         } else {
           filtered = filtered.replace(/[^0-9]/g, "");
         }
-        if (filtered !== e.target.value) e.target.value = filtered;
+        if (filtered !== e.target.value) keepCaret(e.target, converted, filtered);
         onChange?.(e);
       }}
       {...props}

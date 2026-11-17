@@ -49,7 +49,7 @@ export async function GET(req: NextRequest) {
         c.preferredAreas.join(" | "), c.preferredBeds?.toString() ?? "", c.preferredSizeMin?.toString() ?? "",
         c.preferredSizeMax?.toString() ?? "", c.budgetMin?.toString() ?? "", c.budgetMax?.toString() ?? "",
         c.budgetMaxMonthly?.toString() ?? "", c.nextFollowUpAt?.toISOString() ?? "",
-        c.needsManagerReview ? "yes" : "no", c.assignedAgent.name, c.createdAt.toISOString(),
+        c.needsManagerReview ? "yes" : "no", c.assignedAgent?.name ?? "", c.createdAt.toISOString(),
       ]),
     ];
     return new NextResponse(toCsv(rows), {
@@ -85,7 +85,7 @@ export async function GET(req: NextRequest) {
         p.code ?? "", p.title, p.type, p.dealType, p.status, p.region, p.address ?? "",
         p.salePriceToman?.toString() ?? "", p.depositToman?.toString() ?? "", p.monthlyRentToman?.toString() ?? "",
         p.sizeSqm?.toString() ?? "", p.landSizeSqm?.toString() ?? "", p.beds?.toString() ?? "", p.floor?.toString() ?? "", p.totalFloors?.toString() ?? "",
-        p.visibility, p.owner.name, p.listedBy.name, p.isAppraised ? "yes" : "no", p.createdAt.toISOString(),
+        p.visibility, p.owner?.name ?? "", p.listedBy?.name ?? "", p.isAppraised ? "yes" : "no", p.createdAt.toISOString(),
       ]),
     ];
     return new NextResponse(toCsv(rows), {

@@ -24,7 +24,7 @@ export async function GET(req: NextRequest) {
   const since = new Date(Date.now() - range * 24 * 60 * 60 * 1000);
   const now = new Date();
 
-  const [activeUsers, files, appraisals, advertised, sessionCards, fileFindings, viewings, deals, overdue] = await Promise.all([
+  const [activeUsers, files, appraisals, advertised, sessionCards, fileFindings, viewings, deals, dealShares, overdue] = await Promise.all([
     prisma.user.findMany({ where: { active: true }, select: { id: true, name: true, role: true }, orderBy: { name: "asc" } }),
     prisma.property.groupBy({
       by: ["listedById"],
@@ -55,14 +55,21 @@ export async function GET(req: NextRequest) {
     }),
     prisma.viewing.groupBy({
       by: ["agentId"],
-      where: { startAt: { gte: since }, status: { not: "CANCELED" } },
+      where: { startAt: { gte: since, lte: now }, status: { not: "CANCELED" } },
       _count: true,
     }),
-    prisma.deal.groupBy({
-      by: ["agentId"],
+    prisma.deal.findMany({
       // تاریخ قرارداد ملاک است؛ معامله‌های قدیمیِ بدون contractAt با createdAt می‌آیند
       where: { status: "COMPLETED", OR: [{ contractAt: { gte: since } }, { contractAt: null, createdAt: { gte: since } }] },
-      _count: true,
+      select: { id: true, agentId: true },
+    }),
+    // سهم مشاور همکار در معامله های قطعی بازه - همکار بیرونی (userId خالی) کاربر نیست
+    prisma.dealShare.findMany({
+      where: {
+        userId: { not: null },
+        deal: { status: "COMPLETED", OR: [{ contractAt: { gte: since } }, { contractAt: null, createdAt: { gte: since } }] },
+      },
+      select: { userId: true, dealId: true },
     }),
     prisma.customer.groupBy({
       by: ["assignedAgentId"],
@@ -78,7 +85,20 @@ export async function GET(req: NextRequest) {
   const sessionCardsMap = new Map(sessionCards.map((r) => [r.agentId, r._count]));
   const findingMap = new Map(fileFindings.map((r) => [r.assignedAgentId, r._count]));
   const viewingMap = new Map(viewings.map((r) => [r.agentId, r._count]));
-  const dealMap = new Map(deals.map((r) => [r.agentId, r._count]));
+  // قرارداد - معامله قطعی؛ مشاور همکار (سهم) هم شمرده می شود، ولی معامله ای که
+  // مشاور هم مالک آن است و هم در آن سهم دارد فقط یک بار (Set شناسه معامله به ازای هر کاربر)
+  const dealIdsByUser = new Map<string, Set<string>>();
+  const addDealToUser = (userId: string, dealId: string) => {
+    let set = dealIdsByUser.get(userId);
+    if (!set) {
+      set = new Set();
+      dealIdsByUser.set(userId, set);
+    }
+    set.add(dealId);
+  };
+  for (const d of deals) addDealToUser(d.agentId, d.id);
+  for (const s of dealShares) if (s.userId) addDealToUser(s.userId, s.dealId);
+  const dealMap = new Map([...dealIdsByUser.entries()].map(([userId, ids]) => [userId, ids.size]));
   const overdueMap = new Map(overdue.map((r) => [r.assignedAgentId, r._count]));
 
   // کاربران غیرفعالِ دارای فعالیت در بازه هم ردیف می‌گیرند — وگرنه سابقه‌شان ناپدید می‌شود

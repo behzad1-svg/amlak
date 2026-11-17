@@ -28,7 +28,7 @@ export async function nextPropertyCode(): Promise<string> {
       // به دو درخواست هم‌زمان بدهد و روی Property.code یکتا برخورد کند
       const rows = await prisma.$queryRaw<{ value: string }[]>`
         UPDATE "AppSetting"
-        SET value = (COALESCE(value, '0')::bigint + 1)::text,
+        SET value = (COALESCE(NULLIF(value, ''), '0')::bigint + 1)::text,
             "updatedAt" = NOW()
         WHERE key = ${SEQ_KEY}
         RETURNING value

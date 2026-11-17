@@ -46,7 +46,10 @@ export const SHARE_TOTAL_TOLERANCE = 0.01;
 
 export function shareAmount(base: bigint | null | undefined, pct: number): bigint {
   if (base == null) return BigInt(0);
-  return BigInt(Math.round((Number(base) * pct) / 100));
+  // درصد (که می تواند اعشاری باشد) به صدم درصد تبدیل می شود تا ضرب با BigInt
+  // دقیق بماند؛ مبنا در داده معتبر نامنفی است و گرد کردن نیم به بالا است
+  const bps = BigInt(Math.round(pct * 100));
+  return (base * bps + BigInt(5000)) / BigInt(10000);
 }
 
 /**

@@ -32,9 +32,9 @@ export async function GET(req: NextRequest) {
     // معامله بدون درآمد «پرداخت‌نشده» نیست — فقط دارای کمیسیون یا شیرینی‌ها
     where.commissionPaid = false;
     where.OR = [
-      { commissionToman: { not: null } },
-      { sellerShiriniToman: { not: null } },
-      { buyerShiriniToman: { not: null } },
+      { commissionToman: { not: null, gt: BigInt(0) } },
+      { sellerShiriniToman: { not: null, gt: BigInt(0) } },
+      { buyerShiriniToman: { not: null, gt: BigInt(0) } },
     ];
   }
 

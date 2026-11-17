@@ -65,7 +65,12 @@ export async function GET() {
     }
     // مالیات فقط روی کمیسیون است (شیرینی مالیات ندارد)؛ حتی معامله‌ای که کامل
     // تخفیف خورده و مبنای خالصش صفر است، روی کمیسیون ناخالص مالیات دارد
-    if (isOwner) taxTotal += BigInt(Math.round((Number(dealTaxBase(d)) * taxRatePct) / 100));
+    // مالیات با BigInt حساب می شود تا دقت در مبالغ بزرگ از دست نرود؛ نرخ درصد
+    // (که می تواند اعشاری باشد) به صدم درصد تبدیل و نیم به بالا گرد می شود
+    if (isOwner) {
+      const bps = BigInt(Math.round(taxRatePct * 100));
+      taxTotal += (dealTaxBase(d) * bps + BigInt(5000)) / BigInt(10000);
+    }
     // معامله بدون درآمد قابل‌تقسیم (کمیسیون + شیرینی‌ها منهای تخفیف) سهم‌بندی ندارد
     const base = dealSplittable(d);
     if (base <= BigInt(0)) continue;

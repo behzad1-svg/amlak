@@ -24,6 +24,10 @@ describe("shareAmount", () => {
     expect(shareAmount(null, 50)).toBe(BigInt(0));
     expect(shareAmount(undefined, 50)).toBe(BigInt(0));
   });
+
+  it("stays exact above 2^53 where Number would lose precision", () => {
+    expect(shareAmount(BigInt("9007199254740993"), 50)).toBe(BigInt("4503599627370497"));
+  });
 });
 
 describe("equalSplitPcts", () => {
