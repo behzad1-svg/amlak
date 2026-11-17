@@ -162,7 +162,6 @@ model User {
   transfersTo    CustomerTransfer[] @relation("TransferTo")
   transfersBy    CustomerTransfer[] @relation("TransferBy")
   sessionCards   SessionCard[]      @relation("SessionCardAdvisor")
-  cooperatingSessionCards SessionCard[] @relation("SessionCardCooperatingAdvisor")
   sessionCardCoAdvising SessionCardCoAdvisor[] @relation("SessionCardCoAdvisorUser")
   contractManagedSessionCards SessionCard[] @relation("SessionCardContractManager")
 }
@@ -405,8 +404,6 @@ model SessionCard {
   property           Property?         @relation(fields: [propertyId], references: [id])
   advisorId          String
   advisor            User              @relation("SessionCardAdvisor", fields: [advisorId], references: [id])
-  cooperatingAdvisorId String?
-  cooperatingAdvisor   User?             @relation("SessionCardCooperatingAdvisor", fields: [cooperatingAdvisorId], references: [id])
   coAdvisors           SessionCardCoAdvisor[]
   contractManagerId    String?
   contractManager      User?             @relation("SessionCardContractManager", fields: [contractManagerId], references: [id])
@@ -426,7 +423,6 @@ model SessionCard {
   updatedAt          DateTime          @updatedAt
 
   @@index([advisorId])
-  @@index([cooperatingAdvisorId])
   @@index([contractManagerId])
   @@index([status, scheduledAt])
   @@index([customerId])
