@@ -21,14 +21,19 @@ describe("clientIpFromHeaders", () => {
     expect(clientIpFromHeaders(headers({ "x-forwarded-for": "1.2.3.4" }))).toBe(null);
   });
 
-  it("returns the first XFF entry", () => {
+  it("returns the last XFF entry (Caddy appends the real IP last)", () => {
     vi.stubEnv("TRUSTED_PROXY", "true");
-    expect(clientIpFromHeaders(headers({ "x-forwarded-for": "1.2.3.4, 5.6.7.8" }))).toBe("1.2.3.4");
+    expect(clientIpFromHeaders(headers({ "x-forwarded-for": "1.2.3.4, 5.6.7.8" }))).toBe("5.6.7.8");
   });
 
-  it("trims whitespace around the first XFF entry", () => {
+  it("trims whitespace around the last XFF entry", () => {
     vi.stubEnv("TRUSTED_PROXY", "true");
-    expect(clientIpFromHeaders(headers({ "x-forwarded-for": "  9.9.9.9  , 1.1.1.1" }))).toBe("9.9.9.9");
+    expect(clientIpFromHeaders(headers({ "x-forwarded-for": "  9.9.9.9  , 1.1.1.1" }))).toBe("1.1.1.1");
+  });
+
+  it("ignores a spoofed first XFF entry", () => {
+    vi.stubEnv("TRUSTED_PROXY", "true");
+    expect(clientIpFromHeaders(headers({ "x-forwarded-for": "203.0.113.9, 198.51.100.7" }))).toBe("198.51.100.7");
   });
 
   it("empty XFF falls through to x-real-ip", () => {

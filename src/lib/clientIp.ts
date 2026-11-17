@@ -5,5 +5,13 @@
  */
 export function clientIpFromHeaders(headers: { get(name: string): string | null }): string | null {
   if (process.env.TRUSTED_PROXY !== "true") return null;
-  return headers.get("x-forwarded-for")?.split(",")[0]?.trim() || headers.get("x-real-ip") || null;
+  // Caddy appends the real client IP last, so take the last non-empty entry;
+  // a spoofed first entry is ignored. Single-proxy topology only.
+  const parts = headers
+    .get("x-forwarded-for")
+    ?.split(",")
+    .map((s) => s.trim())
+    .filter((s) => s.length > 0);
+  const last = parts && parts.length > 0 ? parts[parts.length - 1] : null;
+  return last || headers.get("x-real-ip") || null;
 }
