@@ -23,6 +23,8 @@ export default function SettingsPage() {
   const [newRegion, setNewRegion] = useState("");
   const [newTypeValue, setNewTypeValue] = useState("");
   const [newTypeLabel, setNewTypeLabel] = useState("");
+  const [renameFor, setRenameFor] = useState<{ value: string; label: string } | null>(null);
+  const [renameCode, setRenameCode] = useState("");
   const [saving, setSaving] = useState(false);
   const [msg, setMsg] = useState("");
   const [err, setErr] = useState("");
@@ -81,14 +83,12 @@ export default function SettingsPage() {
   }
 
   // تغییر کد نوع ملک — همهٔ فایل‌ها و ترجیح مشتریان با کد قدیمی تراکنشی آپدیت می‌شوند
-  async function renameType(t: { value: string; label: string }) {
-    const input = window.prompt(`کد جدید برای نوع «${t.label}» (فقط حروف بزرگ انگلیسی و _):`, t.value);
-    if (input == null) return;
+  async function renameType(t: { value: string; label: string }, input: string): Promise<boolean> {
     const code = input.trim().toUpperCase();
-    if (!code || code === t.value) return;
+    if (!code || code === t.value) return true;
     if (!/^[A-Z_]+$/.test(code)) {
       flash("", "کد جدید فقط حروف بزرگ انگلیسی و _ می‌تواند باشد");
-      return;
+      return false;
     }
     setSaving(true);
     try {
@@ -100,8 +100,10 @@ export default function SettingsPage() {
       setTypes(types.map((x) => (x.value === t.value ? { ...x, value: code } : x)));
       const n = d.renamed;
       flash(`کد نوع به «${code}» تغییر کرد${n ? ` — ${toFaDigits(String(n.properties))} فایل و ${toFaDigits(String(n.customers))} ترجیح مشتری به‌روز شد` : ""}`);
+      return true;
     } catch (e) {
       flash("", errorMessage(e));
+      return false;
     } finally {
       setSaving(false);
     }
@@ -186,11 +188,36 @@ export default function SettingsPage() {
                 {types.map((t) => (
                   <span key={t.value} className="inline-flex items-center gap-1 rounded-full border bg-zinc-50 px-3 py-1 text-sm">
                     {t.label} <span className="text-xs text-zinc-400">({t.value})</span>
-                    <button type="button" title="تغییر کد نوع" onClick={() => void renameType(t)} className="mr-1 text-zinc-400 hover:text-[var(--sea)]">✎</button>
+                    <button type="button" title="تغییر کد نوع" onClick={() => { setRenameFor(t); setRenameCode(t.value); }} className="mr-1 text-zinc-400 hover:text-[var(--sea)]">✎</button>
                     <button type="button" onClick={() => { void (async () => { const next = types.filter((x) => x.value !== t.value); if (await save(undefined, next)) setTypes(next); })(); }} className="mr-1 text-zinc-400 hover:text-red-600">×</button>
                   </span>
                 ))}
               </div>
+              {renameFor && (
+                <div className="mb-4 flex flex-col gap-2 sm:flex-row sm:items-end">
+                  <div className="flex-1">
+                    <Label htmlFor="f-renameType">کد جدید برای «{renameFor.label}» (فقط حروف بزرگ انگلیسی و _)</Label>
+                    <Input
+                      id="f-renameType"
+                      dir="ltr"
+                      className="mt-1 text-left"
+                      value={renameCode}
+                      onChange={(e) => setRenameCode(e.target.value.toUpperCase().replace(/[^A-Z_]/g, ""))}
+                      placeholder="CODE"
+                    />
+                  </div>
+                  <Button
+                    onClick={async () => { if (await renameType(renameFor, renameCode)) setRenameFor(null); }}
+                    disabled={saving}
+                    className="w-full sm:w-auto"
+                  >
+                    ذخیره کد
+                  </Button>
+                  <Button variant="ghost" onClick={() => setRenameFor(null)} className="w-full sm:w-auto">
+                    انصراف
+                  </Button>
+                </div>
+              )}
               <div className="flex flex-col gap-2 sm:flex-row">
                 <Input value={newTypeLabel} onChange={(e) => setNewTypeLabel(e.target.value)} placeholder="نام فارسی (مثلا کلنگی)" className="flex-1" />
                 <Input value={newTypeValue} onChange={(e) => setNewTypeValue(e.target.value.toUpperCase().replace(/[^A-Z_]/g, ""))} placeholder="CODE (مثلا KOLANGI)" dir="ltr" className="flex-1 text-left" />

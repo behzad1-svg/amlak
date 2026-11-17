@@ -6,10 +6,11 @@ import { RoleContext } from "@/components/layout/DashboardShell";
  *  نقش را اول از کانتکست می‌خواند (layout سرور آن را از پروکسی گرفته است)؛
  *  فقط وقتی بیرون از DashboardShell استفاده شود، به /api/auth/me برمی‌گردد.
  *  این کار هم رفت‌وبرگشت اضافه را حذف می‌کند و هم پرش نقش (role flash) را. */
-export function useRole(): { role: string | null; isOwner: boolean; loading: boolean } {
+export function useRole(): { role: string | null; isOwner: boolean; loading: boolean; error: string | null } {
   const ctxRole = useContext(RoleContext);
   const [fetchedRole, setFetchedRole] = useState<string | null>(null);
   const [fetchedLoading, setFetchedLoading] = useState(true);
+  const [fetchError, setFetchError] = useState<string | null>(null);
 
   useEffect(() => {
     if (ctxRole != null) return; // نقش از کانتکست می‌آید؛ فراخوانی لازم نیست
@@ -19,10 +20,13 @@ export function useRole(): { role: string | null; isOwner: boolean; loading: boo
       .then((d) => {
         if (!alive) return;
         setFetchedRole(d?.user?.role ?? null);
+        setFetchError(null);
         setFetchedLoading(false);
       })
       .catch(() => {
-        if (alive) setFetchedLoading(false);
+        if (!alive) return;
+        setFetchError("نقش بارگذاری نشد");
+        setFetchedLoading(false);
       });
     return () => {
       alive = false;
@@ -31,5 +35,5 @@ export function useRole(): { role: string | null; isOwner: boolean; loading: boo
 
   const role = ctxRole ?? fetchedRole;
   const loading = ctxRole == null && fetchedLoading;
-  return { role, isOwner: role === "OWNER", loading };
+  return { role, isOwner: role === "OWNER", loading, error: fetchError };
 }

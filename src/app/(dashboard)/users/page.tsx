@@ -3,6 +3,7 @@ import { useEffect, useState } from "react";
 import { Header } from "@/components/layout/Header";
 import { Card } from "@/components/ui/Card";
 import { Button } from "@/components/ui/Button";
+import { ConfirmDialog } from "@/components/ui/ConfirmDialog";
 import { Input, PasswordInput, Select } from "@/components/ui/Input";
 import { PageError, PageSkeleton } from "@/components/ui/LoadState";
 import { useRole } from "@/hooks/useRole";
@@ -25,6 +26,8 @@ export default function UsersPage() {
   const [err, setErr] = useState("");
   const [loading, setLoading] = useState(true);
   const [loadError, setLoadError] = useState<string | null>(null);
+  const [pendingRole, setPendingRole] = useState<{ user: ManagedUser; nextRole: string } | null>(null);
+  const [pendingToggle, setPendingToggle] = useState<ManagedUser | null>(null);
 
   // پیام موفقیت خودبه‌خود پاک می‌شود؛ پیام خطا تا اقدام بعدی می‌ماند
   function flash(ok: string, bad?: string) {
@@ -140,8 +143,7 @@ export default function UsersPage() {
                     onChange={(e) => {
                       const nextRole = e.target.value;
                       if (nextRole === u.role) return;
-                      if (!confirm(`نقش ${u.name} به «${nextRole === "OWNER" ? "مدیر" : "مشاور"}» تغییر کند؟ این یعنی دسترسی کامل به همهٔ بخش‌های مدیر.`)) return;
-                      void patchUser(u.id, { role: nextRole }, "نقش تغییر کرد");
+                      setPendingRole({ user: u, nextRole });
                     }}
                     disabled={userBusy}
                     className="w-28 text-[13px]"
@@ -154,7 +156,7 @@ export default function UsersPage() {
                     variant="outline"
                     disabled={userBusy}
                     onClick={() => {
-                      if (u.active && !confirm(`دسترسی ${u.name} قطع شود؟ دیگر نمی‌تواند وارد شود.`)) return;
+                      if (u.active) { setPendingToggle(u); return; }
                       void patchUser(u.id, { active: !u.active }, u.active ? "کاربر غیرفعال شد" : "کاربر فعال شد");
                     }}
                   >
@@ -258,6 +260,38 @@ export default function UsersPage() {
           </p>
         </Card>
       </div>
+      {pendingRole && (
+        <ConfirmDialog
+          title="تغییر نقش"
+          message={
+            pendingRole.nextRole === "OWNER"
+              ? `نقش ${pendingRole.user.name} به «مدیر» تغییر کند؟ این یعنی دسترسی کامل به همهٔ بخش\u200Cهای مدیر.`
+              : `نقش ${pendingRole.user.name} به «مشاور» تغییر کند؟ دسترسی\u200Cهای مدیر از او گرفته می\u200Cشود.`
+          }
+          confirmLabel="تغییر نقش"
+          danger={pendingRole.nextRole === "OWNER"}
+          onConfirm={() => {
+            const pr = pendingRole;
+            setPendingRole(null);
+            if (pr) void patchUser(pr.user.id, { role: pr.nextRole }, "نقش تغییر کرد");
+          }}
+          onCancel={() => setPendingRole(null)}
+        />
+      )}
+      {pendingToggle && (
+        <ConfirmDialog
+          title="قطع دسترسی"
+          message={`دسترسی ${pendingToggle.name} قطع شود؟ دیگر نمی\u200Cتواند وارد شود.`}
+          confirmLabel="قطع دسترسی"
+          danger
+          onConfirm={() => {
+            const u = pendingToggle;
+            setPendingToggle(null);
+            void patchUser(u.id, { active: false }, "کاربر غیرفعال شد");
+          }}
+          onCancel={() => setPendingToggle(null)}
+        />
+      )}
     </div>
   );
 }

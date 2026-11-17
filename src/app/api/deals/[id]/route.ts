@@ -5,6 +5,7 @@ import { dealUpdateSchema } from "@/lib/validation";
 import { serializeBigInt } from "@/lib/utils";
 import { createAuditLog } from "@/lib/audit";
 import { validateSplitInput } from "@/lib/shares";
+import { getTaxRatePct } from "@/lib/settings";
 
 // ماشین وضعیت معامله — CANCELED ترمینال است و برنمی‌گردد؛
 // COMPLETED فقط از PENDING می‌آید؛ COMPLETED می‌تواند لغو شود.
@@ -242,8 +243,12 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
   if (d.contractAt !== undefined) data.contractAt = d.contractAt ? new Date(d.contractAt) : null;
   if (d.notes !== undefined) data.notes = d.notes;
   if (session.user.role === "OWNER") {
-    if (d.commissionToman !== undefined)
+    if (d.commissionToman !== undefined) {
       data.commissionToman = d.commissionToman ? BigInt(d.commissionToman) : null;
+      // مهر نرخ مالیات فقط در نخستین ثبت کمیسیون؛ ویرایش بعدی مبلغ روی نرخ مهرشده اثر ندارد
+      // خالی کردن کمیسیون یعنی حذف مهر نرخ
+      data.taxRatePct = d.commissionToman ? (existing.taxRatePct ?? (await getTaxRatePct())) : null;
+    }
     if (d.commissionPercent !== undefined) data.commissionPercent = d.commissionPercent;
     if (d.sellerShiriniToman !== undefined)
       data.sellerShiriniToman = d.sellerShiriniToman ? BigInt(d.sellerShiriniToman) : null;
@@ -270,6 +275,17 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
   // (گزارش عملکرد معامله‌های تکمیل‌شده را با contractAt می‌سنجد، نه createdAt)
   if (nextStatus === "COMPLETED" && existing.status !== "COMPLETED" && d.contractAt === undefined && !existing.contractAt) {
     data.contractAt = new Date();
+  }
+
+  // مهر نرخ برای معامله قدیمی دارای کمیسیون هنگام تکمیل
+  if (
+    nextStatus === "COMPLETED" &&
+    existing.status !== "COMPLETED" &&
+    data.taxRatePct === undefined &&
+    existing.commissionToman != null &&
+    existing.taxRatePct == null
+  ) {
+    data.taxRatePct = await getTaxRatePct();
   }
 
   const deal = await prisma.$transaction(async (tx) => {

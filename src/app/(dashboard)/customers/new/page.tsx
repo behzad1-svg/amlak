@@ -1,9 +1,10 @@
 "use client";
-import { useState, useEffect } from "react";
+import { useState, useEffect, useCallback } from "react";
 import { useRouter } from "next/navigation";
 import { Header } from "@/components/layout/Header";
 import { PhoneInput, Select, Label, Textarea } from "@/components/ui/Input";
 import { Button } from "@/components/ui/Button";
+import { ConfirmDialog } from "@/components/ui/ConfirmDialog";
 import { MultiRegionPicker } from "@/components/ui/MultiRegionPicker";
 import dynamic from "next/dynamic";
 import { Input } from "@/components/ui/Input";
@@ -20,27 +21,79 @@ const JalaliDatePicker = dynamic(
 );
 
 
+const DRAFT_KEY = "saj-new-customer-draft";
+const EMPTY_FORM: Record<string, string> = { name: "", phone: "", type: "BUYER", source: "", preferredDealType: "", preferredType: "", budgetMax: "", budgetMaxMonthly: "", nextFollowUpAt: "", description: "", preferredSizeMin: "", preferredSizeMax: "", assignedAgentId: "" };
+
+type CustomerDraft = {
+  form: Record<string, string>;
+  areas: string[];
+};
+
+function readDraft(): CustomerDraft | null {
+  if (typeof window === "undefined") return null;
+  try {
+    const raw = window.localStorage.getItem(DRAFT_KEY);
+    if (!raw) return null;
+    const parsed: unknown = JSON.parse(raw);
+    if (!parsed || typeof parsed !== "object") return null;
+    const d = parsed as Partial<CustomerDraft>;
+    if (!d.form || typeof d.form !== "object") return null;
+    const form: Record<string, string> = { ...EMPTY_FORM };
+    for (const [k, v] of Object.entries(d.form)) {
+      if (typeof v === "string" && k in form) form[k] = v;
+    }
+    return {
+      form,
+      areas: Array.isArray(d.areas) ? d.areas.filter((a): a is string => typeof a === "string") : [],
+    };
+  } catch {
+    return null;
+  }
+}
+
 export default function NewCustomerPage() {
   const router = useRouter();
+  const [savedDraft] = useState<CustomerDraft | null>(() => readDraft());
   const [regions, setRegions] = useState<string[]>([]);
   const [propertyTypes, setPropertyTypes] = useState<{ value: string; label: string }[]>([]);
   const [agents, setAgents] = useState<{ id: string; name: string; role?: string }[]>([]);
   const { role } = useRole();
-  const [form, setForm] = useState<Record<string, string>>({ name: "", phone: "", type: "BUYER", source: "", preferredDealType: "", preferredType: "", budgetMax: "", budgetMaxMonthly: "", nextFollowUpAt: "", description: "", preferredSizeMin: "", preferredSizeMax: "", assignedAgentId: "" });
+  const [form, setForm] = useState<Record<string, string>>(() => savedDraft?.form ?? { ...EMPTY_FORM });
   const [dup, setDup] = useState<{ id: string; name: string } | null>(null);
-  const [areas, setAreas] = useState<string[]>([]);
+  const [dupConfirmOpen, setDupConfirmOpen] = useState(false);
+  const [areas, setAreas] = useState<string[]>(() => savedDraft?.areas ?? []);
   const [error, setError] = useState("");
+  const [optionsError, setOptionsError] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
   const upd = (k: string, v: string) => setForm((f) => ({ ...f, [k]: v }));
 
+  // گزینه های دراپ دان ها (منطقه، نوع ملک، مشاور)؛ خطا بنر دارد و قابل تلاش دوباره است
+  const loadOptions = useCallback(async () => {
+    const settingsP = apiJson<{ regions?: string[]; propertyTypes?: { value: string; label: string }[] }>("/api/settings");
+    const usersP = role === "OWNER"
+      ? apiJson<{ id: string; name: string; role?: string }[]>("/api/users")
+      : Promise.resolve(null);
+    let err: unknown = null;
+    try {
+      const d = await settingsP;
+      if (d.regions) setRegions(d.regions);
+      if (d.propertyTypes) setPropertyTypes(d.propertyTypes);
+    } catch (e) {
+      err = e;
+    }
+    try {
+      const users = await usersP;
+      if (Array.isArray(users)) setAgents(users);
+    } catch (e) {
+      if (!err) err = e;
+    }
+    setOptionsError(err ? errorMessage(err) : null);
+  }, [role]);
+
   useEffect(() => {
-    apiJson<{ regions?: string[]; propertyTypes?: { value: string; label: string }[] }>("/api/settings")
-      .then((d) => {
-        if (d.regions) setRegions(d.regions);
-        if (d.propertyTypes) setPropertyTypes(d.propertyTypes);
-      })
-      .catch(() => {});
-  }, []);
+    const t = setTimeout(() => { void loadOptions(); }, 0);
+    return () => clearTimeout(t);
+  }, [loadOptions]);
   // هشدار شماره تکراری — با ۳۰۰ میلی‌ثانیه تأخیر، فقط وقتی شماره کامل است
   useEffect(() => {
     const phone = form.phone.trim();
@@ -63,20 +116,31 @@ export default function NewCustomerPage() {
     return () => { cancelled = true; clearTimeout(t); };
   }, [form.phone, form.type]);
 
+  // ذخیره پیش نویس با هر تغییر؛ فرم خالی پیش نویس را پاک می کند
   useEffect(() => {
-    if (role !== "OWNER") return;
-    apiJson<{ id: string; name: string; role?: string }[]>("/api/users")
-      .then((users) => {
-        if (Array.isArray(users)) setAgents(users);
-      })
-      .catch(() => {});
-  }, [role]);
+    const isEmpty =
+      Object.entries(form).every(([k, v]) => v === EMPTY_FORM[k]) && areas.length === 0;
+    try {
+      if (isEmpty) {
+        window.localStorage.removeItem(DRAFT_KEY);
+        return;
+      }
+      window.localStorage.setItem(DRAFT_KEY, JSON.stringify({ form, areas }));
+    } catch {
+      // ذخیره سازی در دسترس نیست؛ ثبت مشتری مختل نمی شود
+    }
+  }, [form, areas]);
 
   async function submit(e: React.FormEvent) {
     e.preventDefault();
     setError("");
     if (!form.source) { setError("شیوه آشنایی را انتخاب کنید"); return; }
-    if (dup && !confirm(`این شماره قبلاً برای «${dup.name}» ثبت شده است. باز هم مشتری جدید بسازم؟`)) return;
+    if (dup) { setDupConfirmOpen(true); return; }
+    await doSubmit();
+  }
+
+  async function doSubmit() {
+    setError("");
     setLoading(true);
     const dealType = form.preferredDealType;
     const body: Record<string, unknown> = { name: form.name, phone: form.phone, type: form.type, stage: "INITIAL_CONTACT", source: form.source };
@@ -104,6 +168,11 @@ export default function NewCustomerPage() {
       setLoading(false);
       return;
     }
+    try {
+      localStorage.removeItem(DRAFT_KEY);
+    } catch {
+      // پاک نشدن پیش نویس مانع رفتن به فهرست نیست
+    }
     router.push("/customers");
   }
 
@@ -112,6 +181,12 @@ export default function NewCustomerPage() {
   return (
     <div>
       <Header title="مشتری جدید" />
+      {optionsError && (
+        <div className="mx-6 mt-4 flex flex-wrap items-center gap-2 rounded-lg bg-red-50 px-3 py-2 text-sm text-red-700" role="alert">
+          <span className="flex-1">{"گزینه\u200Cهای فرم بارگذاری نشد"}: {optionsError}</span>
+          <Button size="sm" variant="outline" onClick={() => void loadOptions()}>تلاش دوباره</Button>
+        </div>
+      )}
       <form onSubmit={submit} className="p-6 max-w-2xl space-y-4">
         {error && <div className="rounded-lg bg-red-50 px-3 py-2 text-sm text-red-700">{error}</div>}
         <div className="grid gap-4 md:grid-cols-2">
@@ -234,6 +309,15 @@ export default function NewCustomerPage() {
         </div>
         <Button type="submit" disabled={loading}>{loading ? "در حال ثبت..." : "ثبت مشتری"}</Button>
       </form>
+      {dupConfirmOpen && dup && (
+        <ConfirmDialog
+          title="شماره تکراری"
+          message={`این شماره قبلاً برای «${dup.name}» ثبت شده است. باز هم مشتری جدید بسازم؟`}
+          confirmLabel="باز هم بساز"
+          onConfirm={() => { setDupConfirmOpen(false); void doSubmit(); }}
+          onCancel={() => setDupConfirmOpen(false)}
+        />
+      )}
     </div>
   );
 }

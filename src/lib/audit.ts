@@ -1,3 +1,4 @@
+import type { Prisma } from "@prisma/client";
 import { prisma } from "./prisma";
 import { maskSensitiveFields } from "./access";
 
@@ -31,9 +32,11 @@ export async function createAuditLog(params: {
   oldValue?: Record<string, unknown> | null;
   newValue?: Record<string, unknown> | null;
   ipAddress?: string;
+  /** کلاینت تراکنش — اگر پاس داده شود، لاگ داخل همان تراکنش نوشته می شود. */
+  client?: Prisma.TransactionClient;
 }) {
   try {
-    await prisma.auditLog.create({
+    await (params.client ?? prisma).auditLog.create({
       data: {
         actorId: params.actorId,
         action: params.action,

@@ -34,6 +34,7 @@ export async function GET() {
     where: { ...agentFilter, status: "COMPLETED" },
     select: {
       commissionToman: true,
+      taxRatePct: true,
       sellerShiriniToman: true,
       buyerShiriniToman: true,
       discountToman: true,
@@ -68,7 +69,9 @@ export async function GET() {
     // مالیات با BigInt حساب می شود تا دقت در مبالغ بزرگ از دست نرود؛ نرخ درصد
     // (که می تواند اعشاری باشد) به صدم درصد تبدیل و نیم به بالا گرد می شود
     if (isOwner) {
-      const bps = BigInt(Math.round(taxRatePct * 100));
+      // نرخ مالیات مهرشده معامله؛ خالی یعنی نرخ جاری
+      const rate = d.taxRatePct ?? taxRatePct;
+      const bps = BigInt(Math.round(rate * 100));
       taxTotal += (dealTaxBase(d) * bps + BigInt(5000)) / BigInt(10000);
     }
     // معامله بدون درآمد قابل‌تقسیم (کمیسیون + شیرینی‌ها منهای تخفیف) سهم‌بندی ندارد

@@ -1,8 +1,9 @@
 "use client";
-import { useEffect, useState, useMemo } from "react";
+import { useState, useMemo } from "react";
 import { ChevronLeft, ChevronRight } from "lucide-react";
 import { toJalali, jalaliToGregorian, getJalaliDaysInMonth, isValidJalaliDate } from "@/lib/jalali";
 import { cn, toFaDigits } from "@/lib/utils";
+import { Modal } from "@/components/ui/Modal";
 
 const MONTH_NAMES = ["فروردین", "اردیبهشت", "خرداد", "تیر", "مرداد", "شهریور", "مهر", "آبان", "آذر", "دی", "بهمن", "اسفند"];
 const WEEKDAYS = ["ش", "ی", "د", "س", "چ", "پ", "ج"];
@@ -48,15 +49,6 @@ export function JalaliDatePicker({
   const selected = useMemo(() => (value ? toJalali(value) : null), [value]);
   const yearOptions = useMemo(() => jalaliYearOptions(), []);
 
-  // نقد ۱۰ — Escape تقویم را می‌بندد
-  useEffect(() => {
-    if (!open) return;
-    function onKey(e: KeyboardEvent) {
-      if (e.key === "Escape") setOpen(false);
-    }
-    document.addEventListener("keydown", onKey);
-    return () => document.removeEventListener("keydown", onKey);
-  }, [open ]);
 
   function handleOpen(next: boolean) {
     if (next) setView(getInitialView(value));
@@ -115,9 +107,15 @@ export function JalaliDatePicker({
         <button type="button" onClick={() => onChange(null)} aria-label="پاک کردن تاریخ" className="absolute left-2 top-1/2 -translate-y-1/2 text-xs text-[var(--ink-3)] hover:text-[var(--ink)]">×</button>
       )}
       {open && (
-        <>
-          <div className="fixed inset-0 z-30" onClick={() => setOpen(false)} />
-          <div role="dialog" aria-label="انتخاب تاریخ" className="absolute z-40 mt-2 w-72 rounded-[16px] border border-[var(--line)] bg-white p-3 shadow-[0_8px_24px_rgba(22,26,36,0.12)] right-0">
+        <Modal
+          layout="popover"
+          onClose={() => setOpen(false)}
+          ariaLabel="انتخاب تاریخ"
+          panelClassName="absolute z-40 mt-2 w-72 rounded-[16px] border border-[var(--line)] bg-white p-3 shadow-[0_8px_24px_rgba(22,26,36,0.12)] right-0"
+          autoFocus={false}
+          lockScroll={false}
+          trapFocus={false}
+        >
             <div className="flex items-center justify-between mb-3">
               <button type="button" onClick={prevMonth} aria-label="ماه قبل" className="rounded-[10px] p-1.5 hover:bg-[var(--paper-2)]"><ChevronRight className="h-4 w-4" /></button>
               <span className="flex items-center gap-1.5 text-[13px] font-bold">
@@ -156,8 +154,7 @@ export function JalaliDatePicker({
             <button type="button" onClick={goToday} className="mt-3 w-full rounded-[10px] border border-[var(--line)] bg-[var(--paper-2)] px-3 py-1.5 text-[12.5px] font-bold hover:bg-[var(--paper)]">
               امروز
             </button>
-          </div>
-        </>
+        </Modal>
       )}
     </div>
   );

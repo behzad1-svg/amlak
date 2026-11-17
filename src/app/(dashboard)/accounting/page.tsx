@@ -5,6 +5,7 @@ import { Card, CardHeader, CardTitle } from "@/components/ui/Card";
 import { Button } from "@/components/ui/Button";
 import { Label, NumberInput } from "@/components/ui/Input";
 import { MoneyInput } from "@/components/ui/MoneyInput";
+import { Modal } from "@/components/ui/Modal";
 import { PageError, PageSkeleton } from "@/components/ui/LoadState";
 import { useRole } from "@/hooks/useRole";
 import { apiFetch, apiJson, errorMessage } from "@/lib/api";
@@ -274,15 +275,6 @@ export default function AccountingPage() {
     })();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [tab]);
-
-  useEffect(() => {
-    if (!editingDeal) return;
-    const onKey = (e: KeyboardEvent) => {
-      if (e.key === "Escape") setEditingDeal(null);
-    };
-    document.addEventListener("keydown", onKey);
-    return () => document.removeEventListener("keydown", onKey);
-  }, [editingDeal]);
 
   async function toggleSettle(deal: CommissionDeal) {
     setActionError(null);
@@ -1125,14 +1117,10 @@ export default function AccountingPage() {
         )}
 
         {editingDeal && (
-          <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
-            <button type="button" className="absolute inset-0 bg-black/40" onClick={() => setEditingDeal(null)} aria-label="بستن" />
-            <div
-              role="dialog"
-              aria-modal="true"
-              aria-label={!dealHasIncome(editingDeal) ? "تعیین کمیسیون" : "ویرایش قیمت و کمیسیون"}
-              className="relative max-h-[calc(100dvh-2rem)] w-full max-w-lg overflow-y-auto rounded-[16px] border border-[var(--line)] bg-white p-5 shadow-xl"
-            >
+          <Modal
+            onClose={() => setEditingDeal(null)}
+            ariaLabel={!dealHasIncome(editingDeal) ? "تعیین کمیسیون" : "ویرایش قیمت و کمیسیون"}
+          >
               <h3 className="text-[15px] font-extrabold">
                 {!dealHasIncome(editingDeal) ? "تعیین کمیسیون" : "ویرایش قیمت و کمیسیون"}
               </h3>
@@ -1351,8 +1339,7 @@ export default function AccountingPage() {
                   </Button>
                 </div>
               </form>
-            </div>
-          </div>
+          </Modal>
         )}
       </div>
     </div>

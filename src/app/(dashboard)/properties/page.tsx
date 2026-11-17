@@ -1,5 +1,5 @@
 "use client";
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import Link from "next/link";
 import { Header } from "@/components/layout/Header";
 import { Button } from "@/components/ui/Button";
@@ -8,6 +8,7 @@ import { Card } from "@/components/ui/Card";
 import { Input, Select } from "@/components/ui/Input";
 import { PROPERTY_TYPE_LABELS, PROPERTY_TYPE_CARD, PROPERTY_TYPE_BADGE, DEAL_TYPE_LABELS, PROPERTY_STATUS_LABELS, CUSTOMER_SOURCE_LABELS, CUSTOMER_SOURCE_OPTIONS } from "@/lib/constants";
 import { useRole } from "@/hooks/useRole";
+import { useApiList } from "@/hooks/useApiList";
 import { MoneyText } from "@/components/ui/MoneyText";
 import { PageError, PageSkeleton } from "@/components/ui/LoadState";
 import { apiJson, errorMessage } from "@/lib/api";
@@ -77,13 +78,6 @@ const emptyFilters = {
 };
 
 export default function PropertiesPage() {
-  const [list, setList] = useState<Property[]>([]);
-  const [total, setTotal] = useState<number | null>(null);
-  const [page, setPage] = useState(1);
-  const [loading, setLoading] = useState(true);
-  const [loadingMore, setLoadingMore] = useState(false);
-  const [loadError, setLoadError] = useState<string | null>(null);
-  const [msg, setMsg] = useState("");
   const [regions, setRegions] = useState<string[]>([]);
   const [types, setTypes] = useState<{ value: string; label: string }[]>([]);
   const [selectedRegions, setSelectedRegions] = useState<string[]>([]);
@@ -91,13 +85,15 @@ export default function PropertiesPage() {
   const [showFlags, setShowFlags] = useState(false);
   const [showAdvanced, setShowAdvanced] = useState(false);
   const [agents, setAgents] = useState<{ id: string; name: string }[]>([]);
+  const [optionsError, setOptionsError] = useState<string | null>(null);
   const { isOwner } = useRole();
 
-  // نقد ۱ و ۳ — بارگذاری با کمک‌کنندهٔ مرکزی + صفحه‌بندی صادقانه (۱۰۰ ردیف در هر صفحه)
-  // پاسخ‌های کهنه نادیده گرفته می‌شوند (مسابقهٔ فیلتر)
-  const requestIdRef = useRef(0);
-  const load = useCallback(async (pageNum = 1, append = false) => {
-    const myRequestId = ++requestIdRef.current;
+  // نقد ۱ و ۳ — بارگذاری با هوک مرکزی useApiList؛ ۱۰۰ ردیف در هر صفحه
+  // هوک پاسخ کهنه را کنار خواهد گذاشت
+  const hasTextFilter =
+    filters.search || filters.priceMin || filters.priceMax || filters.rentMin || filters.rentMax ||
+    filters.sizeMin || filters.sizeMax || filters.landSizeMin || filters.landSizeMax;
+  const fetcher = useCallback(async (pageNum: number) => {
     const params = new URLSearchParams();
     if (filters.search.trim()) params.set("search", filters.search.trim());
     selectedRegions.forEach((r) => params.append("regions", r));
@@ -126,55 +122,60 @@ export default function PropertiesPage() {
     if (filters.appraised) params.set("appraised", filters.appraised);
     params.set("limit", "100");
     params.set("page", String(pageNum));
-
-    if (append) setLoadingMore(true);
-    else {
-      setLoading(true);
-      setLoadError(null);
-    }
-    try {
-      const d = await apiJson<{ properties?: Property[]; total?: number } | Property[]>(`/api/properties?${params.toString()}`);
-      if (requestIdRef.current !== myRequestId) return;
-      const items = Array.isArray(d) ? d : d.properties ?? [];
-      setList((prev) => (append ? [...prev, ...items] : items));
-      setTotal(Array.isArray(d) ? d.length : d.total ?? items.length);
-      setPage(pageNum);
-    } catch (e) {
-      if (requestIdRef.current !== myRequestId) return;
-      if (append) setMsg(errorMessage(e));
-      else setLoadError(errorMessage(e));
-    } finally {
-      if (requestIdRef.current === myRequestId) {
-        setLoading(false);
-        setLoadingMore(false);
-      }
-    }
+    const d = await apiJson<{ properties?: Property[]; total?: number } | Property[]>(`/api/properties?${params.toString()}`);
+    const items = Array.isArray(d) ? d : d.properties ?? [];
+    return { items, total: Array.isArray(d) ? d.length : d.total ?? items.length };
   }, [filters, selectedRegions]);
 
-  const hasTextFilter =
-    filters.search || filters.priceMin || filters.priceMax || filters.rentMin || filters.rentMax ||
-    filters.sizeMin || filters.sizeMax || filters.landSizeMin || filters.landSizeMax;
-  useEffect(() => {
-    const t = setTimeout(() => load(1, false), hasTextFilter ? 280 : 0);
-    return () => clearTimeout(t);
-  }, [load, hasTextFilter]);
+  // بارگذاری خودکار با تاخیر بر عهده هوک است (فیلتر متنی ۲۸۰ms، بقیه بدون تاخیر)
+  const {
+    items: list,
+    total,
+    loading,
+    loadingMore,
+    error: loadError,
+    appendError,
+    hasMore,
+    loadMore,
+    retry,
+  } = useApiList<Property>({
+    fetcher,
+    debounceMs: hasTextFilter ? 280 : 0,
+    deps: [filters, selectedRegions, hasTextFilter],
+  });
+
+  // واکشی فهرست انتخاب (مناطق، نوع ملک، کاربران) — خطا ساکت رد نخواهد شد؛
+  // بنر بالای فهرست با دکمه «تلاش دوباره» نشان داده خواهد شد
+  const loadOptions = useCallback(async () => {
+    const settingsP = apiJson<{ regions?: string[]; propertyTypes?: { value: string; label: string }[] }>("/api/settings");
+    const usersP = apiJson<{ id: string; name: string }[]>("/api/users");
+    let err: unknown = null;
+    try {
+      const d = await settingsP;
+      if (d.regions) setRegions(d.regions);
+      if (d.propertyTypes) setTypes(d.propertyTypes);
+    } catch (e) {
+      err = e;
+    }
+    try {
+      const d = await usersP;
+      if (Array.isArray(d)) setAgents(d.map((u) => ({ id: u.id, name: u.name })));
+    } catch (e) {
+      if (!err) err = e;
+    }
+    setOptionsError(err ? errorMessage(err) : null);
+  }, []);
 
   useEffect(() => {
-    apiJson<{ regions?: string[]; propertyTypes?: { value: string; label: string }[] }>("/api/settings")
-      .then((d) => {
-        if (d.regions) setRegions(d.regions);
-        if (d.propertyTypes) setTypes(d.propertyTypes);
-      })
-      .catch(() => {});
-    apiJson<{ id: string; name: string }[]>("/api/users")
-      .then((d) => {
-        if (Array.isArray(d)) setAgents(d.map((u) => ({ id: u.id, name: u.name })));
-      })
-      .catch(() => {});
-  }, []);
+    const t = setTimeout(() => { void loadOptions(); }, 0);
+    return () => clearTimeout(t);
+  }, [loadOptions]);
 
   const isSale = filters.dealType === "SALE";
   const isRent = filters.dealType === "RENT";
+  // اسکلت و خطا inline هستند؛ هدر و فیلتر همیشه دیده خواهند شد
+  const showSkeleton = loading && list.length === 0 && !loadError;
+  const showEmpty = list.length === 0 && !loading && !loadError;
 
   const advancedCount =
     selectedRegions.length +
@@ -226,8 +227,6 @@ export default function PropertiesPage() {
     return items;
   }
 
-  if (loading && list.length === 0) return <PageSkeleton rows={4} />;
-  if (loadError && list.length === 0) return <PageError message={loadError} onRetry={() => load(1, false)} />;
 
   return (
     <div>
@@ -241,7 +240,13 @@ export default function PropertiesPage() {
           </div>
         }
       />
-      {msg && <div className="mx-4 sm:mx-6 mt-3 rounded-lg bg-red-50 px-3 py-2 text-sm text-red-700" role="alert">{msg}</div>}
+      {optionsError && (
+        <div className="mx-4 sm:mx-6 mt-3 flex flex-wrap items-center gap-2 rounded-lg bg-red-50 px-3 py-2 text-sm text-red-700" role="alert">
+          <span>بارگذاری مناطق و کاربران ناموفق بود: {optionsError}</span>
+          <Button variant="outline" size="sm" onClick={() => void loadOptions()}>تلاش دوباره</Button>
+        </div>
+      )}
+      {appendError && <div className="mx-4 sm:mx-6 mt-3 rounded-lg bg-red-50 px-3 py-2 text-sm text-red-700" role="alert">{appendError}</div>}
       <div className="p-4 sm:p-6 space-y-4 max-w-[1200px]">
         <Card className="p-3 sm:p-4">
           <div className="grid gap-2 sm:grid-cols-2 lg:grid-cols-4">
@@ -484,7 +489,10 @@ export default function PropertiesPage() {
           )}
         </Card>
 
-        {list.length === 0 ? (
+        {loadError && <PageError message={loadError} onRetry={retry} />}
+        {showSkeleton ? (
+          <PageSkeleton rows={4} />
+        ) : showEmpty ? (
           <div className="max-w-[560px] rounded-[16px] border border-dashed border-[var(--line-2)] bg-white px-6 py-10 text-center">
             <div className="mx-auto flex h-10 w-10 items-center justify-center rounded-[12px] bg-[var(--paper-2)] border border-[var(--line)]">🏠</div>
             <div className="mt-3 text-[14px] font-bold">فایلی با این فیلترها یافت نشد</div>
@@ -496,7 +504,7 @@ export default function PropertiesPage() {
               <Link href="/properties/new"><Button>ساخت فایل</Button></Link>
             </div>
           </div>
-        ) : (
+        ) : list.length > 0 ? (
           <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-3">
             {list.map((p) => {
               const chips = cardChips(p);
@@ -597,10 +605,10 @@ export default function PropertiesPage() {
               );
             })}
           </div>
-        )}
-        {total != null && list.length < total && (
+        ) : null}
+        {hasMore && (
           <div className="text-center">
-            <Button variant="outline" onClick={() => load(page + 1, true)} disabled={loadingMore}>
+            <Button variant="outline" onClick={() => void loadMore()} disabled={loadingMore}>
               {loadingMore ? "در حال بارگذاری..." : `بارگذاری بیشتر (نمایش ${toFaDigits(String(list.length))} از ${toFaDigits(String(total))})`}
             </Button>
           </div>

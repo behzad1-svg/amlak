@@ -1,12 +1,16 @@
 "use client";
-import { useState } from "react";
-import { useRouter } from "next/navigation";
-import { Input, Label, PasswordInput } from "@/components/ui/Input";
+import { Suspense, useState } from "react";
+import { useRouter, useSearchParams } from "next/navigation";
+import { Label, PasswordInput, PhoneInput } from "@/components/ui/Input";
 import { Button } from "@/components/ui/Button";
 import Image from "next/image";
 
-export default function LoginPage() {
+function LoginForm() {
   const router = useRouter();
+  const searchParams = useSearchParams();
+  // بازگشت به صفحه درخواستی پس از ورود — فقط مسیر داخلی معتبر پذیرفته می شود
+  const nextParam = searchParams.get("next");
+  const next = nextParam && nextParam.startsWith("/") && !nextParam.startsWith("//") ? nextParam : "/dashboard";
   const [phone, setPhone] = useState("");
   const [password, setPassword] = useState("");
   const [error, setError] = useState("");
@@ -20,7 +24,9 @@ export default function LoginPage() {
       const res = await fetch("/api/auth/login", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ phone, password }) });
       const data = await res.json();
       if (!res.ok) { setError(data.error ?? "خطا"); return; }
-      router.push("/dashboard");
+      router.push(next);
+    } catch {
+      setError("ارتباط با سرور برقرار نشد، لطفاً دوباره تلاش کنید");
     } finally { setLoading(false); }
   }
 
@@ -43,7 +49,7 @@ export default function LoginPage() {
             <form onSubmit={handleSubmit} className="mt-6 space-y-4">
               <div>
                 <Label htmlFor="f-phone">شماره تماس</Label>
-                <Input id="f-phone" value={phone} onChange={(e) => setPhone(e.target.value)} placeholder="0917..." dir="ltr" className="mt-1.5 text-left" autoComplete="username" inputMode="tel" required />
+                <PhoneInput id="f-phone" value={phone} onChange={(e) => setPhone(e.target.value)} placeholder="0917..." dir="ltr" className="mt-1.5 text-left" autoComplete="username" inputMode="tel" required />
               </div>
               <div>
                 <Label htmlFor="f-password">رمز عبور</Label>
@@ -93,5 +99,13 @@ export default function LoginPage() {
         </div>
       </div>
     </div>
+  );
+}
+
+export default function LoginPage() {
+  return (
+    <Suspense>
+      <LoginForm />
+    </Suspense>
   );
 }

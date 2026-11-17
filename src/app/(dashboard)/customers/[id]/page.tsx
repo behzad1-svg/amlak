@@ -4,6 +4,7 @@ import { useParams, useRouter } from "next/navigation";
 import Link from "next/link";
 import { Header } from "@/components/layout/Header";
 import { Button } from "@/components/ui/Button";
+import { ConfirmDialog } from "@/components/ui/ConfirmDialog";
 import { Input, Textarea, Select, Label, PhoneInput } from "@/components/ui/Input";
 import { Card } from "@/components/ui/Card";
 import { Badge } from "@/components/ui/Badge";
@@ -143,6 +144,8 @@ export default function CustomerDetailPage() {
   const [propertyTypes, setPropertyTypes] = useState<{ value: string; label: string }[]>([]);
   const [customerTags, setCustomerTags] = useState<string[]>([]);
   const [dup, setDup] = useState<{ id: string; name: string } | null>(null);
+  const [confirmAction, setConfirmAction] = useState<"delete" | "transfer" | "revert" | null>(null);
+  const [dupConfirmOpen, setDupConfirmOpen] = useState(false);
   const [outcome, setOutcome] = useState<OutcomeKind | null>(null);
   const [outcomeMsg, setOutcomeMsg] = useState("");
   const [nextPrompt, setNextPrompt] = useState<{ type: string; date: string | null; note: string } | null>(null);
@@ -298,7 +301,12 @@ export default function CustomerDetailPage() {
 
   async function save() {
     setError("");
-    if (dup && !confirm(`این شماره قبلاً برای «${dup.name}» ثبت شده است. باز هم ذخیره کنم؟`)) return;
+    if (dup) { setDupConfirmOpen(true); return; }
+    await doSave();
+  }
+
+  async function doSave() {
+    setError("");
     const body: Record<string, unknown> = {
       name: form.name, phone: form.phone, notes: form.notes || null, description: form.description || null,
       stage: form.stage, temperature: form.temperature, type: form.type,
@@ -325,7 +333,6 @@ export default function CustomerDetailPage() {
   }
 
   async function handleDelete() {
-    if (!confirm("حذف مشتری؟ این کار برگشت‌پذیر نیست.")) return;
     try {
       await apiFetch(`/api/customers/${id}`, { method: "DELETE" });
     } catch (e) {
@@ -339,7 +346,6 @@ export default function CustomerDetailPage() {
     if (!transferTo || !c) return;
     const target = agents.find((a) => a.id === transferTo);
     if (!target) return;
-    if (!confirm(`مشتری «${c.name}» به ${target.name} منتقل شود؟`)) return;
     setTransferring(true);
     setTransferOk("");
     setError("");
@@ -358,7 +364,6 @@ export default function CustomerDetailPage() {
   async function revertTransfer() {
     if (!c || !c.transfers?.[0]?.fromAgent) return;
     const prev = c.transfers[0].fromAgent;
-    if (!confirm(`مشتری «${c.name}» به ${prev.name} برگردانده شود؟`)) return;
     setReverting(true);
     setTransferOk("");
     setError("");
@@ -558,7 +563,7 @@ export default function CustomerDetailPage() {
               <Pencil className="h-4 w-4" /> {editing ? "انصراف" : "ویرایش"}
             </Button>
             {isOwner && (
-              <Button variant="ghost" onClick={handleDelete} className="gap-1.5 text-red-600 hover:bg-red-50">
+              <Button variant="ghost" onClick={() => setConfirmAction("delete")} className="gap-1.5 text-red-600 hover:bg-red-50">
                 <Trash2 className="h-4 w-4" /> حذف
               </Button>
             )}
@@ -990,7 +995,7 @@ export default function CustomerDetailPage() {
               <div className="mb-3 rounded-lg bg-zinc-50 p-3 text-[13px] space-y-2">
                 <p>منتقل‌شده از: <span className="font-medium">{c.transfers[0].fromAgent?.name ?? "—"}</span></p>
                 {c.transfers[0].fromAgent?.active ? (
-                  <Button variant="outline" size="sm" onClick={revertTransfer} disabled={reverting}>
+                  <Button variant="outline" size="sm" onClick={() => setConfirmAction("revert")} disabled={reverting}>
                     {reverting ? "در حال بازگرداندن..." : `بازگرداندن به ${c.transfers[0].fromAgent.name}`}
                   </Button>
                 ) : (
@@ -1008,7 +1013,7 @@ export default function CustomerDetailPage() {
                   <option key={a.id} value={a.id}>{a.name}{a.role === "OWNER" ? " (مدیر)" : ""}</option>
                 ))}
               </Select>
-              <Button onClick={transferCustomer} disabled={!transferTo || transferring || (!isOwner && (c.transfers?.length ?? 0) > 0)} className="w-full sm:w-auto">
+              <Button onClick={() => setConfirmAction("transfer")} disabled={!transferTo || transferring || (!isOwner && (c.transfers?.length ?? 0) > 0)} className="w-full sm:w-auto">
                 {transferring ? "در حال انتقال..." : "انتقال بده"}
               </Button>
             </div>
@@ -1281,6 +1286,37 @@ export default function CustomerDetailPage() {
           </Card>
         </div>
       </div>
+      {confirmAction && (
+        <ConfirmDialog
+          title={confirmAction === "delete" ? "حذف مشتری" : confirmAction === "transfer" ? "انتقال مشتری" : "برگرداندن مشتری"}
+          message={
+            confirmAction === "delete"
+              ? "حذف مشتری؟ مشتری فقط از فهرست پنهان می\u200Cشود و داده\u200Cاش پاک نمی\u200Cشود؛ با ثبت دوبارهٔ همین شماره، رکورد قبلی بازیابی می\u200Cشود."
+              : confirmAction === "transfer"
+                ? `مشتری «${c?.name}» به ${agents.find((a) => a.id === transferTo)?.name ?? ""} منتقل شود؟`
+                : `مشتری «${c?.name}» به ${c?.transfers?.[0]?.fromAgent?.name ?? ""} برگردانده شود؟`
+          }
+          confirmLabel={confirmAction === "delete" ? "حذف" : confirmAction === "transfer" ? "انتقال" : "برگرداندن"}
+          danger={confirmAction === "delete"}
+          onConfirm={() => {
+            const action = confirmAction;
+            setConfirmAction(null);
+            if (action === "delete") void handleDelete();
+            else if (action === "transfer") void transferCustomer();
+            else if (action === "revert") void revertTransfer();
+          }}
+          onCancel={() => setConfirmAction(null)}
+        />
+      )}
+      {dupConfirmOpen && dup && (
+        <ConfirmDialog
+          title="شماره تکراری"
+          message={`این شماره قبلاً برای «${dup.name}» ثبت شده است. باز هم ذخیره کنم؟`}
+          confirmLabel="باز هم ذخیره کن"
+          onConfirm={() => { setDupConfirmOpen(false); void doSave(); }}
+          onCancel={() => setDupConfirmOpen(false)}
+        />
+      )}
     </div>
   );
 }

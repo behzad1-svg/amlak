@@ -1,4 +1,5 @@
 import { redirect } from "next/navigation";
+import { headers } from "next/headers";
 import { getSessionFromCookies } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 import { DashboardShell } from "@/components/layout/DashboardShell";
@@ -9,7 +10,10 @@ export default async function DashboardLayout({ children }: { children: React.Re
   // به هدرهای آن اعتماد کرد. این همان یک اعتبارسنجی دیتابیسی در هر صفحه است
   // (قبلاً ۳–۴ بار بود: middleware + verify + layout + useRole).
   const session = await getSessionFromCookies();
-  if (!session) redirect("/login");
+  if (!session) {
+    const pathname = (await headers()).get("x-pathname") ?? "/dashboard";
+    redirect(`/login?next=${encodeURIComponent(pathname)}`);
+  }
   const role = session.user.role;
   const userName = session.user.name;
   const userId = session.user.id;

@@ -3,6 +3,7 @@
 // خطا را error.tsx می‌گیرد و بارگذاری را loading.tsx با اسکلت نشان می‌دهد.
 import Link from "next/link";
 import { redirect } from "next/navigation";
+import { headers } from "next/headers";
 import { getSessionFromCookies } from "@/lib/auth";
 import { getDashboardData } from "@/lib/dashboard";
 import { Header } from "@/components/layout/Header";
@@ -15,7 +16,10 @@ import { AdvertiseTodayCard } from "@/components/dashboard/AdvertiseTodayCard";
 
 export default async function DashboardPage() {
   const session = await getSessionFromCookies();
-  if (!session) redirect("/login");
+  if (!session) {
+    const pathname = (await headers()).get("x-pathname") ?? "/dashboard";
+    redirect(`/login?next=${encodeURIComponent(pathname)}`);
+  }
   const data = await getDashboardData(session.user.id, session.user.role === "OWNER");
 
   const overdue = data.overdueCustomers;

@@ -458,6 +458,8 @@ model Deal {
   notes       String?
   commissionToman   BigInt?
   commissionPercent Float?
+  /// نرخ مالیات (٪) مهرشده در لحظه ثبت کمیسیون؛ تغییر نرخ جاری روی آن اثر ندارد
+  taxRatePct        Float?
   sellerShiriniToman BigInt?
   buyerShiriniToman  BigInt?
   discountToman      BigInt?

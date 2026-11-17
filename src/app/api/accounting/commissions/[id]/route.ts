@@ -10,10 +10,10 @@ import { dealSplittable, resolveSplit } from "@/lib/shares";
  * دریافت یا برگرداندن دریافت کمیسیون یک معامله — فقط مدیر.
  * PATCH /api/accounting/commissions/[id] { commissionPaid: boolean }
  * دکمه «دریافت شد» یعنی کمیسیون از مشتری دریافت شد: فقط پرچم commissionPaid
- * عوض می‌شود و به سهم‌ها دست نمی‌زند؛ با دریافت، مبلغ مبنای تقسیم (کمیسیون +
- * هر دو شیرینی منهای تخفیف) به‌عنوان ورودی خودکار در صندوق دفتر ثبت می‌شود و با برگرداندن
- * دریافت، آن ورودی حذف می‌شود. برگرداندن دریافت فقط وقتی مجاز است که هیچ
- * سهمی تسویه نشده باشد.
+ * عوض می شود و به سهم ها دست نمی زند؛ با دریافت، مبلغ مبنای تقسیم (کمیسیون +
+ * هر دو شیرینی منهای تخفیف) به عنوان ورودی خودکار در صندوق دفتر ثبت می شود و با برگرداندن
+ * دریافت، به جای حذف ورودی، یک رکورد معکوس OUT با همان مبلغ ساخته می شود تا تاریخچه صندوق
+ * حفظ شود. برگرداندن دریافت فقط وقتی مجاز است که هیچ سهمی تسویه نشده باشد.
  */
 export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id: string }> }) {
   const session = await getSessionFromCookies();
@@ -46,9 +46,11 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
   }
 
   const now = new Date();
+  // P2002: دو درخواست هم زمان «دریافت شد» می توانند هر دو از findFirst عبور کنند؛
+  // ایندکس یکتای جزئی روی IN هر معامله، دومی را با 409 رد می کند.
   const updated = await prisma.$transaction(async (tx) => {
     if (paid) {
-      // ورودی خودکار صندوق — فقط اگر برای این معامله ورودی خودکار نیست
+      // ورودی خودکار صندوق — فقط اگر برای این معامله ورودی فعالی نیست
       const existing = await tx.cashboxEntry.findFirst({ where: { dealId: id, type: "IN" } });
       if (!existing) {
         await tx.cashboxEntry.create({
@@ -62,11 +64,35 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
             createdById: session.user.id,
           },
         });
+      } else {
+        // ورودی هست ولی برگردانده شده (رکورد معکوس OUT دارد): با حذف رکورد معکوس،
+        // همان ورودی اول دوباره فعال می شود. ایندکس یکتای جزئی فقط یک IN برای هر
+        // معامله قبول می کند، پس IN تازه ساخته نمی شود؛ تاریخچه کامل در AuditLog می ماند.
+        await tx.cashboxEntry.deleteMany({ where: { dealId: id, type: "OUT" } });
       }
     } else {
-      await tx.cashboxEntry.deleteMany({ where: { dealId: id, type: "IN" } });
+      // برگرداندن دریافت: ورودی صندوق حذف نمی شود؛ رکورد معکوس OUT با همان مبلغ
+      // ورودی ساخته می شود تا تاریخچه حفظ شود. موجودی صندوق با groupBy روی کل جدول
+      // حساب می شود (IN منهای OUT)، پس رکورد معکوس تراز را درست نگه می دارد.
+      const existing = await tx.cashboxEntry.findFirst({ where: { dealId: id, type: "IN" } });
+      if (existing) {
+        const alreadyReversed = await tx.cashboxEntry.findFirst({ where: { dealId: id, type: "OUT" } });
+        if (!alreadyReversed) {
+          await tx.cashboxEntry.create({
+            data: {
+              type: "OUT",
+              amount: existing.amount,
+              title: `برگرداندن دریافت کمیسیون معامله ${deal.property.code ?? deal.property.title}`,
+              note: `رکورد معکوس برای برگرداندن دریافت کمیسیون معامله ${deal.property.code ?? deal.property.title}`,
+              occurredAt: now,
+              dealId: id,
+              createdById: session.user.id,
+            },
+          });
+        }
+      }
     }
-    return tx.deal.update({
+    const upd = await tx.deal.update({
       where: { id },
       data: {
         commissionPaid: paid,
@@ -82,7 +108,22 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
         },
       },
     });
+    await createAuditLog({
+      actorId: session.user.id,
+      action: paid ? "COMMISSION_SETTLED" : "COMMISSION_UNSETTLED",
+      entityType: "Deal",
+      entityId: id,
+      newValue: { commissionPaid: paid, amount: dealIncome } as never,
+      client: tx,
+    });
+    return upd;
+  }).catch((e: unknown) => {
+    if ((e as { code?: string }).code === "P2002") return null;
+    throw e;
   });
+  if (updated === null) {
+    return NextResponse.json({ error: "برای این معامله ورودی صندوق قبلاً ثبت شده است" }, { status: 409 });
+  }
 
   const split = resolveSplit(updated);
   const out = {
@@ -92,13 +133,6 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
     shares: split.shares,
   };
 
-  await createAuditLog({
-    actorId: session.user.id,
-    action: paid ? "COMMISSION_SETTLED" : "COMMISSION_UNSETTLED",
-    entityType: "Deal",
-    entityId: id,
-    newValue: { commissionPaid: paid } as never,
-  });
 
   return NextResponse.json(serializeBigInt(out));
 }

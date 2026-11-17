@@ -28,6 +28,67 @@ const emptyFlags: Flags = {
   isNewBuild: false,
 };
 
+// پیشنویس ثبت فایل: محتوای فرم در localStorage ذخیره شده و با باز شدن فرم،
+// مقدارهای ذخیره شده در فرم قرار داده خواهند شد؛ پس از ثبت موفق، پیشنویس پاک خواهد شد
+const DRAFT_KEY = "saj-new-property-draft-v1";
+
+const emptyForm: Record<string, string> = {
+  title: "", type: "APARTMENT", dealType: "SALE", region: "", ownerId: "",
+  salePriceToman: "", pricePerSqm: "", depositToman: "", monthlyRentToman: "",
+  sizeSqm: "", landSizeSqm: "", builtYear: "", address: "", description: "",
+  floor: "", totalFloors: "", unitsPerFloor: "", unitCount: "",
+  beds: "", passageWidth: "", buildingFrontage: "", buildingFloors: "",
+  isAppraised: "false", source: "",
+};
+
+type PropertyDraft = {
+  form: Record<string, string>;
+  flags: Flags;
+  accessUserIds: string[];
+  isOfficeFile: boolean;
+  // مالک انتخاب شده هم در پیشنویس ذخیره شده تا نام او پس از بازیابی دیده شود
+  // (قیمت هر متر و قیمت کل هر دو به صورت رشته ذخیره شده است؛ اثر محاسبه متراژ
+  // مبنا پس از بازیابی، مقدار سازگار را نگه خواهد داشت)
+  owner?: { id: string; name: string; phone?: string } | null;
+};
+
+function readDraft(): PropertyDraft | null {
+  if (typeof window === "undefined") return null;
+  try {
+    const raw = window.localStorage.getItem(DRAFT_KEY);
+    if (!raw) return null;
+    const parsed: unknown = JSON.parse(raw);
+    if (!parsed || typeof parsed !== "object") return null;
+    const d = parsed as Partial<PropertyDraft>;
+    if (!d.form || typeof d.form !== "object") return null;
+    const form: Record<string, string> = { ...emptyForm };
+    for (const [k, v] of Object.entries(d.form)) {
+      if (typeof v === "string" && k in form) form[k] = v;
+    }
+    const flags: Flags = { ...emptyFlags };
+    if (d.flags && typeof d.flags === "object") {
+      for (const [k, v] of Object.entries(d.flags)) {
+        if (typeof v === "boolean" && k in flags) (flags as Record<string, boolean>)[k] = v;
+      }
+    }
+    const owner =
+      d.owner && typeof d.owner === "object" && typeof d.owner.id === "string" && typeof d.owner.name === "string"
+        ? d.owner
+        : null;
+    return {
+      form,
+      flags,
+      accessUserIds: Array.isArray(d.accessUserIds)
+        ? d.accessUserIds.filter((x): x is string => typeof x === "string")
+        : [],
+      isOfficeFile: d.isOfficeFile === true,
+      owner,
+    };
+  } catch {
+    return null;
+  }
+}
+
 function CheckRow({
   flags,
   onChange,
@@ -80,24 +141,21 @@ function Num({
 
 export default function NewPropertyPage() {
   const router = useRouter();
-  const [owners, setOwners] = useState<{ id: string; name: string; phone?: string }[]>([]);
+  const [savedDraft] = useState<PropertyDraft | null>(() => readDraft());
+  const [owners, setOwners] = useState<{ id: string; name: string; phone?: string }[]>(() =>
+    savedDraft?.owner ? [{ id: savedDraft.owner.id, name: savedDraft.owner.name, phone: savedDraft.owner.phone }] : []
+  );
   const [ownerSearch, setOwnerSearch] = useState("");
   const ownerIdRef = useRef("");
   const [regions, setRegions] = useState<string[]>([]);
   const [propertyTypes, setPropertyTypes] = useState<{ value: string; label: string }[]>([]);
-  const [form, setForm] = useState<Record<string, string>>({
-    title: "", type: "APARTMENT", dealType: "SALE", region: "", ownerId: "",
-    salePriceToman: "", pricePerSqm: "", depositToman: "", monthlyRentToman: "",
-    sizeSqm: "", landSizeSqm: "", builtYear: "", address: "", description: "",
-    floor: "", totalFloors: "", unitsPerFloor: "", unitCount: "",
-    beds: "", passageWidth: "", buildingFrontage: "", buildingFloors: "",
-    isAppraised: "false", source: "",
-  });
-  const [flags, setFlags] = useState<Flags>(emptyFlags);
+  const [form, setForm] = useState<Record<string, string>>(() => savedDraft?.form ?? { ...emptyForm });
+  const [flags, setFlags] = useState<Flags>(() => savedDraft?.flags ?? { ...emptyFlags });
   const [agents, setAgents] = useState<{ id: string; name: string }[]>([]);
-  const [accessUserIds, setAccessUserIds] = useState<string[]>([]);
-  const [isOfficeFile, setIsOfficeFile] = useState(false);
+  const [accessUserIds, setAccessUserIds] = useState<string[]>(() => savedDraft?.accessUserIds ?? []);
+  const [isOfficeFile, setIsOfficeFile] = useState(() => savedDraft?.isOfficeFile ?? false);
   const [error, setError] = useState("");
+  const [optionsError, setOptionsError] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
   // ثبت مالک درون‌خطی — بدون رفتن به صفحه مشتریان
   const [showNewOwner, setShowNewOwner] = useState(false);
@@ -108,6 +166,32 @@ export default function NewPropertyPage() {
   const setFlag = (k: keyof Flags, v: boolean) => setFlags((f) => ({ ...f, [k]: v }));
   const toggleAccess = (id: string) =>
     setAccessUserIds((s) => (s.includes(id) ? s.filter((x) => x !== id) : [...s, id]));
+
+  // ذخیره پیشنویس با هر تغییر؛ فرم خالی پیشنویس را پاک خواهد کرد
+  useEffect(() => {
+    const isEmpty =
+      Object.entries(form).every(([k, v]) => v === emptyForm[k]) &&
+      Object.entries(flags).every(([k, v]) => v === (emptyFlags as Record<string, boolean>)[k]) &&
+      accessUserIds.length === 0 &&
+      !isOfficeFile;
+    try {
+      if (isEmpty) {
+        window.localStorage.removeItem(DRAFT_KEY);
+        return;
+      }
+      const owner = owners.find((o) => o.id === form.ownerId) ?? null;
+      const draft: PropertyDraft = {
+        form,
+        flags,
+        accessUserIds,
+        isOfficeFile,
+        owner: owner ? { id: owner.id, name: owner.name, phone: owner.phone } : null,
+      };
+      window.localStorage.setItem(DRAFT_KEY, JSON.stringify(draft));
+    } catch {
+      // localStorage در دسترس نیست یا پر است؛ ثبت فایل ادامه خواهد داشت
+    }
+  }, [form, flags, accessUserIds, isOfficeFile, owners]);
 
   // قیمت هر متر — محاسبه دوطرفه با قیمت کل، مثل محاسبه خودکار کمیسیون:
   // مقدار دستی هر فیلد تا وقتی فیلد دیگر عوض شود می‌ماند.
@@ -176,26 +260,40 @@ export default function NewPropertyPage() {
     return () => clearTimeout(t);
   }, [ownerSearch, loadOwnerOptions]);
 
-  useEffect(() => {
-    apiJson<{ regions?: string[]; propertyTypes?: { value: string; label: string }[] }>("/api/settings")
-      .then((d) => {
-        if (d.regions) setRegions(d.regions);
-        if (d.propertyTypes) setPropertyTypes(d.propertyTypes);
-      })
-      .catch(() => {});
-    // مشاورهای دیگر برای لیست دسترسی کامل (خود ثبت‌کننده همیشه کامل می‌بیند)
-    apiJson<{ user?: { id: string } }>("/api/auth/me")
-      .then((me) => {
-        const meId = me?.user?.id;
-        return apiJson<{ id: string; name: string; role: string; active?: boolean }[]>("/api/users").then((us) => {
-          const list = (Array.isArray(us) ? us : []).filter(
-            (u) => u.role === "AGENT" && u.id !== meId && u.active !== false
-          );
-          setAgents(list.map((u) => ({ id: u.id, name: u.name })));
-        });
-      })
-      .catch(() => {});
+  // واکشی فهرست انتخاب (مناطق، نوع ملک، کاربران) — خطا ساکت رد نخواهد شد؛
+  // بنر بالای فرم با دکمه «تلاش دوباره» نشان داده خواهد شد
+  const loadOptions = useCallback(async () => {
+    const settingsP = apiJson<{ regions?: string[]; propertyTypes?: { value: string; label: string }[] }>("/api/settings");
+    // دسترسی کامل برای کاربران دیگر؛ خود ثبت کننده همیشه کامل خواهد دید
+    const agentsP = apiJson<{ user?: { id: string } }>("/api/auth/me").then((me) => {
+      const meId = me?.user?.id;
+      return apiJson<{ id: string; name: string; role: string; active?: boolean }[]>("/api/users").then((us) => {
+        const list = (Array.isArray(us) ? us : []).filter(
+          (u) => u.role === "AGENT" && u.id !== meId && u.active !== false
+        );
+        return list.map((u) => ({ id: u.id, name: u.name }));
+      });
+    });
+    let err: unknown = null;
+    try {
+      const d = await settingsP;
+      if (d.regions) setRegions(d.regions);
+      if (d.propertyTypes) setPropertyTypes(d.propertyTypes);
+    } catch (e) {
+      err = e;
+    }
+    try {
+      setAgents(await agentsP);
+    } catch (e) {
+      if (!err) err = e;
+    }
+    setOptionsError(err ? errorMessage(err) : null);
   }, []);
+
+  useEffect(() => {
+    const t = setTimeout(() => { void loadOptions(); }, 0);
+    return () => clearTimeout(t);
+  }, [loadOptions]);
 
   // ثبت مالک تازه همین‌جا؛ اگر شماره تکراری باشد، همان مالک قبلی انتخاب می‌شود
   async function createOwner() {
@@ -315,6 +413,12 @@ export default function NewPropertyPage() {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(body),
       });
+      // ثبت موفق — پیشنویس دیگر لازم نیست
+      try {
+        window.localStorage.removeItem(DRAFT_KEY);
+      } catch {
+        /* خطا در پاک کردن پیشنویس مهم نیست */
+      }
       router.push("/properties");
     } catch (err) {
       setError(err instanceof Error ? err.message : "خطا در ارتباط با سرور");
@@ -343,6 +447,12 @@ export default function NewPropertyPage() {
     <div>
       <Header title="فایل جدید" subtitle="کد فایل به‌صورت خودکار صادر می‌شود" />
       <form onSubmit={submit} className="p-6 max-w-2xl space-y-4">
+        {optionsError && (
+          <div className="flex flex-wrap items-center gap-2 rounded-lg bg-red-50 px-3 py-2 text-sm text-red-700" role="alert">
+            <span>بارگذاری مناطق و کاربران ناموفق بود: {optionsError}</span>
+            <Button type="button" variant="outline" size="sm" onClick={() => void loadOptions()}>تلاش دوباره</Button>
+          </div>
+        )}
         {error && <div className="rounded-lg bg-red-50 px-3 py-2 text-sm text-red-700">{error}</div>}
 
         <div className="rounded-[14px] border border-[var(--line)] bg-white p-4">

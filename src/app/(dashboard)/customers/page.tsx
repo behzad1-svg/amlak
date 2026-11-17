@@ -8,8 +8,9 @@ import { Header } from "@/components/layout/Header";
 import { Button } from "@/components/ui/Button";
 import { Badge } from "@/components/ui/Badge";
 import { Input, Select } from "@/components/ui/Input";
-import { PageError, PageSkeleton } from "@/components/ui/LoadState";
+import { PageSkeleton } from "@/components/ui/LoadState";
 import { useRole } from "@/hooks/useRole";
+import { useApiList } from "@/hooks/useApiList";
 import { apiFetch, apiJson, errorMessage } from "@/lib/api";
 import {
   CUSTOMER_KANBAN_COLUMNS,
@@ -67,16 +68,10 @@ function kanbanBucket(stage: string): string | null {
 const PAGE_SIZE = 100;
 
 export default function CustomersPage() {
-  const [customers, setCustomers] = useState<Customer[]>([]);
-  const [total, setTotal] = useState(0);
-  const [page, setPage] = useState(1);
-  const [stageCounts, setStageCounts] = useState<Record<string, number>>({});
-  const [loading, setLoading] = useState(true);
-  const [loadingMore, setLoadingMore] = useState(false);
-  const [loadError, setLoadError] = useState<string | null>(null);
   const [showLost, setShowLost] = useState(false);
   const [staleOnly, setStaleOnly] = useState(false);
-  const [sourceStats, setSourceStats] = useState<SourceStat[]>([]);
+  const [failedOnly, setFailedOnly] = useState(false);
+  const [optionsError, setOptionsError] = useState<string | null>(null);
   const [tags, setTags] = useState<string[]>([]);
   const [search, setSearch] = useState("");
   const [showAdvanced, setShowAdvanced] = useState(false);
@@ -122,59 +117,80 @@ export default function CustomersPage() {
       if (filters.source) params.set("source", filters.source);
       if (filters.tag) params.set("tag", filters.tag);
       if (staleOnly) params.set("staleOnly", "true");
+      if (failedOnly) params.set("stage", "FAILED");
       return params.toString();
     },
-    [showLost, search, filters, staleOnly]
+    [showLost, search, filters, staleOnly, failedOnly]
   );
 
-  const load = useCallback(
-    async (pageNum = 1, append = false) => {
-      if (append) setLoadingMore(true);
-      else {
-        setLoading(true);
-        setLoadError(null);
-      }
-      try {
-        const d = await apiJson<{ customers?: Customer[]; total?: number; stageCounts?: Record<string, number>; sourceStats?: SourceStat[] } | Customer[]>(
-          `/api/customers?${buildParams(pageNum)}`
-        );
-        const list = Array.isArray(d) ? d : d.customers ?? [];
-        setCustomers((prev) => (append ? [...prev, ...list] : list));
-        setTotal(Array.isArray(d) ? list.length : d.total ?? list.length);
-        if (!Array.isArray(d) && d.stageCounts) setStageCounts(d.stageCounts);
-        if (!Array.isArray(d) && d.sourceStats) setSourceStats(d.sourceStats);
-        setPage(pageNum);
-      } catch (e) {
-        if (!append) setLoadError(errorMessage(e));
-        else setMsg(errorMessage(e));
-      } finally {
-        setLoading(false);
-        setLoadingMore(false);
-      }
-    },
-    [buildParams]
-  );
+  type CustomerListExtra = {
+    stageCounts?: Record<string, number>;
+    sourceStats?: SourceStat[];
+  };
 
-  useEffect(() => {
-    const t = setTimeout(() => load(1, false), 250);
-    return () => clearTimeout(t);
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [showLost, search, filters, staleOnly]);
+  const fetcher = useCallback(async (pageNum: number) => {
+    const d = await apiJson<{ customers?: Customer[]; total?: number; stageCounts?: Record<string, number>; sourceStats?: SourceStat[] } | Customer[]>(
+      `/api/customers?${buildParams(pageNum)}`
+    );
+    const list = Array.isArray(d) ? d : d.customers ?? [];
+    return {
+      items: list,
+      total: Array.isArray(d) ? list.length : d.total ?? list.length,
+      extra: Array.isArray(d)
+        ? undefined
+        : { stageCounts: d.stageCounts, sourceStats: d.sourceStats },
+    };
+  }, [buildParams]);
 
-  useEffect(() => {
-    apiJson<{ regions?: string[]; propertyTypes?: { value: string; label: string }[]; customerTags?: string[] }>("/api/settings")
-      .then((d) => {
-        if (d.regions) setRegions(d.regions);
-        if (d.propertyTypes) setTypes(d.propertyTypes);
-        if (d.customerTags) setTags(d.customerTags);
-      })
-      .catch(() => {});
-    apiJson<{ id: string; name: string }[]>("/api/users")
-      .then((d) => {
-        if (Array.isArray(d)) setAgents(d.map((u) => ({ id: u.id, name: u.name })));
-      })
-      .catch(() => {});
+  const {
+    items: customers,
+    extra,
+    total,
+    loading,
+    loadingMore,
+    error: loadError,
+    appendError,
+    hasMore,
+    load,
+    loadMore,
+    retry,
+  } = useApiList<Customer, CustomerListExtra>({
+    fetcher,
+    debounceMs: 250,
+    deps: [showLost, search, filters, staleOnly, failedOnly],
+  });
+
+  // شمارش سرور برای ستون ها و آمار منبع؛ با فیلتر فعال فقط همان فیلتر شمرده می شود
+  const stageCounts = extra?.stageCounts ?? {};
+  const sourceStats = extra?.sourceStats ?? [];
+  const failedCount = stageCounts.FAILED ?? 0;
+
+  // گزینه های فهرست ها (منطقه، نوع ملک، برچسب، مشاور)؛ خطا بنر دارد و قابل تلاش دوباره است
+  const loadOptions = useCallback(async () => {
+    const settingsP = apiJson<{ regions?: string[]; propertyTypes?: { value: string; label: string }[]; customerTags?: string[] }>("/api/settings");
+    const usersP = apiJson<{ id: string; name: string }[]>("/api/users");
+    let err: unknown = null;
+    try {
+      const d = await settingsP;
+      if (d.regions) setRegions(d.regions);
+      if (d.propertyTypes) setTypes(d.propertyTypes);
+      if (d.customerTags) setTags(d.customerTags);
+    } catch (e) {
+      err = e;
+    }
+    try {
+      const d = await usersP;
+      if (Array.isArray(d)) setAgents(d.map((u) => ({ id: u.id, name: u.name })));
+    } catch (e) {
+      if (!err) err = e;
+    }
+    setOptionsError(err ? errorMessage(err) : null);
   }, []);
+
+  useEffect(() => {
+    const t = setTimeout(() => { void loadOptions(); }, 0);
+    return () => clearTimeout(t);
+  }, [loadOptions]);
 
   const advancedCount =
     (filters.temperature ? 1 : 0) +
@@ -257,11 +273,7 @@ export default function CustomersPage() {
     ? [...CUSTOMER_KANBAN_COLUMNS, "LOST" as const]
     : [...CUSTOMER_KANBAN_COLUMNS];
 
-  const filtered = customers;
-  const hasMore = customers.length < total;
 
-  if (loading && customers.length === 0) return <PageSkeleton rows={4} />;
-  if (loadError && customers.length === 0) return <PageError message={loadError} onRetry={() => load(1, false)} />;
 
   return (
     <div>
@@ -281,21 +293,52 @@ export default function CustomersPage() {
               value={search}
               onChange={(e) => setSearch(e.target.value)}
             />
-            <label className="hidden sm:flex items-center gap-2 rounded-[12px] border border-[var(--line)] bg-white px-3 py-2 text-[12px]">
+            <label className="flex items-center gap-2 rounded-[12px] border border-[var(--line)] bg-white px-3 py-2 text-[12px]">
               <input type="checkbox" checked={showLost} onChange={(e) => setShowLost(e.target.checked)} /> بایگانی
             </label>
-            <label className="hidden sm:flex items-center gap-2 rounded-[12px] border border-[var(--line)] bg-white px-3 py-2 text-[12px]">
+            <label className="flex items-center gap-2 rounded-[12px] border border-[var(--line)] bg-white px-3 py-2 text-[12px]">
               <input type="checkbox" checked={staleOnly} onChange={(e) => setStaleOnly(e.target.checked)} /> فقط راکدها
             </label>
             <Link href="/customers/new"><Button>＋ مشتری جدید</Button></Link>
           </div>
         }
       />
-      {total > 0 && (
-        <div className="mx-4 sm:mx-6 mt-3 text-[12px] text-[var(--ink-3)]">
-          نمایش {toFaDigits(String(customers.length))} از {toFaDigits(String(total))} مشتری
+      {optionsError && (
+        <div className="mx-4 sm:mx-6 mt-3 flex flex-wrap items-center gap-2 rounded-lg bg-red-50 px-3 py-2 text-sm text-red-700" role="alert">
+          <span className="flex-1">{"گزینه\u200Cهای فیلتر بارگذاری نشد"}: {optionsError}</span>
+          <Button size="sm" variant="outline" onClick={() => void loadOptions()}>تلاش دوباره</Button>
         </div>
       )}
+      {loadError && (
+        <div className="mx-4 sm:mx-6 mt-3 flex flex-wrap items-center gap-2 rounded-lg bg-red-50 px-3 py-2 text-sm text-red-700" role="alert">
+          <span className="flex-1">{loadError}</span>
+          <Button size="sm" variant="outline" onClick={retry}>تلاش دوباره</Button>
+        </div>
+      )}
+      {appendError && (
+        <div className="mx-4 sm:mx-6 mt-3 flex flex-wrap items-center gap-2 rounded-lg bg-red-50 px-3 py-2 text-sm text-red-700" role="alert">
+          <span className="flex-1">{appendError}</span>
+          <Button size="sm" variant="outline" onClick={() => void loadMore()}>تلاش دوباره</Button>
+        </div>
+      )}
+      {(total !== null && total > 0) || failedOnly ? (
+        <div className="mx-4 sm:mx-6 mt-3 flex flex-wrap items-center gap-2 text-[12px] text-[var(--ink-3)]">
+          {total !== null && total > 0 && (
+            <span>
+              نمایش {toFaDigits(String(customers.length))} از {toFaDigits(String(total))} مشتری{failedOnly ? " ناموفق" : ""}
+            </span>
+          )}
+          {(failedCount > 0 || failedOnly) && (
+            <button
+              type="button"
+              onClick={() => setFailedOnly((v) => !v)}
+              className="rounded-full border border-[var(--line)] bg-white px-2.5 py-1 text-[11px] font-bold text-[var(--ink-2)]"
+            >
+              {failedOnly ? "نمایش همه" : `ناموفق: ${toFaDigits(String(failedCount))}`}
+            </button>
+          )}
+        </div>
+      ) : null}
       {sourceStats.length > 0 && (
         <div className="mx-4 sm:mx-6 mt-2 flex flex-wrap gap-1.5">
           {sourceStats.map((s) => (
@@ -394,9 +437,28 @@ export default function CustomersPage() {
         </div>
       )}
 
+      {loading && customers.length === 0 ? (
+        <div className="p-4 sm:p-6"><PageSkeleton rows={4} /></div>
+      ) : failedOnly ? (
+        <div className="mx-4 sm:mx-6 mt-3 space-y-2 pb-6">
+          {customers.map((c) => (
+            <Link key={c.id} href={`/customers/${c.id}`} className="flex flex-wrap items-center gap-2 rounded-[12px] border border-[var(--line)] bg-white px-3 py-2.5">
+              <span className="text-[13.5px] font-bold">{c.name}</span>
+              <span className="text-[11px] text-[var(--ink-3)]" dir="ltr">{c.phone}</span>
+              <Badge className={`text-[10.5px] ${CUSTOMER_TYPE_BADGE[c.type] ?? ""}`}>{CUSTOMER_TYPE_LABELS[c.type] ?? c.type}</Badge>
+              <span className="text-[11px] text-[var(--ink-3)]">ناموفق</span>
+            </Link>
+          ))}
+          {customers.length === 0 && (
+            <div className="rounded-[12px] border border-dashed border-[var(--line-2)] bg-white/60 px-3 py-6 text-center text-[12px] text-[var(--ink-3)]">
+              مشتری ناموفقی نیست
+            </div>
+          )}
+        </div>
+      ) : (
       <div className="p-4 flex gap-3 overflow-x-auto pb-6">
         {columns.map((stage) => {
-          const list = filtered.filter((c) => {
+          const list = customers.filter((c) => {
             if (stage === "LOST") return c.stage === "LOST";
             return kanbanBucket(c.stage) === stage;
           });
@@ -512,10 +574,11 @@ export default function CustomersPage() {
           );
         })}
       </div>
+      )}
 
       {hasMore && (
         <div className="px-4 pb-6 text-center">
-          <Button variant="outline" onClick={() => load(page + 1, true)} disabled={loadingMore}>
+          <Button variant="outline" onClick={() => void loadMore()} disabled={loadingMore}>
             {loadingMore ? "در حال بارگذاری..." : `بارگذاری بیشتر (نمایش ${toFaDigits(String(customers.length))} از ${toFaDigits(String(total))})`}
           </Button>
         </div>

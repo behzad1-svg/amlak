@@ -6,6 +6,7 @@ import { serializeBigInt } from "@/lib/utils";
 import { canAccessCustomer, hasRestrictedAccess } from "@/lib/access";
 import { createAuditLog } from "@/lib/audit";
 import { hasPermission } from "@/lib/permissions";
+import { getTaxRatePct } from "@/lib/settings";
 
 async function canAccessPropertyForAction(
   user: { id: string; role: string },
@@ -113,6 +114,10 @@ export async function POST(req: NextRequest) {
     );
   }
 
+  // مهر نرخ مالیات در لحظه ثبت کمیسیون — تغییر نرخ جاری بعدا روی این معامله اثر ندارد
+  const hasCommission = session.user.role === "OWNER" && Boolean(d.commissionToman);
+  const taxRateSnapshot = hasCommission ? await getTaxRatePct() : null;
+
   let deal;
   try {
     deal = await prisma.$transaction(async (tx) => {
@@ -148,6 +153,7 @@ export async function POST(req: NextRequest) {
           notes: d.notes,
           commissionToman: session.user.role === "OWNER" && d.commissionToman ? BigInt(d.commissionToman) : null,
           commissionPercent: session.user.role === "OWNER" ? (d.commissionPercent ?? null) : null,
+          taxRatePct: taxRateSnapshot,
           dealSalePriceToman: d.dealSalePriceToman ? BigInt(d.dealSalePriceToman) : (lockedProperty.salePriceToman ?? null),
           dealDepositToman: d.dealDepositToman ? BigInt(d.dealDepositToman) : (lockedProperty.depositToman ?? null),
           dealMonthlyRentToman: d.dealMonthlyRentToman

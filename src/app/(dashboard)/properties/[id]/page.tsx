@@ -6,6 +6,7 @@ import { Header } from "@/components/layout/Header";
 import { Card } from "@/components/ui/Card";
 import { Badge } from "@/components/ui/Badge";
 import { Button } from "@/components/ui/Button";
+import { ConfirmDialog } from "@/components/ui/ConfirmDialog";
 import { Input, NumberInput, Select, Label, Textarea } from "@/components/ui/Input";
 import dynamic from "next/dynamic";
 import { SearchSelect } from "@/components/ui/SearchSelect";
@@ -122,6 +123,7 @@ export default function PropertyDetailPage() {
   const [meId, setMeId] = useState("");
   const [mePermissions, setMePermissions] = useState<Record<string, boolean>>({});
   const [editing, setEditing] = useState(false);
+  const [confirmAction, setConfirmAction] = useState<"delete" | "archive" | null>(null);
   const [form, setForm] = useState<Record<string, string>>({});
   const [pricePerSqm, setPricePerSqm] = useState("");
   const lastPriceField = useRef<"total" | "perMetre" | null>(null);
@@ -237,7 +239,6 @@ export default function PropertyDetailPage() {
   }
 
   async function handleDelete() {
-    if (!confirm("حذف فایل؟ این کار برگشت‌پذیر نیست.")) return;
     try {
       await apiFetch(`/api/properties/${id}`, { method: "DELETE" });
     } catch (e) {
@@ -249,7 +250,6 @@ export default function PropertyDetailPage() {
 
   async function handleArchive() {
     const archiving = p?.status !== "ARCHIVED";
-    if (!confirm(archiving ? "فایل بایگانی شود؟ دیگر در فهرست اصلی دیده نمی‌شود." : "فایل از بایگانی برگردد؟")) return;
     try {
       await apiFetch(`/api/properties/${id}`, {
         method: "PATCH",
@@ -362,10 +362,10 @@ export default function PropertyDetailPage() {
           <div className="flex gap-2">
             <Button variant="outline" onClick={() => setEditing(!editing)}>{editing ? "انصراف" : "ویرایش"}</Button>
             {canArchive && (
-              <Button variant="outline" onClick={handleArchive}>{p.status === "ARCHIVED" ? "بازگردانی" : "بایگانی"}</Button>
+              <Button variant="outline" onClick={() => setConfirmAction("archive")}>{p.status === "ARCHIVED" ? "بازگردانی" : "بایگانی"}</Button>
             )}
             {isOwner && (
-              <Button variant="ghost" onClick={handleDelete} className="text-red-600 hover:bg-red-50">حذف</Button>
+              <Button variant="ghost" onClick={() => setConfirmAction("delete")} className="text-red-600 hover:bg-red-50">حذف</Button>
             )}
           </div>
         }
@@ -694,6 +694,27 @@ export default function PropertyDetailPage() {
           </div>
         </Card>
       </div>
+      {confirmAction && (
+        <ConfirmDialog
+          title={confirmAction === "delete" ? "حذف فایل" : p.status === "ARCHIVED" ? "بازگردانی فایل" : "بایگانی فایل"}
+          message={
+            confirmAction === "delete"
+              ? "حذف فایل؟ دادهٔ فایل پاک نمی\u200Cشود، ولی در رابط کاربری راهی برای برگرداندن آن نیست."
+              : p.status === "ARCHIVED"
+                ? "فایل از بایگانی برگردد؟"
+                : "فایل بایگانی شود؟ دیگر در فهرست اصلی دیده نمی\u200Cشود."
+          }
+          confirmLabel={confirmAction === "delete" ? "حذف" : p.status === "ARCHIVED" ? "بازگردانی" : "بایگانی"}
+          danger={confirmAction === "delete"}
+          onConfirm={() => {
+            const action = confirmAction;
+            setConfirmAction(null);
+            if (action === "delete") void handleDelete();
+            else if (action === "archive") void handleArchive();
+          }}
+          onCancel={() => setConfirmAction(null)}
+        />
+      )}
     </div>
   );
 }

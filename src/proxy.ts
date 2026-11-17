@@ -1,9 +1,9 @@
 // نقد ۸ — جایگزین middleware.ts (در Next 16 منسوخ و به proxy تغییر نام داده).
 // پروکسی فقط امضای JWT را بررسی می‌کند (jose خالص جاوااسکریپت است)؛
 // بررسی لغو نشست (tokenVersion) و فعال‌بودن کاربر با دیتابیس در layout
-// داشبورد و تک‌تک روت‌های API انجام می‌شود، چون Netlify/OpenNext موتور
-// نیتیو Prisma (فایل .so) را در باندل Middleware قبول نمی‌کند و بیلد با
-// «Usage of unsupported C++ Addon(s) found in Node.js Middleware» می‌شکست.
+// داشبورد و همهٔ مسیرهای API است، چون موتور نیتیو Prisma
+// (فایل .so) در باندل پروکسی قابل استفاده نیست؛ دیپلوی مستقیم روی VPS
+// با deploy.sh است، نه Netlify.
 // پس این پروکسی «دروازهٔ اول» است، نه تنها لایهٔ احراز هویت: توکنِ لغوشده
 // (مثلاً بعد از logout) از اینجا رد می‌شود ولی layout/API آن را 401 می‌کنند.
 import { NextResponse } from "next/server";
@@ -33,12 +33,16 @@ export async function proxy(req: NextRequest) {
   if (!payload) {
     const res = pathname.startsWith("/api/")
       ? NextResponse.json({ error: "وارد نشده‌اید" }, { status: 401 })
-      : NextResponse.redirect(new URL("/login", req.url));
+      : NextResponse.redirect(new URL(`/login?next=${encodeURIComponent(pathname + req.nextUrl.search)}`, req.url));
     // کوکی خراب را پاک کن تا حلقهٔ هدایت نسازد
     res.cookies.delete(COOKIE_NAME);
     return res;
   }
-  return NextResponse.next();
+  // مسیر فعلی را در هدر درخواست بگذار تا layout و صفحات سرور
+  // هنگام نبود نشست، به /login?next=<همین مسیر> برگردند.
+  const requestHeaders = new Headers(req.headers);
+  requestHeaders.set("x-pathname", pathname + req.nextUrl.search);
+  return NextResponse.next({ request: { headers: requestHeaders } });
 }
 
 export const config = {

@@ -3,9 +3,9 @@ import { prisma } from "@/lib/prisma";
 import { verifyPassword, signToken } from "@/lib/auth";
 import { COOKIE_NAME, authCookieOptions } from "@/lib/jwt";
 import { loginSchema } from "@/lib/validation";
-import { checkRateLimitDb, cleanupExpiredRateLimitDb, clearRateLimitDb, recordRateLimitDb, rateLimitForKey } from "@/lib/rateLimitDb";
+import { checkRateLimitDb, cleanupExpiredRateLimitDb, clearRateLimitDb, ipRateLimitKey, phoneRateLimitKey, recordRateLimitDb, rateLimitForKey } from "@/lib/rateLimitDb";
 import { clientIpFromHeaders } from "@/lib/clientIp";
-import { serializeBigInt } from "@/lib/utils";
+import { serializeBigInt, toEnDigits } from "@/lib/utils";
 
 // توجه: محدودیت نرخ ورود با جدول RateLimitHit در دیتابیس ذخیره می‌شود (نقد ۱۳)
 // تا بین نمونه‌های سرورلس هم مشترک باشد؛ اگر جدول نباشد، به محدودیت
@@ -13,7 +13,7 @@ import { serializeBigInt } from "@/lib/utils";
 //
 // فقط تلاش‌های ناموفق شمرده می‌شوند: اول سطل‌ها چک می‌شوند (بدون ثبت)،
 // و فقط در صورت شکست احراز هویت یک ضربه ثبت می‌شود — پس لاگین‌های موفق هرگز
-// باعث 429 نمی‌شوند. دو سطل جداگانه هست: هر IP بیست تلاش و هر شماره تماس پنج تلاش در ۱۵ دقیقه دارد.
+// باعث 429 نمی شوند. دو سطل جداگانه هست: هر IP بیست تلاش و هر شماره تماس از هر IP پنج تلاش در ۱۵ دقیقه دارد.
 //
 // سطل IP فقط وقتی فعال است که TRUSTED_PROXY=true باشد — یعنی وقتی پشت یک
 // reverse-proxy معتبر هستیم و می‌توان به x-forwarded-for اعتماد کرد.
@@ -33,6 +33,11 @@ const DUMMY_PASSWORD_HASH =
 
 export async function POST(req: NextRequest) {
   const body = await req.json().catch(() => null);
+  // ارقام فارسی/عربی شماره تماس پیش از اعتبارسنجی به لاتین تبدیل می شوند تا
+  // «۰۹۱۷…» هم درست lookup شود و سطل rate-limit با شماره نرمال شده کلید بخورد
+  if (body && typeof body.phone === "string") {
+    body.phone = toEnDigits(body.phone);
+  }
   const parsed = loginSchema.safeParse(body);
   if (!parsed.success) {
     return NextResponse.json({ error: parsed.error.issues[0].message }, { status: 400 });
@@ -41,12 +46,14 @@ export async function POST(req: NextRequest) {
   const { phone, password } = parsed.data;
 
   const ip = clientIp(req);
+  const ipKey = ip ? ipRateLimitKey(ip) : null;
+  const phoneKey = phoneRateLimitKey(phone, ip);
   const [ipAllowed, phoneAllowed] = await Promise.all([
-    ip ? checkRateLimitDb(`login:ip:${ip}`) : Promise.resolve(true),
-    checkRateLimitDb(`login:phone:${phone}`),
+    ipKey ? checkRateLimitDb(ipKey) : Promise.resolve(true),
+    checkRateLimitDb(phoneKey),
   ]);
   if (!ipAllowed || !phoneAllowed) {
-    return NextResponse.json({ error: "تعداد تلاش بیش از حد مجاز، لطفا بعدا تلاش کنید" }, { status: 429 });
+    return NextResponse.json({ error: "تعداد تلاش بیش از حد مجاز است، لطفاً ۱۵ دقیقهٔ دیگر تلاش کنید" }, { status: 429 });
   }
 
   // ثبت شکست به‌صورت اتمیک و تصمیم 429 بر اساس تعداد پس از افزایش:
@@ -55,12 +62,12 @@ export async function POST(req: NextRequest) {
   // رد کند، 429 می‌گیرد.
   const recordFailure = async (): Promise<boolean> => {
     const [ipCount, phoneCount] = await Promise.all([
-      ip ? recordRateLimitDb(`login:ip:${ip}`) : Promise.resolve(0),
-      recordRateLimitDb(`login:phone:${phone}`),
+      ipKey ? recordRateLimitDb(ipKey) : Promise.resolve(0),
+      recordRateLimitDb(phoneKey),
     ]);
     return (
-      (ip ? ipCount > rateLimitForKey(`login:ip:${ip}`) : false) ||
-      phoneCount > rateLimitForKey(`login:phone:${phone}`)
+      (ipKey ? ipCount > rateLimitForKey(ipKey) : false) ||
+      phoneCount > rateLimitForKey(phoneKey)
     );
   };
 
@@ -69,7 +76,7 @@ export async function POST(req: NextRequest) {
     // مقایسهٔ ساختگی با همان هزینهٔ bcrypt تا زمان پاسخ با مسیر رمز اشتباه یکی باشد
     await verifyPassword(password, DUMMY_PASSWORD_HASH);
     if (await recordFailure()) {
-      return NextResponse.json({ error: "تعداد تلاش بیش از حد مجاز، لطفا بعدا تلاش کنید" }, { status: 429 });
+      return NextResponse.json({ error: "تعداد تلاش بیش از حد مجاز است، لطفاً ۱۵ دقیقهٔ دیگر تلاش کنید" }, { status: 429 });
     }
     return NextResponse.json({ error: "شماره یا رمز عبور اشتباه است" }, { status: 401 });
   }
@@ -77,7 +84,7 @@ export async function POST(req: NextRequest) {
   const valid = await verifyPassword(password, user.passwordHash);
   if (!valid) {
     if (await recordFailure()) {
-      return NextResponse.json({ error: "تعداد تلاش بیش از حد مجاز، لطفا بعدا تلاش کنید" }, { status: 429 });
+      return NextResponse.json({ error: "تعداد تلاش بیش از حد مجاز است، لطفاً ۱۵ دقیقهٔ دیگر تلاش کنید" }, { status: 429 });
     }
     return NextResponse.json({ error: "شماره یا رمز عبور اشتباه است" }, { status: 401 });
   }
@@ -85,7 +92,8 @@ export async function POST(req: NextRequest) {
   const token = await signToken({ userId: user.id, role: user.role, tokenVersion: user.tokenVersion });
 
   // ورود موفق: شمارندهٔ خطاهای همان پنجره پاک می‌شود تا چند خطای قدیمی باعث 429 نشوند
-  await clearRateLimitDb(`login:phone:${phone}`, ...(ip ? [`login:ip:${ip}`] : []));
+  // کلید ساده تلفن هم پاک می شود تا سطل های قدیمی (پیش از ترکیب کلید) باقی نمانند
+  await clearRateLimitDb(phoneKey, `login:phone:${phone}`, ...(ipKey ? [ipKey] : []));
   // پاک‌سازی فرصت‌طلبانهٔ ردیف‌های منقضی — خرابی‌اش ورود را خراب نمی‌کند
   void cleanupExpiredRateLimitDb();
 

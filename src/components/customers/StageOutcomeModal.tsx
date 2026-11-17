@@ -7,6 +7,7 @@ import { LOST_REASON_LABELS, PROPERTY_TYPE_LABELS, DEAL_TYPE_LABELS } from "@/li
 import { formatTomanCompact, toFaDigits } from "@/lib/utils";
 import { apiJson } from "@/lib/api";
 import { useRole } from "@/hooks/useRole";
+import { Modal } from "@/components/ui/Modal";
 
 type PropertyOption = {
   id: string;
@@ -56,36 +57,7 @@ export function StageOutcomeModal({
   const [agents, setAgents] = useState<{ id: string; name: string }[]>([]);
   const propertyIdRef = useRef("");
   const { isOwner } = useRole();
-  const panelRef = useRef<HTMLDivElement>(null);
 
-  // نقد ۱۰ — مودال دیالوگ واقعی است: Escape می‌بندد و Tab داخل مودال می‌ماند
-  useEffect(() => {
-    const onKey = (e: KeyboardEvent) => {
-      if (e.key === "Escape") {
-        e.stopPropagation();
-        onClose();
-        return;
-      }
-      if (e.key !== "Tab" || !panelRef.current) return;
-      const els = panelRef.current.querySelectorAll<HTMLElement>(
-        'button, [href], input, select, textarea, [tabindex]:not([tabindex="-1"])'
-      );
-      const list = Array.from(els).filter((el) => !el.hasAttribute("disabled") && el.offsetParent !== null);
-      if (list.length === 0) return;
-      const first = list[0];
-      const last = list[list.length - 1];
-      if (e.shiftKey && document.activeElement === first) {
-        e.preventDefault();
-        last.focus();
-      } else if (!e.shiftKey && document.activeElement === last) {
-        e.preventDefault();
-        first.focus();
-      }
-    };
-    document.addEventListener("keydown", onKey, true);
-    panelRef.current?.querySelector<HTMLElement>("button, input, select, textarea")?.focus();
-    return () => document.removeEventListener("keydown", onKey, true);
-  }, [onClose]);
   const [notes, setNotes] = useState("");
   const [reasonCat, setReasonCat] = useState("OTHER");
   const [reasonDetail, setReasonDetail] = useState("");
@@ -170,15 +142,7 @@ export function StageOutcomeModal({
   }
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
-      <button type="button" className="absolute inset-0 bg-black/40" onClick={onClose} aria-label="بستن" />
-      <div
-        ref={panelRef}
-        role="dialog"
-        aria-modal="true"
-        aria-label={isWon ? "ثبت موفقیت مشتری" : "ثبت ناموفقی مشتری"}
-        className="relative max-h-[calc(100dvh-2rem)] w-full max-w-lg overflow-y-auto rounded-[16px] border border-[var(--line)] bg-white p-5 shadow-xl"
-      >
+    <Modal onClose={onClose} ariaLabel={isWon ? "ثبت موفقیت مشتری" : "ثبت ناموفقی مشتری"}>
         <h3 className={`text-[15px] font-extrabold ${isWon ? "text-emerald-700" : "text-red-700"}`}>
           {isWon ? "ثبت موفقیت مشتری" : "ثبت ناموفقی مشتری"}
         </h3>
@@ -338,7 +302,6 @@ export function StageOutcomeModal({
             <Button type="button" variant="ghost" onClick={onClose} disabled={saving}>انصراف</Button>
           </div>
         </form>
-      </div>
-    </div>
+    </Modal>
   );
 }

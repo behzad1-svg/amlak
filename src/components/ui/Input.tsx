@@ -73,13 +73,44 @@ export function PhoneInput({ className, onChange, ...props }: React.InputHTMLAtt
       className={cn(fieldBase, "text-right font-mono", className)}
       inputMode="numeric"
       dir="ltr"
-      maxLength={11}
       onChange={(e) => {
-        // ارقام فارسی/عربی اول به لاتین تبدیل می‌شوند، بعد فیلتر — onBeforeInput
-        // مسدودکننده حذف شد چون ارقام فارسی را پیش از رسیدن به onChange بلاک می‌کرد
+        // نرمال سازی پیش از برش: ارقام فارسی/عربی به لاتین تبدیل می شوند،
+        // فاصله و خط تیره حذف و +98/0098 ابتدای رشته به 0 تبدیل می شود؛
+        // بعد مقدار به ۱۱ رقم محدود می شود (برش مرورگر با maxLength برداشته
+        // شد چون پیش از نرمال سازی برش می زد). onBeforeInput مسدودکننده
+        // حذف شده چون ارقام فارسی را پیش از رسیدن به onChange بلاک می کرد.
         const converted = toEnDigits(e.target.value);
-        const filtered = converted.replace(/[^0-9]/g, "");
-        if (filtered !== e.target.value) keepCaret(e.target, converted, filtered);
+        const stripped = converted.replace(/[\s-]/g, "");
+        const normalized = stripped.replace(/^(?:\+98|0098)/, "0");
+        const filtered = normalized.replace(/[^0-9]/g, "").slice(0, 11);
+        if (filtered !== e.target.value) {
+          // keepCaret فرض می کند مقدار نهایی زیررشته ای از مقدار قبل است؛
+          // جایگزینی پیش شماره (+98/0098 با 0) این فرض را می شکند، پس
+          // مکان نما برای این مرحله دستی جابه جا و keepCaret فقط برای
+          // فیلتر/برش (حذف خالص) به کار می رود
+          const input = e.target;
+          const start = input.selectionStart ?? converted.length;
+          const end = input.selectionEnd ?? converted.length;
+          const mapPos = (pos: number) => {
+            let p = pos;
+            for (let i = 0; i < Math.min(pos, converted.length); i++) {
+              if (/[\s-]/.test(converted[i])) p--;
+            }
+            const prefix = stripped.match(/^(?:\+98|0098)/);
+            if (prefix) {
+              const len = prefix[0].length;
+              p = p > len ? p - (len - 1) : Math.min(p, 1);
+            }
+            return Math.max(0, p);
+          };
+          input.value = normalized;
+          try {
+            input.setSelectionRange(mapPos(start), mapPos(end));
+          } catch {
+            // ورودی هایی که انتخاب متن ندارند
+          }
+          keepCaret(input, normalized, filtered);
+        }
         onChange?.(e);
       }}
       {...props}
