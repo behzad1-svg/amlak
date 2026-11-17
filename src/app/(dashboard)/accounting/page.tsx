@@ -65,7 +65,7 @@ type CommissionDeal = {
   officeAmount: string | null;
   shares: ShareView[];
   customer: { id: string; name: string; phone: string };
-  property: { id: string; title: string; dealType: string; region: string };
+  property: { id: string; title: string; dealType: string; region: string; salePriceToman: string | null; depositToman: string | null; monthlyRentToman: string | null };
   agent: { id: string; name: string };
 };
 
@@ -1129,12 +1129,17 @@ export default function AccountingPage() {
               </p>
               <form onSubmit={saveEdit} className="mt-4 space-y-3">
                 {editingDeal.property.dealType === "SALE" ? (
-                  <MoneyInput
-                    label="قیمت فروش معامله (تومان)"
-                    value={editPrice}
-                    onChange={onEditPrice}
-                    placeholder="مثلا ۱۰۰۰۰۰۰۰۰۰۰"
-                  />
+                  <>
+                    <MoneyInput
+                      label="قیمت فروش معامله (تومان)"
+                      value={editPrice}
+                      onChange={onEditPrice}
+                      placeholder="مثلا ۱۰۰۰۰۰۰۰۰۰۰"
+                    />
+                    {editingDeal.property.salePriceToman ? (
+                      <p className="mt-1 text-[11px] text-[var(--ink-3)]">قیمت فایل: {formatToman(editingDeal.property.salePriceToman)}</p>
+                    ) : null}
+                  </>
                 ) : (
                   <>
                     <MoneyInput
@@ -1143,12 +1148,18 @@ export default function AccountingPage() {
                       onChange={(v) => setEditDeposit(toEnDigits(v).replace(/[^0-9]/g, ""))}
                       placeholder="مثلا ۵۰۰۰۰۰۰۰۰"
                     />
+                    {editingDeal.property.depositToman ? (
+                      <p className="mt-1 text-[11px] text-[var(--ink-3)]">ودیعه فایل: {formatToman(editingDeal.property.depositToman)}</p>
+                    ) : null}
                     <MoneyInput
                       label="اجاره ماهانه (تومان)"
                       value={editRent}
                       onChange={(v) => setEditRent(toEnDigits(v).replace(/[^0-9]/g, ""))}
                       placeholder="مثلا ۲۰۰۰۰۰۰۰"
                     />
+                    {editingDeal.property.monthlyRentToman ? (
+                      <p className="mt-1 text-[11px] text-[var(--ink-3)]">اجاره ماهانه فایل: {formatToman(editingDeal.property.monthlyRentToman)}</p>
+                    ) : null}
                   </>
                 )}
                 <div>

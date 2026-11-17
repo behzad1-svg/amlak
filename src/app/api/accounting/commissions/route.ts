@@ -42,7 +42,7 @@ export async function GET(req: NextRequest) {
     where,
     include: {
       customer: { select: { id: true, name: true, phone: true } },
-      property: { select: { id: true, title: true, dealType: true, region: true } },
+      property: { select: { id: true, title: true, dealType: true, region: true, salePriceToman: true, depositToman: true, monthlyRentToman: true } },
       agent: { select: { id: true, name: true } },
       shares: {
         select: { id: true, userId: true, name: true, pct: true, settled: true, settledAt: true },
