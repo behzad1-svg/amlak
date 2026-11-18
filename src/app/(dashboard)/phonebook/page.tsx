@@ -196,7 +196,9 @@ export default function PhonebookPage() {
     }
   }
 
-  if (loading) return <PageSkeleton rows={4} />;
+  // Skeleton only on first load: on filter/search changes the old list stays
+  // visible until the new result arrives, so the page does not jump.
+  if (loading && total === null) return <PageSkeleton rows={4} />;
   if (error) return <PageError message={error} onRetry={retry} />;
 
   return (
@@ -234,6 +236,7 @@ export default function PhonebookPage() {
         </div>
         <p className="text-[12px] text-[var(--ink-3)]">
           نمایش {toFaDigits(String(items.length))} از {toFaDigits(String(total ?? 0))} مخاطب
+          {loading && total !== null ? " — در حال بارگذاری..." : ""}
         </p>
         {items.length === 0 ? (
           <p className="text-zinc-400">مخاطبی ندارید</p>
