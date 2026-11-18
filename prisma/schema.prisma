@@ -29,6 +29,14 @@ enum CustomerTemperature {
   COLD
 }
 
+enum PhonebookGroup {
+  BUILDER
+  OWNER
+  BUYER
+  COLLEAGUE
+  OTHER
+}
+
 // نوع ملک: type در Property/Customer ترجیحاً یکی از مقادیر DEFAULT_PROPERTY_TYPES یا AppSetting است
 // (رشته آزاد می‌ماند تا مدیر بتواند از تنظیمات نوع جدید اضافه کند — enum دیتابیسی آن را می‌شکند)
 enum PropertyType {
@@ -164,6 +172,7 @@ model User {
   sessionCards   SessionCard[]      @relation("SessionCardAdvisor")
   sessionCardCoAdvising SessionCardCoAdvisor[] @relation("SessionCardCoAdvisorUser")
   contractManagedSessionCards SessionCard[] @relation("SessionCardContractManager")
+  phonebookContacts PhonebookContact[] @relation("PhonebookOwner")
 }
 
 model Customer {
@@ -226,6 +235,33 @@ model Customer {
   // یک شماره در هر دسته (مالک / مشتری) یک بار برای رکوردهای فعال —
   // یکتایی با partial unique index در دیتابیس است (prisma/partial-unique-customer-phone.sql)؛
   // db push نمی‌تواند partial index بسازد، پس @@unique اینجا نیست
+}
+
+// Phonebook (Didar-style): general contacts (builders, owners, colleagues),
+// kept separate from Customer so the customer pipeline stays clean.
+model PhonebookContact {
+  id        String         @id @default(cuid())
+  name      String
+  phone     String
+  phone2    String?
+  email     String?
+  group     PhonebookGroup @default(OTHER)
+  tags      String[]       @default([])
+  notes     String?
+  isVip     Boolean        @default(false)
+  isPinned  Boolean        @default(false)
+  isPrivate Boolean        @default(false)
+  deletedAt DateTime?
+
+  ownerId   String
+  owner     User           @relation("PhonebookOwner", fields: [ownerId], references: [id])
+  createdAt DateTime       @default(now())
+  updatedAt DateTime       @updatedAt
+
+  @@index([ownerId])
+  @@index([group])
+  @@index([name])
+  @@index([deletedAt, createdAt])
 }
 
 model CustomerTransfer {

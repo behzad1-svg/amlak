@@ -7,6 +7,8 @@ export const PERMISSIONS = [
   { key: "canDeleteProperty", label: "حذف فایل", defaultAgent: false },
   { key: "canCreateCustomer", label: "ثبت مشتری", defaultAgent: true },
   { key: "canCreateDeal", label: "ثبت معامله", defaultAgent: true },
+  { key: "canCreatePhonebook", label: "ثبت دفترچه تلفن", defaultAgent: true },
+  { key: "canDeletePhonebook", label: "حذف دفترچه تلفن", defaultAgent: false },
 ] as const;
 
 export type PermissionKey = (typeof PERMISSIONS)[number]["key"];

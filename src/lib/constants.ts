@@ -178,6 +178,20 @@ export const CUSTOMER_TYPE_LABELS: Record<string, string> = {
   OWNER: "مالک",
 };
 
+/** Phonebook groups (Didar-style grouping): builder, owner, buyer, colleague, other. */
+export const PHONEBOOK_GROUP_LABELS: Record<string, string> = {
+  BUILDER: "سازنده",
+  OWNER: "مالک",
+  BUYER: "خریدار",
+  COLLEAGUE: "همکار",
+  OTHER: "سایر",
+};
+
+export const PHONEBOOK_GROUP_OPTIONS = (Object.keys(PHONEBOOK_GROUP_LABELS) as string[]).map((value) => ({
+  value,
+  label: PHONEBOOK_GROUP_LABELS[value],
+}));
+
 /** رنگ پس‌زمینه کارت مشتری بر اساس نوع مشتری — برای پیدا کردن سریع نوع مشتری در کانبان.
  * بهزاد (۱۴۰۵/۰۸/۲۵): فروشنده همان مالک است و مستاجر همان مشتری (خریدار) — پس دو طرف بیشتر نیست:
  * مالک/فروشنده (عرضه) یک رنگ، خریدار/مستاجر (تقاضا) یک رنگ. برچسب روی کارت همچنان نوع دقیق را نشان می‌دهد. */

@@ -5,6 +5,17 @@ export function canAccessCustomer(user: { id: string; role: string }, customer: 
   return customer.assignedAgentId === user.id;
 }
 
+/** Phonebook (Didar-style view permission): OWNER sees all; a private
+ *  contact is visible only to its owner, a team contact to everyone. */
+export function canAccessPhonebookContact(
+  user: { id: string; role: string },
+  contact: { ownerId: string; isPrivate: boolean },
+): boolean {
+  if (user.role === "OWNER") return true;
+  if (!contact.isPrivate) return true;
+  return contact.ownerId === user.id;
+}
+
 /** حذف (soft-delete) رکوردهای اصلی فقط با نقش مدیر */
 export function canDeleteEntity(user: { role: string }): boolean {
   return user.role === "OWNER";

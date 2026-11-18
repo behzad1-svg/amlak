@@ -123,6 +123,22 @@ export const customerCreateSchema = z.object({
 
 export const customerUpdateSchema = customerCreateSchema.partial();
 
+/// Phonebook (Didar-style): name + mobile required, like Didar's family-name rule.
+export const phonebookCreateSchema = z.object({
+  name: z.string().min(1, "نام الزامی است").max(120),
+  phone: z.string().regex(/^[0-9]{11}$/, "شماره تماس باید ۱۱ رقم باشد"),
+  phone2: z.string().regex(/^[0-9]{11}$/, "شماره دوم باید ۱۱ رقم باشد").optional().nullable(),
+  email: z.string().email("ایمیل معتبر نیست").max(200).optional().nullable(),
+  group: z.enum(["BUILDER", "OWNER", "BUYER", "COLLEAGUE", "OTHER"]).optional(),
+  tags: z.array(z.string().min(1).max(30)).max(10).optional(),
+  notes: z.string().max(2000).optional().nullable(),
+  isVip: z.boolean().optional(),
+  isPinned: z.boolean().optional(),
+  isPrivate: z.boolean().optional(),
+});
+
+export const phonebookUpdateSchema = phonebookCreateSchema.partial();
+
 export const followUpCreateSchema = z.object({
   dueAt: z.string().min(1, "تاریخ پیگیری الزامی است"),
   note: z.string().max(1000).optional().nullable(),
