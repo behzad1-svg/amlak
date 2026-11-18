@@ -42,6 +42,9 @@ function readDraft(): CustomerDraft | null {
     for (const [k, v] of Object.entries(d.form)) {
       if (typeof v === "string" && k in form) form[k] = v;
     }
+    // The form no longer offers مالک/فروشنده (owners are created from the
+    // property form); an old draft with one of those types falls back to خریدار.
+    if (form.type === "OWNER" || form.type === "SELLER") form.type = "BUYER";
     return {
       form,
       areas: Array.isArray(d.areas) ? d.areas.filter((a): a is string => typeof a === "string") : [],
@@ -220,9 +223,7 @@ export default function NewCustomerPage() {
               className="mt-1"
             >
               <option value="BUYER">خریدار</option>
-              <option value="SELLER">فروشنده</option>
               <option value="TENANT">مستاجر</option>
-              <option value="OWNER">مالک</option>
             </Select>
           </div>
           {role === "OWNER" && agents.length > 0 && (
