@@ -198,7 +198,7 @@ export default function MatchingPage() {
           <div className="rounded-lg bg-red-50 px-3 py-2 text-sm text-red-700" role="alert">{actionError}</div>
         )}
         {list.length === 0 ? <p className="text-zinc-400">تطبیقی ندارید</p> : list.map((n) => (
-          <Card key={n.id} className={n.read ? "opacity-60" : "border-amber-200 bg-amber-50/30"}>
+          <Card key={n.id} className={n.read ? "bg-[var(--paper-2)]" : "border-amber-200 bg-amber-50/30"}>
             <div className="flex items-start justify-between gap-3">
               <div className="flex-1 min-w-0">
                 <div className="flex flex-wrap gap-2 mb-1"><Badge className={n.priority === "HIGH" ? "bg-red-100 text-red-700 border-red-200" : ""}>{PRIORITY_LABELS[n.priority] ?? n.priority}</Badge><Badge>تطبیق</Badge></div>

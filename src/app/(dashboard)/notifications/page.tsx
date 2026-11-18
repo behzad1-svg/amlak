@@ -166,7 +166,7 @@ export default function NotificationsPage() {
           ))}
         </div>
         {filtered.length === 0 ? <p className="text-zinc-400">{list.length === 0 ? "اعلانی ندارید" : "در این دسته اعلانی ندارید"}</p> : filtered.map((n) => (
-          <Card key={n.id} className={n.read ? "opacity-60" : "border-amber-200 bg-amber-50/30"}>
+          <Card key={n.id} className={n.read ? "bg-[var(--paper-2)]" : "border-amber-200 bg-amber-50/30"}>
             <div className="flex items-start justify-between gap-3">
               <div className="flex-1 min-w-0">
                 <div className="flex flex-wrap gap-2 mb-1"><Badge className={n.priority === "HIGH" ? "bg-red-100 text-red-700 border-red-200" : ""}>{PRIORITY_LABELS[n.priority] ?? n.priority}</Badge><Badge>{TYPE_LABELS[n.type] ?? n.type}</Badge></div>

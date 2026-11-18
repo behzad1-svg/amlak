@@ -1,7 +1,11 @@
-// Phonebook (Didar-style): general contacts, separate from customers.
-// Fast lookup by name or number, groups, VIP/pin, click-to-call.
+// Phonebook: ONE directory — phonebook contacts + customers together.
+// A customer shows with the مالک/خریدار tag, read live (never copied).
+// An advisor sees only the numbers they registered themselves, same rule
+// as files/customers; OWNER sees all. Fast lookup by name or number,
+// groups, VIP/pin, click-to-call.
 "use client";
 import { useCallback, useState } from "react";
+import Link from "next/link";
 import { Header } from "@/components/layout/Header";
 import { Button } from "@/components/ui/Button";
 import { Badge } from "@/components/ui/Badge";
@@ -29,6 +33,8 @@ type ContactRow = {
   isPrivate: boolean;
   owner: { id: string; name: string } | null;
   createdAt: string;
+  source: "phonebook" | "customer";
+  customerId: string | null;
 };
 
 type FormState = {
@@ -41,7 +47,6 @@ type FormState = {
   notes: string;
   isVip: boolean;
   isPinned: boolean;
-  isPrivate: boolean;
 };
 
 const EMPTY_FORM: FormState = {
@@ -54,7 +59,6 @@ const EMPTY_FORM: FormState = {
   notes: "",
   isVip: false,
   isPinned: false,
-  isPrivate: false,
 };
 
 const GROUP_FILTERS = [{ value: "all", label: "همه" }, ...PHONEBOOK_GROUP_OPTIONS];
@@ -106,7 +110,6 @@ export default function PhonebookPage() {
         notes: contact.notes ?? "",
         isVip: contact.isVip,
         isPinned: contact.isPinned,
-        isPrivate: contact.isPrivate,
       });
     } else {
       setEditing(null);
@@ -143,7 +146,6 @@ export default function PhonebookPage() {
         notes: form.notes.trim() || null,
         isVip: form.isVip,
         isPinned: form.isPinned,
-        isPrivate: form.isPrivate,
       };
       if (editing) {
         await apiFetch(`/api/phonebook/${editing.id}`, {
@@ -246,8 +248,15 @@ export default function PhonebookPage() {
               <div className="flex items-start justify-between gap-3">
                 <div className="flex-1 min-w-0">
                   <div className="flex flex-wrap items-center gap-2">
-                    <span className="text-[14px] font-bold">{c.name}</span>
+                    {c.customerId ? (
+                      <Link href={`/customers/${c.customerId}`} className="text-[14px] font-bold underline underline-offset-2">
+                        {c.name}
+                      </Link>
+                    ) : (
+                      <span className="text-[14px] font-bold">{c.name}</span>
+                    )}
                     <Badge>{PHONEBOOK_GROUP_LABELS[c.group] ?? c.group}</Badge>
+                    {c.customerId && <Badge className="bg-[#EFF4FF] text-[#2F5D8A] border-[#A8C4EA]">مشتری</Badge>}
                     {c.isVip && <Badge className="bg-red-100 text-red-700 border-red-200">مهم</Badge>}
                     {c.isPinned && <Badge className="bg-amber-100 text-amber-800 border-amber-200">پین شده</Badge>}
                     {c.isPrivate && <Badge>خصوصی</Badge>}
@@ -275,20 +284,22 @@ export default function PhonebookPage() {
                   {c.notes && <p className="mt-1 text-[13px] leading-6 text-[var(--ink-2)] break-words">{c.notes}</p>}
                   {c.owner && <p className="mt-1 text-[11px] text-[var(--ink-3)]">ثبت کننده: {c.owner.name}</p>}
                 </div>
-                <div className="flex shrink-0 flex-col gap-2">
-                  <Button size="sm" variant="outline" onClick={() => toggleFlag(c, "isPinned")}>
-                    {c.isPinned ? "برداشتن پین" : "پین"}
-                  </Button>
-                  <Button size="sm" variant="outline" onClick={() => toggleFlag(c, "isVip")}>
-                    {c.isVip ? "برداشتن مهم" : "مهم"}
-                  </Button>
-                  <Button size="sm" variant="outline" onClick={() => openForm(c)}>
-                    ویرایش
-                  </Button>
-                  <Button size="sm" variant="ghost" onClick={() => setDeleting(c)}>
-                    حذف
-                  </Button>
-                </div>
+                {c.source === "phonebook" && (
+                  <div className="flex shrink-0 flex-col gap-2">
+                    <Button size="sm" variant="outline" onClick={() => toggleFlag(c, "isPinned")}>
+                      {c.isPinned ? "برداشتن پین" : "پین"}
+                    </Button>
+                    <Button size="sm" variant="outline" onClick={() => toggleFlag(c, "isVip")}>
+                      {c.isVip ? "برداشتن مهم" : "مهم"}
+                    </Button>
+                    <Button size="sm" variant="outline" onClick={() => openForm(c)}>
+                      ویرایش
+                    </Button>
+                    <Button size="sm" variant="ghost" onClick={() => setDeleting(c)}>
+                      حذف
+                    </Button>
+                  </div>
+                )}
               </div>
             </Card>
           ))
@@ -357,10 +368,6 @@ export default function PhonebookPage() {
               <label className="flex items-center gap-2">
                 <input type="checkbox" checked={form.isPinned} onChange={(e) => upd("isPinned", e.target.checked)} />
                 پین شده
-              </label>
-              <label className="flex items-center gap-2">
-                <input type="checkbox" checked={form.isPrivate} onChange={(e) => upd("isPrivate", e.target.checked)} />
-                خصوصی (فقط خودم و مدیر)
               </label>
             </div>
             <div className="flex gap-2">

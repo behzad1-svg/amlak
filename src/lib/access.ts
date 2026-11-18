@@ -5,14 +5,14 @@ export function canAccessCustomer(user: { id: string; role: string }, customer: 
   return customer.assignedAgentId === user.id;
 }
 
-/** Phonebook (Didar-style view permission): OWNER sees all; a private
- *  contact is visible only to its owner, a team contact to everyone. */
+/** Phonebook visibility (Behzad's rule, same as files/customers): an advisor
+ *  sees only the numbers they registered themselves; OWNER sees all.
+ *  The old Didar-style "team contact visible to everyone" does not apply. */
 export function canAccessPhonebookContact(
   user: { id: string; role: string },
   contact: { ownerId: string; isPrivate: boolean },
 ): boolean {
   if (user.role === "OWNER") return true;
-  if (!contact.isPrivate) return true;
   return contact.ownerId === user.id;
 }
 

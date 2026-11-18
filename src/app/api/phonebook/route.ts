@@ -5,6 +5,7 @@ import { findInvalidQueryParam, phonebookCreateSchema } from "@/lib/validation";
 import { createAuditLog } from "@/lib/audit";
 import { hasPermission } from "@/lib/permissions";
 import { persianSearchOr } from "@/lib/search";
+import { mergePhonebookRows } from "@/lib/phonebookMerge";
 
 const GROUPS = ["BUILDER", "OWNER", "BUYER", "COLLEAGUE", "OTHER"];
 
@@ -30,14 +31,15 @@ export async function GET(req: NextRequest) {
     return NextResponse.json({ error: "مقدار «group» معتبر نیست" }, { status: 400 });
   }
 
-  const and: Record<string, unknown>[] = [{ deletedAt: null }];
-  // Didar-style view permission: a private contact is visible only to its
-  // owner (and OWNER); team contacts are visible to everyone.
-  if (session.user.role !== "OWNER") {
-    and.push({ OR: [{ isPrivate: false }, { ownerId: session.user.id }] });
-  }
+  const isOwner = session.user.role === "OWNER";
+  const MERGE_CAP = 500;
+
+  // Phonebook contacts: an advisor sees only the numbers they registered
+  // themselves — the same rule as files/customers; OWNER sees all.
+  const pbAnd: Record<string, unknown>[] = [{ deletedAt: null }];
+  if (!isOwner) pbAnd.push({ ownerId: session.user.id });
   if (search) {
-    and.push({
+    pbAnd.push({
       OR: [
         ...persianSearchOr(["name"], search),
         { phone: { contains: search } },
@@ -46,25 +48,60 @@ export async function GET(req: NextRequest) {
       ],
     });
   }
-  if (group) and.push({ group });
-  if (vip) and.push({ isVip: true });
-  if (pinned) and.push({ isPinned: true });
+  if (group) pbAnd.push({ group });
+  if (vip) pbAnd.push({ isVip: true });
+  if (pinned) pbAnd.push({ isPinned: true });
 
-  const where = { AND: and } as Record<string, unknown>;
-  const [contacts, total] = await Promise.all([
+  // Customers appear in the same list, tagged مالک/خریدار — read live, never
+  // copied. They have no VIP/pin flags, so those filters exclude them; and
+  // they never map to the سازنده/همکار/سایر groups.
+  let includeCustomers = !vip && !pinned;
+  const cuAnd: Record<string, unknown>[] = [{ deletedAt: null }];
+  if (!isOwner) cuAnd.push({ assignedAgentId: session.user.id });
+  if (search) {
+    cuAnd.push({
+      OR: [...persianSearchOr(["name"], search), { phone: { contains: search } }],
+    });
+  }
+  if (group === "OWNER") cuAnd.push({ type: { in: ["OWNER", "SELLER"] } });
+  else if (group === "BUYER") cuAnd.push({ type: { in: ["BUYER", "TENANT"] } });
+  else if (group) includeCustomers = false;
+
+  const [contacts, customers] = await Promise.all([
     prisma.phonebookContact.findMany({
-      where,
+      where: { AND: pbAnd } as Record<string, unknown>,
       include: { owner: { select: { id: true, name: true } } },
       orderBy: [{ isPinned: "desc" }, { name: "asc" }, { createdAt: "desc" }],
-      skip: (page - 1) * limit,
-      take: limit,
+      take: MERGE_CAP,
     }),
-    prisma.phonebookContact.count({ where }),
+    includeCustomers
+      ? prisma.customer.findMany({
+          where: { AND: cuAnd } as Record<string, unknown>,
+          select: {
+            id: true,
+            name: true,
+            phone: true,
+            type: true,
+            tags: true,
+            notes: true,
+            createdAt: true,
+            assignedAgent: { select: { id: true, name: true } },
+          },
+          orderBy: { name: "asc" },
+          take: MERGE_CAP,
+        })
+      : [],
   ]);
 
+  // One directory: merge in memory (small lists) and paginate the result,
+  // so counts and "load more" stay consistent across both sources.
+  const merged = mergePhonebookRows(contacts, customers);
+  const total = merged.length;
+
   const isDefaultPage = !searchParams.has("page") && !searchParams.has("limit");
-  if (isDefaultPage) return NextResponse.json(contacts);
-  return NextResponse.json({ contacts, total, page, limit });
+  if (isDefaultPage) return NextResponse.json(merged);
+  const start = (page - 1) * limit;
+  return NextResponse.json({ contacts: merged.slice(start, start + limit), total, page, limit });
 }
 
 export async function POST(req: NextRequest) {
