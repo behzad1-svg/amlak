@@ -1,7 +1,7 @@
 "use client";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { LayoutDashboard, Users, Building2, Bell, GitMerge, CalendarClock, BarChart3, Settings, PanelLeftOpen, UserCog, TrendingUp, Wallet } from "lucide-react";
+import { LayoutDashboard, Users, BookUser, Building2, Bell, GitMerge, CalendarClock, BarChart3, Settings, PanelLeftOpen, UserCog, TrendingUp, Wallet } from "lucide-react";
 import { cn } from "@/lib/utils";
 import Image from "next/image";
 
@@ -13,6 +13,7 @@ const nav = [
   { href: "/matching", icon: GitMerge },
   { href: "/session-cards", icon: CalendarClock },
   { href: "/accounting", icon: Wallet },
+  { href: "/phonebook", icon: BookUser },
 ];
 
 export function SidebarMini({ role, userName, unreadCount, unreadMatchCount, pendingSessionCardCount, onExpand }: { role?: string; userName?: string; unreadCount?: number; unreadMatchCount?: number; pendingSessionCardCount?: number; onExpand?: () => void }) {

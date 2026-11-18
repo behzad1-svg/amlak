@@ -8,12 +8,12 @@ import Image from "next/image";
 const nav = [
   { href: "/dashboard", label: "داشبورد", icon: LayoutDashboard },
   { href: "/customers", label: "مشتریان", icon: Users },
-  { href: "/phonebook", label: "دفترچه تلفن", icon: BookUser },
   { href: "/properties", label: "فایل‌ها", icon: Building2 },
   { href: "/notifications", label: "اعلان‌ها", icon: Bell },
   { href: "/matching", label: "تطبیق", icon: GitMerge },
   { href: "/session-cards", label: "کارت جلسه", icon: CalendarClock },
   { href: "/accounting", label: "حسابداری", icon: Wallet },
+  { href: "/phonebook", label: "دفترچه تلفن", icon: BookUser },
 ];
 
 export function Sidebar({ role, userName, unreadCount, unreadMatchCount, pendingSessionCardCount, onClose }: { role?: string; userName?: string; unreadCount?: number; unreadMatchCount?: number; pendingSessionCardCount?: number; onClose?: () => void }) {
