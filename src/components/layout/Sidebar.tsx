@@ -97,6 +97,8 @@ export function Sidebar({ role, userName, unreadCount, unreadMatchCount, pending
             >
               <UserCog className={cn("h-[18px] w-[18px]", pathname?.startsWith("/users") ? "text-white" : "text-[var(--ink-3)]")} /> کاربران
             </Link>
+          </>
+        )}
             <Link
               href="/reports"
               onClick={onClose}
@@ -107,8 +109,6 @@ export function Sidebar({ role, userName, unreadCount, unreadMatchCount, pending
             >
               <TrendingUp className={cn("h-[18px] w-[18px]", pathname?.startsWith("/reports") ? "text-white" : "text-[var(--ink-3)]")} /> گزارش عملکرد
             </Link>
-          </>
-        )}
         <Link
           href="/settings"
           onClick={onClose}

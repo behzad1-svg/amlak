@@ -85,17 +85,16 @@ export default function ReportsPage() {
     }
   }, []);
 
-  // گزارش فقط بعد از مشخص شدن نقش و فقط برای مدیر فراخوانی می‌شود —
-  // وگرنه هر مشاور در هر بازدید یک ۴۰۳ اضافی می‌زد
+  // Fetch the report only after the role is known — otherwise every visit
+  // would fire an extra request.
   useEffect(() => {
-    if (roleLoading || !isOwner) return;
+    if (roleLoading) return;
     void (async () => {
       await load(range);
     })();
-  }, [range, roleLoading, isOwner, load]);
+  }, [range, roleLoading, load]);
 
   if (roleLoading) return <PageSkeleton rows={4} />;
-  if (!isOwner) return <p className="p-6 text-[var(--ink-2)]">این صفحه فقط برای مدیر است.</p>;
   if (loading) return <PageSkeleton rows={4} />;
   if (loadError || !data) return <PageError message={loadError ?? "داده بارگذاری نشد."} onRetry={() => load(range)} />;
 
@@ -104,7 +103,7 @@ export default function ReportsPage() {
     <div>
       <Header
         title="گزارش عملکرد"
-        subtitle={`عملکرد مشاوران در ${toFaDigits(String(data.range))} روز گذشته — به تفکیک هر مشاور`}
+        subtitle={isOwner ? `عملکرد مشاوران در ${toFaDigits(String(data.range))} روز گذشته — به تفکیک هر مشاور` : `عملکرد شما در ${toFaDigits(String(data.range))} روز گذشته`}
         action={
           <div className="flex gap-2">
             {([7, 30, 90] as const).map((r) => (

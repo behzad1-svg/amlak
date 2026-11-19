@@ -4,20 +4,20 @@ import { getSessionFromCookies } from "@/lib/auth";
 import { serializeBigInt } from "@/lib/utils";
 
 /**
- * گزارش عملکرد مشاوران — فقط مدیر.
- * GET /api/reports/performance?range=7|30|90 (پیش‌فرض ۳۰ روز)
- * به‌ازای هر کاربر فعال — به‌علاوهٔ کاربران غیرفعالی که در همین بازه فعالیتی
- * داشته‌اند (تا سابقه‌شان از جدول و جمع کل ناپدید نشود): فایل ثبت‌شده، کارشناسی،
- * آگهی، کارت جلسه، فایل‌یابی، بازدید (غیر از لغوشده)، قرارداد (معامله قطعی) و
- * پیگیری عقب‌افتادهٔ جاری. «قرارداد» با تاریخ قرارداد (contractAt) سنجیده می‌شود؛
- * برای معامله‌های قدیمیِ بدون contractAt، تاریخ ثبت (createdAt) ملاک است.
+ * Performance report — OWNER sees everyone, each advisor sees only themself.
+ * GET /api/reports/performance?range=7|30|90 (default 30 days)
+ * OWNER: one row per active user, plus inactive users with activity in range
+ * (so their history does not vanish from the table and totals). AGENT: only
+ * their own row (and totals equal to that row) — no other row or total is
+ * returned. Metrics: files filed, appraisals, advertised, session cards,
+ * file findings, viewings (except canceled), deals (completed) and currently
+ * overdue follow-ups. "Deals" are measured by contract date (contractAt);
+ * old deals without contractAt fall back to createdAt.
  */
 export async function GET(req: NextRequest) {
   const session = await getSessionFromCookies();
   if (!session) return NextResponse.json({ error: "وارد نشده‌اید" }, { status: 401 });
-  if (session.user.role !== "OWNER") {
-    return NextResponse.json({ error: "فقط مدیر به گزارش عملکرد دسترسی دارد" }, { status: 403 });
-  }
+  const isOwner = session.user.role === "OWNER";
 
   const rawRange = new URL(req.url).searchParams.get("range") ?? "30";
   const range = ["7", "30", "90"].includes(rawRange) ? parseInt(rawRange) : 30;
@@ -101,17 +101,31 @@ export async function GET(req: NextRequest) {
   const dealMap = new Map([...dealIdsByUser.entries()].map(([userId, ids]) => [userId, ids.size]));
   const overdueMap = new Map(overdue.map((r) => [r.assignedAgentId, r._count]));
 
-  // کاربران غیرفعالِ دارای فعالیت در بازه هم ردیف می‌گیرند — وگرنه سابقه‌شان ناپدید می‌شود
-  const activeIds = new Set(activeUsers.map((u) => u.id));
-  const groupByMaps = [filesMap, appraisalMap, advertisedMap, sessionCardsMap, findingMap, viewingMap, dealMap, overdueMap];
-  const missingIds = [...new Set(groupByMaps.flatMap((m) => [...m.keys()]))].filter((id) => !activeIds.has(id));
-  const inactiveUsers =
-    missingIds.length > 0
-      ? await prisma.user.findMany({ where: { id: { in: missingIds } }, select: { id: true, name: true, role: true }, orderBy: { name: "asc" } })
-      : [];
-  const users = [...activeUsers.map((u) => ({ ...u, active: true })), ...inactiveUsers.map((u) => ({ ...u, active: false }))].sort((a, b) =>
-    a.name.localeCompare(b.name, "fa")
-  );
+  // An advisor gets only their own row; OWNER gets all active users plus
+  // inactive users with activity in range (otherwise their history vanishes).
+  // The response is built only from this `users` list, so for an advisor no
+  // other row or total leaks — even via a direct API call.
+  type ReportUser = { id: string; name: string; role: string; active: boolean };
+  let users: ReportUser[];
+  if (isOwner) {
+    const activeIds = new Set(activeUsers.map((u) => u.id));
+    const groupByMaps = [filesMap, appraisalMap, advertisedMap, sessionCardsMap, findingMap, viewingMap, dealMap, overdueMap];
+    const missingIds = [...new Set(groupByMaps.flatMap((m) => [...m.keys()]))].filter((id) => !activeIds.has(id));
+    const inactiveUsers =
+      missingIds.length > 0
+        ? await prisma.user.findMany({ where: { id: { in: missingIds } }, select: { id: true, name: true, role: true }, orderBy: { name: "asc" } })
+        : [];
+    users = [...activeUsers.map((u) => ({ ...u, active: true })), ...inactiveUsers.map((u) => ({ ...u, active: false }))].sort((a, b) =>
+      a.name.localeCompare(b.name, "fa")
+    );
+  } else {
+    const self = await prisma.user.findUnique({
+      where: { id: session.user.id },
+      select: { id: true, name: true, role: true, active: true },
+    });
+    if (!self) return NextResponse.json({ error: "کاربر یافت نشد" }, { status: 401 });
+    users = [self];
+  }
 
   const rows = users.map((u) => ({
     id: u.id,
