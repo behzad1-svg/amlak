@@ -8,18 +8,17 @@ import { toFaDigits } from "./utils";
  * مبنای تقسیم = کمیسیون + شیرینی فروشنده + شیرینی خریدار؛ درصدها روی همین
  * جمع اعمال می‌شوند و هر سهم جداگانه تسویه می‌شود. مالیات اینجا نیست.
  *
- * معامله‌های قدیمی که سهم واقعی ندارند، عددشان عوض نمی‌شود: همه‌جا با یک
- * سهم مجازی ۱۰۰٪ برای مشاور معامله دیده می‌شوند (سهم دفتر صفر، تسویه‌شده
- * بودنش همان commissionPaid معامله است). وقتی مدیر روی چنین معامله‌ای
- * تقسیم را ویرایش کند، سهم‌های واقعی ساخته می‌شوند.
+ * معامله‌های قدیمی که سهم واقعی ندارند، از درصد دفتر ذخیره‌شده استفاده
+ * می‌کنند: دفتر officePct٪ از مبنا می‌گیرد و بقیه (۱۰۰ − officePct) با یک
+ * سهم مجازی به مشاور معامله می‌رسد (تسویه‌شده بودنش همان commissionPaid
+ * معامله است). وقتی مدیر روی چنین معامله‌ای تقسیم را ویرایش کند، سهم‌های
+ * واقعی ساخته می‌شوند. این قانون از ۲۰۲۶-۱۱-۲۰ است (تصمیم بهزاد: دفتر
+ * خودش یک طرف حساب است و سهم و درآمدش باید مشخص باشد)؛ پیش از آن سهم
+ * مجازی ۱۰۰٪ بود و سهم دفتر صفر حساب می‌شد.
  *
- * قانون طلایی: سهم دفتر ذخیره‌شده (officePct) فقط وقتی معنا دارد که سهم
- * واقعی وجود داشته باشد؛ برای معامله بدون سهم، resolveSplit سهم دفتر را
- * صفر می‌گیرد و officePct ذخیره‌شده نادیده گرفته می‌شود. پس هیچ گزارش
- * یا خلاصه‌ای نباید officePct ذخیره‌شده را مستقیم بخواند — همه مسیرها
- * باید از resolveSplit بگذرند، وگرنه عددشان با گزارش‌های دیگر نمی‌خواند
- * (مثال زنده: F-0022 و F-0023 هر کدام officePct=۵۰٪ دارند ولی سهم
- * دفتر مؤثرشان صفر است).
+ * قانون طلایی: هیچ گزارش یا خلاصه‌ای نباید officePct ذخیره‌شده را مستقیم
+ * بخواند — همه مسیرها باید از resolveSplit بگذرند، وگرنه عددشان با
+ * گزارش‌های دیگر نمی‌خواند.
  */
 
 export type ShareInput = {
@@ -148,7 +147,7 @@ export function dealTaxBase(deal: { commissionToman: bigint | null }): bigint {
   return deal.commissionToman ?? BigInt(0);
 }
 
-/** سهم‌بندی حل‌شدهٔ یک معامله — واقعی اگر سهم دارد، وگرنه مجازی ۱۰۰٪ برای مشاور معامله. */
+/** سهم‌بندی حل‌شدهٔ یک معامله — واقعی اگر سهم دارد، وگرنه دفتر officePct ذخیره‌شده + بقیه مجازی برای مشاور معامله. */
 export function resolveSplit(deal: DealLike): ResolvedSplit {
   const base = dealSplittable(deal);
   if (deal.shares.length > 0) {
@@ -170,22 +169,29 @@ export function resolveSplit(deal: DealLike): ResolvedSplit {
     };
   }
   if (base <= BigInt(0)) return { officePct: 0, officeAmount: BigInt(0), shares: [] };
+  // معامله بدون سهم واقعی: دفتر officePct ذخیره‌شده را می‌گیرد و بقیه به‌صورت
+  // سهم مجازی به مشاور معامله می‌رسد. اگر دفتر ۱۰۰٪ باشد سهمی برای مشاور نمی‌ماند.
+  const officePct = Math.min(100, Math.max(0, Number(deal.officePct ?? 0)));
+  const agentPct = 100 - officePct;
   return {
-    officePct: 0,
-    officeAmount: BigInt(0),
-    shares: [
-      {
-        id: null,
-        userId: deal.agentId,
-        name: deal.agent?.name ?? "مشاور معامله",
-        pct: 100,
-        settled: deal.commissionPaid,
-        settledAt: null,
-        isExternal: false,
-        amount: base,
-        virtual: true,
-      },
-    ],
+    officePct,
+    officeAmount: shareAmount(base, officePct),
+    shares:
+      agentPct > 0
+        ? [
+            {
+              id: null,
+              userId: deal.agentId,
+              name: deal.agent?.name ?? "مشاور معامله",
+              pct: agentPct,
+              settled: deal.commissionPaid,
+              settledAt: null,
+              isExternal: false,
+              amount: shareAmount(base, agentPct),
+              virtual: true,
+            },
+          ]
+        : [],
   };
 }
 

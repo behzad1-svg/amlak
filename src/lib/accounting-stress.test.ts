@@ -29,8 +29,11 @@ const TOTAL_RANDOM = Number(process.env.STRESS_SCENARIOS ?? 481);
 const BASELINE = {
   dealsCompleted: 5,
   commissionTotal: BigInt(350_000_000),
-  officeTotal: BigInt(60_500_000),
-  debtToAgents: BigInt(290_500_000),
+  // New split rule (Behzad 2026-11-20): share-less legacy deals F-0022/F-0023
+  // pay their stored officePct=50 to the office — office 60.5M -> 180.5M,
+  // advisor debt 290.5M -> 170.5M; the 351M total is unchanged.
+  officeTotal: BigInt(180_500_000),
+  debtToAgents: BigInt(170_500_000),
   shiriniTotal: BigInt(1_000_000),
   taxTotal: BigInt(35_000_000),
   cashboxBalance: BigInt(0),
@@ -143,24 +146,11 @@ const bi = (v: any): bigint => (v == null ? BigInt(0) : BigInt(v));
 // Failures are collected with full context instead of aborting the run.
 type Failure = { scenario: string; step: string; detail: string };
 const failures: Failure[] = [];
-const knownFindings: Failure[] = [];
 function check(scenario: string, step: string, cond: boolean, detail: string) {
   if (!cond) failures.push({ scenario, step, detail });
   return cond;
 }
 
-/**
- * A failure that is a KNOWN, already-documented product semantic (not a new
- * regression): recorded separately so the run can still be green while the
- * finding stays visible. Currently: the legacy virtual-share rule in
- * resolveSplit — a deal with stored officePct=100 but no real shares pays
- * 100% to the deal's agent (virtual share) and 0 to the office. Changing
- * that rule would move live totals for the legacy test deals F-0022/F-0023,
- * so it needs Behzad's decision; see audit §4 issue 2 / §8.
- */
-function recordFinding(scenario: string, step: string, detail: string) {
-  knownFindings.push({ scenario, step, detail });
-}
 function expectStatus(scenario: string, step: string, r: CallResult, want: number) {
   check(scenario, step, r.status === want, `expected HTTP ${want}, got ${r.status}: ${JSON.stringify(r.json).slice(0, 300)}`);
   return r.status === want;
@@ -223,10 +213,17 @@ function mirrorSplit(d: DbDeal): { officePct: number; officeAmount: bigint; shar
     };
   }
   if (base <= BigInt(0)) return { officePct: 0, officeAmount: BigInt(0), shares: [] };
+  // New rule (Behzad 2026-11-20): a share-less deal pays the stored officePct
+  // to the office and the remainder to the deal agent as a virtual share.
+  const officePct = Math.min(100, Math.max(0, Number(d.officePct ?? 0)));
+  const agentPct = 100 - officePct;
   return {
-    officePct: 0,
-    officeAmount: BigInt(0),
-    shares: [{ id: null, userId: d.agentId, name: "agent", pct: 100, settled: d.commissionPaid, isExternal: false, amount: base }],
+    officePct,
+    officeAmount: roundShare(base, officePct),
+    shares:
+      agentPct > 0
+        ? [{ id: null, userId: d.agentId, name: "agent", pct: agentPct, settled: d.commissionPaid, isExternal: false, amount: roundShare(base, agentPct) }]
+        : [],
   };
 }
 
@@ -935,9 +932,8 @@ describeOrSkip("accounting stress — 500 scenarios on the live database", () =>
       failures.push({ scenario: "cleanup", step: "baseline-summary", detail: `summary GET returned ${s.status}` });
     }
     const secs = ((Date.now() - startTime) / 1000).toFixed(1);
-    console.log(`[stress] scenarios=${scenariosRun} failures=${failures.length} knownFindings=${knownFindings.length} elapsed=${secs}s`);
+    console.log(`[stress] scenarios=${scenariosRun} failures=${failures.length} elapsed=${secs}s`);
     for (const f of failures.slice(0, 50)) console.log(`[stress-fail] ${f.scenario} :: ${f.step} :: ${f.detail}`);
-    for (const f of knownFindings) console.log(`[stress-known-finding] ${f.scenario} :: ${f.step} :: ${f.detail}`);
   }, 180_000);
 
   // --- deterministic edge cases (30 scenarios) ---
@@ -1348,16 +1344,10 @@ describeOrSkip("accounting stress — 500 scenarios on the live database", () =>
     setSession(ownerUser);
     const list = await callGET(commissionsGET, `${BASE_URL}/api/accounting/commissions?paid=all`);
     const row = (list.json as any[]).find((d) => d.id === dealId);
-    // Stored officePct is 100, so the office should receive the whole base —
-    // but the legacy virtual-share rule pays 100% to the deal's agent instead.
-    // KNOWN FINDING (audit §4 issue 2): recorded, not a new failure.
-    if (!row || BigInt(row.officeAmount ?? 0) !== BigInt(30_000_000)) {
-      recordFinding(
-        tag,
-        "office-100-means-office-gets-all",
-        `officeAmount=${row?.officeAmount} shares=${JSON.stringify(row?.shares)} — stored officePct=100 yields office 0 and a 100% VIRTUAL share to the deal agent`,
-      );
-    }
+    // Stored officePct is 100, so the office receives the whole base and the
+    // deal agent gets no (virtual) share — new rule, Behzad 2026-11-20.
+    check(tag, "office-100-means-office-gets-all", !!row && BigInt(row.officeAmount ?? 0) === BigInt(30_000_000), `officeAmount=${row?.officeAmount} shares=${JSON.stringify(row?.shares)}`);
+    check(tag, "office-100-means-no-agent-share", !!row && (row.shares as any[]).length === 0, `shares=${JSON.stringify(row?.shares)}`);
     scenariosRun += 1;
     await verifyGlobal(tag);
   });
@@ -1397,9 +1387,6 @@ describeOrSkip("accounting stress — 500 scenarios on the live database", () =>
   it("final: failure count is zero", () => {
     if (failures.length > 0) {
       console.log(`[stress] ${failures.length} failures recorded (see afterAll log)`);
-    }
-    if (knownFindings.length > 0) {
-      console.log(`[stress] ${knownFindings.length} known finding(s) recorded (documented semantics, not new failures)`);
     }
     expect(failures.length, failures.slice(0, 10).map((f) => `${f.scenario}::${f.step}::${f.detail}`).join("\n")).toBe(0);
   });

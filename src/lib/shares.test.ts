@@ -137,21 +137,36 @@ describe("resolveSplit", () => {
     expect(split.officeAmount).toBe(BigInt(0));
   });
 
-  it("gives old deals without shares a virtual 100% share for the deal agent", () => {
+  it("gives deals without shares the stored office share and a virtual remainder share for the deal agent", () => {
     const split = resolveSplit({ ...dealWithShares(), shares: [] });
-    expect(split.officePct).toBe(0);
-    expect(split.officeAmount).toBe(BigInt(0));
+    expect(split.officePct).toBe(50);
+    expect(split.officeAmount).toBe(BigInt(50_000_000));
     expect(split.shares).toHaveLength(1);
     expect(split.shares[0]).toMatchObject({
       id: null,
       userId: "agent-1",
       name: "مشاور تست",
-      pct: 100,
+      pct: 50,
       settled: false,
       isExternal: false,
-      amount: BigInt(100_000_000),
+      amount: BigInt(50_000_000),
       virtual: true,
     });
+  });
+
+  it("gives the office everything when a share-less deal stores officePct 100", () => {
+    const split = resolveSplit({ ...dealWithShares(), shares: [], officePct: 100 });
+    expect(split.officePct).toBe(100);
+    expect(split.officeAmount).toBe(BigInt(100_000_000));
+    expect(split.shares).toEqual([]);
+  });
+
+  it("scales the virtual share with the stored office share", () => {
+    const split = resolveSplit({ ...dealWithShares(), shares: [], officePct: 25 });
+    expect(split.officePct).toBe(25);
+    expect(split.officeAmount).toBe(BigInt(25_000_000));
+    expect(split.shares).toHaveLength(1);
+    expect(split.shares[0]).toMatchObject({ pct: 75, amount: BigInt(75_000_000), virtual: true });
   });
 
   it("marks the virtual share settled when the deal commission is paid", () => {
