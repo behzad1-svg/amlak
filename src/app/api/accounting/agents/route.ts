@@ -14,6 +14,13 @@ import { dealSplittable, resolveSplit } from "@/lib/shares";
  * دارد (سهم واقعی یا سهم مجازی معامله بدون سهم)؛ حجم فروش فقط از
  * معامله‌های خودش است. جمع کل «قرارداد قطعی» تعداد معامله‌های یکتاست،
  * نه جمع ردیف‌ها — یک معامله می‌تواند برای چند مشاور شمرده شود.
+ *
+ * ردیف «دفتر» (فقط مدیر): دفتر خودش یک طرف حساب است — سهم دفتر همه
+ * معامله‌های قطعی با همان resolveSplit حساب می‌شود (نه محاسبه جدا).
+ * «پرداخت‌شده» سهم دفترِ معامله‌های «دریافت شد» خورده است و بقیه
+ * «پرداخت‌نشده»؛ حجم فروش دفتر جمع قیمت معامله‌های مرتبط با دفتر است.
+ * مشاور (AGENT) به این ای‌پی‌آی 403 می‌گیرد — ردیف دفتر و ردیف
+ * مشاورهای دیگر به او نشت نمی‌کند (اسکوپ مشاور فقط در ‎/reports است).
  */
 export async function GET() {
   const session = await getSessionFromCookies();
@@ -143,5 +150,43 @@ export async function GET() {
   // می‌تواند برای چند مشاور شمرده شود (صاحب + سهم‌داران)
   const completedDealsTotal = deals.filter((d) => d.status === "COMPLETED").length;
 
-  return NextResponse.json(serializeBigInt({ users: rows, totals: { ...totals, dealsCompleted: completedDealsTotal, officeTotal, externalTotal, commissionGrandTotal } }));
+  // ردیف «دفتر» — با همان resolveSplit معامله‌ها، نه محاسبه جدا؛
+  // totals بالا فقط جمع ردیف‌های مشاوران است، پس ردیف دفتر بعد از آن
+  // ساخته می‌شود تا جمع کل دو بار حساب نشود. commissionTotal ردیف دفتر
+  // همیشه با totals.officeTotal برابر است.
+  const officeRow = (() => {
+    let dealsCompleted = 0;
+    let dealsWithCommission = 0;
+    let saleVolume = BigInt(0);
+    let commissionTotal = BigInt(0);
+    let commissionPaid = BigInt(0);
+    let commissionUnpaid = BigInt(0);
+    deals.forEach((d, i) => {
+      const base = dealSplittable(d);
+      if (base <= BigInt(0)) return;
+      const officeAmount = splits[i].officeAmount ?? BigInt(0);
+      if (officeAmount <= BigInt(0)) return;
+      dealsCompleted += 1;
+      if (d.commissionToman != null) dealsWithCommission += 1;
+      saleVolume += d.dealSalePriceToman ?? BigInt(0);
+      commissionTotal += officeAmount;
+      // سهم دفتر تسویه جداگانه ندارد؛ «دریافت شد» خوردن معامله یعنی سهم
+      // دفترش وصول‌شده است و بقیه وصول‌نشده.
+      if (d.commissionPaid) commissionPaid += officeAmount;
+      else commissionUnpaid += officeAmount;
+    });
+    return {
+      id: "office",
+      name: "دفتر",
+      role: "OFFICE",
+      dealsCompleted,
+      dealsWithCommission,
+      saleVolume,
+      commissionTotal,
+      commissionPaid,
+      commissionUnpaid,
+    };
+  })();
+
+  return NextResponse.json(serializeBigInt({ users: [...rows, officeRow], totals: { ...totals, dealsCompleted: completedDealsTotal, officeTotal, externalTotal, commissionGrandTotal } }));
 }
