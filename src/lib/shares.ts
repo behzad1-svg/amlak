@@ -12,6 +12,14 @@ import { toFaDigits } from "./utils";
  * سهم مجازی ۱۰۰٪ برای مشاور معامله دیده می‌شوند (سهم دفتر صفر، تسویه‌شده
  * بودنش همان commissionPaid معامله است). وقتی مدیر روی چنین معامله‌ای
  * تقسیم را ویرایش کند، سهم‌های واقعی ساخته می‌شوند.
+ *
+ * قانون طلایی: سهم دفتر ذخیره‌شده (officePct) فقط وقتی معنا دارد که سهم
+ * واقعی وجود داشته باشد؛ برای معامله بدون سهم، resolveSplit سهم دفتر را
+ * صفر می‌گیرد و officePct ذخیره‌شده نادیده گرفته می‌شود. پس هیچ گزارش
+ * یا خلاصه‌ای نباید officePct ذخیره‌شده را مستقیم بخواند — همه مسیرها
+ * باید از resolveSplit بگذرند، وگرنه عددشان با گزارش‌های دیگر نمی‌خواند
+ * (مثال زنده: F-0022 و F-0023 هر کدام officePct=۵۰٪ دارند ولی سهم
+ * دفتر مؤثرشان صفر است).
  */
 
 export type ShareInput = {
@@ -50,6 +58,40 @@ export function shareAmount(base: bigint | null | undefined, pct: number): bigin
   // دقیق بماند؛ مبنا در داده معتبر نامنفی است و گرد کردن نیم به بالا است
   const bps = BigInt(Math.round(pct * 100));
   return (base * bps + BigInt(5000)) / BigInt(10000);
+}
+
+/** تلرانس مجاز اختلاف مبلغ کمیسیون با درصد × قیمت (تومان) — فقط خطای گرد کردن؛
+ *  محاسبه مرورگر (Math.round) و سرور (BigInt نیم‌به‌بالا) برای مبالغ واقعی
+ *  حداکثر چند تومان اختلاف دارند، پس ۱۰۰ تومان با حاشیه امن کافی است. */
+export const COMMISSION_AMOUNT_TOLERANCE_TOMAN = BigInt(100);
+
+/**
+ * مبلغ کمیسیون موردانتظار از قیمت معامله × درصد — همان قانون گرد کردن
+ * shareAmount (نیم‌به‌بالا، با دقت صدم درصد)؛ مرورگر هم همین را با
+ * Math.round حساب می‌کند (calcCommissionAmount در صفحه حسابداری).
+ */
+export function commissionAmountFor(price: bigint, percent: number): bigint {
+  const bps = BigInt(Math.round(percent * 100));
+  return (price * bps + BigInt(5000)) / BigInt(10000);
+}
+
+/**
+ * اعتبارسنجی جفت مبلغ/درصد کمیسیون برای معامله فروش؛ null یعنی سازگار،
+ * وگرنه پیام خطای فارسی با مبلغ موردانتظار. اجاره دستی است و چک نمی‌شود —
+ * صدا زدن این تابع فقط برای فروش معنا دارد. هر سه ورودی خالی یعنی
+ * «تعیین نشده» و چک نمی‌شود.
+ */
+export function validateCommissionAmount(
+  price: bigint | null,
+  percent: number | null | undefined,
+  amount: bigint | null,
+): string | null {
+  if (price == null || percent == null || amount == null) return null;
+  if (!Number.isFinite(percent) || percent < 0 || percent > 100) return null;
+  const expected = commissionAmountFor(price, percent);
+  const diff = amount >= expected ? amount - expected : expected - amount;
+  if (diff <= COMMISSION_AMOUNT_TOLERANCE_TOMAN) return null;
+  return `مبلغ کمیسیون با درصدش نمی‌خواند؛ با این قیمت و درصد، مبلغ باید ${toFaDigits(String(expected))} تومان باشد`;
 }
 
 /**

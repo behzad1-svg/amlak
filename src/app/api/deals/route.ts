@@ -7,6 +7,7 @@ import { canAccessCustomer, hasRestrictedAccess } from "@/lib/access";
 import { createAuditLog } from "@/lib/audit";
 import { hasPermission } from "@/lib/permissions";
 import { getTaxRatePct } from "@/lib/settings";
+import { validateCommissionAmount } from "@/lib/shares";
 
 async function canAccessPropertyForAction(
   user: { id: string; role: string },
@@ -112,6 +113,19 @@ export async function POST(req: NextRequest) {
       { error: "برای این فایل معامله باز/قطعی وجود دارد. ابتدا آن را لغو کنید." },
       { status: 409 }
     );
+  }
+
+  // مبلغ کمیسیون باید با درصد × قیمت معامله بخواند (فقط فروش؛ اجاره دستی است)؛
+  // وگرنه معامله‌ای مثل F-0022 با ۱٪ و ۱۲۰م روی قیمت ۱۰ میلیاردی ساخته می‌شود
+  if (
+    session.user.role === "OWNER" &&
+    property.dealType === "SALE" &&
+    d.commissionToman &&
+    d.commissionPercent != null
+  ) {
+    const effectivePrice = d.dealSalePriceToman ? BigInt(d.dealSalePriceToman) : property.salePriceToman;
+    const commissionError = validateCommissionAmount(effectivePrice, d.commissionPercent, BigInt(d.commissionToman));
+    if (commissionError) return NextResponse.json({ error: commissionError }, { status: 400 });
   }
 
   // مهر نرخ مالیات در لحظه ثبت کمیسیون — تغییر نرخ جاری بعدا روی این معامله اثر ندارد

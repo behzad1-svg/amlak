@@ -4,7 +4,7 @@ import { getSessionFromCookies } from "@/lib/auth";
 import { dealUpdateSchema } from "@/lib/validation";
 import { serializeBigInt } from "@/lib/utils";
 import { createAuditLog } from "@/lib/audit";
-import { validateSplitInput } from "@/lib/shares";
+import { validateCommissionAmount, validateSplitInput } from "@/lib/shares";
 import { getTaxRatePct } from "@/lib/settings";
 
 // ماشین وضعیت معامله — CANCELED ترمینال است و برنمی‌گردد؛
@@ -154,6 +154,29 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
       { status: 400 }
     );
   }
+  // مبلغ کمیسیون باید با درصد × قیمت معامله بخواند (فقط فروش؛ اجاره دستی است).
+  // فقط وقتی یکی از سه ورودی سه‌تایی (قیمت/درصد/مبلغ) در همین درخواست آمده باشد
+  // چک می‌شود تا ویرایش غیرپولی معامله‌های قدیمیِ ناسازگار (مثل F-0022) مسدود نشود.
+  const touchesCommissionTriple =
+    d.dealSalePriceToman !== undefined || d.commissionToman !== undefined || d.commissionPercent !== undefined;
+  if (touchesCommissionTriple && existing.property.dealType === "SALE") {
+    const effectivePrice =
+      d.dealSalePriceToman !== undefined
+        ? d.dealSalePriceToman
+          ? BigInt(d.dealSalePriceToman)
+          : null
+        : existing.dealSalePriceToman;
+    const effectivePercent = d.commissionPercent !== undefined ? d.commissionPercent : existing.commissionPercent;
+    const effectiveAmount =
+      d.commissionToman !== undefined
+        ? d.commissionToman
+          ? BigInt(d.commissionToman)
+          : null
+        : existing.commissionToman;
+    const commissionError = validateCommissionAmount(effectivePrice, effectivePercent, effectiveAmount);
+    if (commissionError) return NextResponse.json({ error: commissionError }, { status: 400 });
+  }
+
   const clearingIncome = incomeTouched && incomeAfter <= BigInt(0);
   if (clearingIncome && existing.shares.some((s) => s.settled)) {
     return NextResponse.json(
@@ -162,7 +185,8 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
     );
   }
 
-  // پس از تسویه، قیمت/کمیسیون قفل است — اول باید تسویه برگردد؛ تغییر وضعیت (لغو) از این قفل مستثناست
+  // پس از تسویه، قیمت/کمیسیون قفل است — اول باید تسویه برگردد؛ لغو هم با بلوک جداگانه‌اش
+  // وقتی پول دریافت یا سهمی تسویه شده باشد مسدود است
   const wantsMoneyChange =
     d.dealSalePriceToman !== undefined ||
     d.dealDepositToman !== undefined ||
@@ -223,6 +247,21 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
         { status: 409 },
       );
     }
+  }
+
+  // لغو معامله‌ای که پولش دریافت یا سهمی از آن تسویه شده ممکن نیست — ورودی
+  // صندوق و خروجی‌های تسویه در لغو دست نمی‌خورند و معامله از جمع‌ها حذف می‌شود،
+  // پس اول باید تسویه سهم‌ها و بعد دریافت برگردانده شود (همان ترتیبی که قفل
+  // برگرداندن دریافت می‌خواهد).
+  if (
+    d.status === "CANCELED" &&
+    d.status !== existing.status &&
+    (existing.commissionPaid || existing.shares.some((s) => s.settled))
+  ) {
+    return NextResponse.json(
+      { error: "این معامله دریافت یا تسویه شده است؛ برای لغو اول تسویه سهم‌ها و بعد دریافت را برگردانید" },
+      { status: 400 }
+    );
   }
 
   // قبل از تکمیل، دوباره چک کن معامله باز دیگری روی همین فایل نباشد

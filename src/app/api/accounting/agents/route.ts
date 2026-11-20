@@ -10,6 +10,10 @@ import { dealSplittable, resolveSplit } from "@/lib/shares";
  * به‌ازای هر کاربر فعال: قراردادهای قطعی، حجم فروش قطعی، مجموع کمیسیون، پرداخت‌شده و پرداخت‌نشده.
  * جمع هر مشاور = مجموع مبلغ سهم‌های خودش است، نه مبلغ کامل معامله؛
  * سهم دفتر و سهم تعاون (بیرونی) جداگانه در totals می‌آیند.
+ * «قرارداد قطعی» معامله‌ای را می‌شمارد که مشاور صاحبش است یا در آن سهم
+ * دارد (سهم واقعی یا مجازی ۱۰۰٪ معامله بدون سهم)؛ حجم فروش فقط از
+ * معامله‌های خودش است. جمع کل «قرارداد قطعی» تعداد معامله‌های یکتاست،
+ * نه جمع ردیف‌ها — یک معامله می‌تواند برای چند مشاور شمرده شود.
  */
 export async function GET() {
   const session = await getSessionFromCookies();
@@ -35,7 +39,7 @@ export async function GET() {
         discountToman: true,
         commissionPaid: true,
         dealSalePriceToman: true,
-        officePct: true,
+        officePct: true, // فقط ورودی resolveSplit است؛ هیچ جمعی از آن مستقیم خوانده نمی‌شود
         agent: { select: { id: true, name: true } },
         shares: { select: { id: true, userId: true, name: true, pct: true, settled: true, settledAt: true } },
       },
@@ -87,10 +91,14 @@ export async function GET() {
     let commissionPaid = BigInt(0);
     let commissionUnpaid = BigInt(0);
     deals.forEach((d, i) => {
-      // تعداد قرارداد و حجم فروش فقط از معامله‌هایی که صاحبشان است
+      // قرارداد قطعی: معامله‌ای که مشاور صاحبش است یا در آن سهم دارد؛
+      // حجم فروش فقط از معامله‌های خودش است و با تعداد قرارداد جمع نمی‌شود
+      const participates = d.agentId === u.id || splits[i].shares.some((s) => s.userId === u.id);
+      if (participates && d.status === "COMPLETED") {
+        dealsCompleted += 1;
+      }
       if (d.agentId === u.id) {
         if (d.status === "COMPLETED") {
-          dealsCompleted += 1;
           saleVolume += d.dealSalePriceToman ?? BigInt(0);
         }
         if (d.commissionToman != null) dealsWithCommission += 1;
@@ -131,5 +139,9 @@ export async function GET() {
     { dealsCompleted: 0, dealsWithCommission: 0, saleVolume: BigInt(0), commissionTotal: BigInt(0), commissionPaid: BigInt(0), commissionUnpaid: BigInt(0) }
   );
 
-  return NextResponse.json(serializeBigInt({ users: rows, totals: { ...totals, officeTotal, externalTotal, commissionGrandTotal } }));
+  // جمع «قرارداد قطعی» تعداد معامله‌های یکتاست، نه جمع ردیف‌ها — یک معامله
+  // می‌تواند برای چند مشاور شمرده شود (صاحب + سهم‌داران)
+  const completedDealsTotal = deals.filter((d) => d.status === "COMPLETED").length;
+
+  return NextResponse.json(serializeBigInt({ users: rows, totals: { ...totals, dealsCompleted: completedDealsTotal, officeTotal, externalTotal, commissionGrandTotal } }));
 }

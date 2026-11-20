@@ -41,7 +41,7 @@ export async function GET() {
       commissionPaid: true,
       status: true,
       agentId: true,
-      officePct: true,
+      officePct: true, // فقط ورودی resolveSplit است؛ هیچ جمعی از آن مستقیم خوانده نمی‌شود
       agent: { select: { id: true, name: true } },
       shares: { select: { id: true, userId: true, name: true, pct: true, settled: true, settledAt: true } },
     },

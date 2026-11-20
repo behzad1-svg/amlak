@@ -1,11 +1,13 @@
 import { describe, expect, it } from "vitest";
 import {
+  commissionAmountFor,
   dealSplittable,
   dealTaxBase,
   equalSplitPcts,
   resolveSplit,
   shareAmount,
   splitForViewer,
+  validateCommissionAmount,
   validateSplitInput,
 } from "./shares";
 
@@ -257,5 +259,59 @@ describe("validateSplitInput", () => {
         { userId: "u2", pct: 24.995 },
       ]),
     ).toBeNull();
+  });
+});
+
+describe("commissionAmountFor", () => {
+  it("computes price x percent with the same half-up rounding as shareAmount", () => {
+    expect(commissionAmountFor(BigInt(10_000_000_000), 1)).toBe(BigInt(100_000_000));
+    expect(commissionAmountFor(BigInt(12_000_000_000), 1)).toBe(BigInt(120_000_000));
+    expect(commissionAmountFor(BigInt(4_000_000_000), 0.25)).toBe(BigInt(10_000_000));
+    expect(commissionAmountFor(BigInt(5_000_000_000), 1)).toBe(BigInt(50_000_000));
+  });
+
+  it("rounds half up on fractional tomans", () => {
+    expect(commissionAmountFor(BigInt(999), 50)).toBe(BigInt(500));
+    expect(commissionAmountFor(BigInt(1_000_001), 50)).toBe(BigInt(500_001));
+  });
+
+  it("matches the browser calcCommissionAmount (Math.round) for real deals", () => {
+    // مرورگر: Math.round((price * percent) / 100)
+    for (const [price, pct] of [
+      [10_000_000_000, 1],
+      [4_000_000_000, 0.25],
+      [7_850_000_000, 1.5],
+      [3_250_000_000, 0.75],
+    ] as const) {
+      expect(commissionAmountFor(BigInt(price), pct)).toBe(BigInt(Math.round((price * pct) / 100)));
+    }
+  });
+});
+
+describe("validateCommissionAmount", () => {
+  it("accepts a matching amount/percent pair", () => {
+    expect(validateCommissionAmount(BigInt(10_000_000_000), 1, BigInt(100_000_000))).toBeNull();
+    expect(validateCommissionAmount(BigInt(4_000_000_000), 0.25, BigInt(10_000_000))).toBeNull();
+  });
+
+  it("rejects the F-0022 mismatch (1% of 10bn is 100m, not 120m)", () => {
+    const error = validateCommissionAmount(BigInt(10_000_000_000), 1, BigInt(120_000_000));
+    expect(error).toContain("مبلغ کمیسیون با درصدش نمی‌خواند");
+    expect(error).toContain("۱۰۰۰۰۰۰۰۰");
+  });
+
+  it("accepts a difference within rounding tolerance", () => {
+    expect(validateCommissionAmount(BigInt(10_000_000_000), 1, BigInt(100_000_100))).toBeNull();
+  });
+
+  it("rejects a difference beyond rounding tolerance", () => {
+    expect(validateCommissionAmount(BigInt(10_000_000_000), 1, BigInt(100_000_101))).not.toBeNull();
+  });
+
+  it("skips the check when any of price/percent/amount is missing (تعیین نشده)", () => {
+    expect(validateCommissionAmount(null, 1, BigInt(100_000_000))).toBeNull();
+    expect(validateCommissionAmount(BigInt(10_000_000_000), null, BigInt(100_000_000))).toBeNull();
+    expect(validateCommissionAmount(BigInt(10_000_000_000), undefined, BigInt(100_000_000))).toBeNull();
+    expect(validateCommissionAmount(BigInt(10_000_000_000), 1, null)).toBeNull();
   });
 });
