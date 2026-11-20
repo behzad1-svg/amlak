@@ -412,6 +412,27 @@ async function verifyGlobal(tag: string) {
     eqT("officeTotal", t.officeTotal, officeTotal);
     eqT("externalTotal", t.externalTotal, externalTotal);
     eqT("commissionGrandTotal", t.commissionGrandTotal, grandTotal);
+    // Grand totals now include the office row (advisors + office);
+    // external co-op shares stay out.
+    let advisorCt = BigInt(0), advisorCp = BigInt(0), advisorCu = BigInt(0);
+    let officeCt = BigInt(0), officeCp = BigInt(0), officeCu = BigInt(0);
+    for (const d of deals) {
+      const base = dealBase(d);
+      if (base <= BigInt(0)) continue;
+      const split = mirrorSplit(d);
+      officeCt += split.officeAmount;
+      if (d.commissionPaid) officeCp += split.officeAmount;
+      else officeCu += split.officeAmount;
+      for (const sh of split.shares) {
+        if (sh.isExternal || !sh.userId) continue;
+        advisorCt += sh.amount;
+        if (sh.settled) advisorCp += sh.amount;
+        else advisorCu += sh.amount;
+      }
+    }
+    eqT("commissionTotal", t.commissionTotal, advisorCt + officeCt);
+    eqT("commissionPaid", t.commissionPaid, advisorCp + officeCp);
+    eqT("commissionUnpaid", t.commissionUnpaid, advisorCu + officeCu);
   } else {
     check(tag, "agents-200", false, `agents GET returned ${a.status}`);
   }

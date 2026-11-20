@@ -10,6 +10,10 @@ import { dealSplittable, resolveSplit } from "@/lib/shares";
  * به‌ازای هر کاربر فعال: قراردادهای قطعی، حجم فروش قطعی، مجموع کمیسیون، پرداخت‌شده و پرداخت‌نشده.
  * جمع هر مشاور = مجموع مبلغ سهم‌های خودش است، نه مبلغ کامل معامله؛
  * سهم دفتر و سهم تعاون (بیرونی) جداگانه در totals می‌آیند.
+ * جمع کل کمیسیون = جمع ردیف‌های مشاورها + ردیف دفتر است؛ تعداد قرارداد
+ * و حجم فروش جمع کل همان مقادیر متمایز معامله‌هاست تا معامله‌ها دو بار
+ * حساب نشوند — ردیف دفتر همان معامله‌های مشاورها را پوشش می‌دهد.
+ * تعاون بیرونی ردیفی در این جدول ندارد و در جمع کل نمی‌آید.
  * «قرارداد قطعی» معامله‌ای را می‌شمارد که مشاور صاحبش است یا در آن سهم
  * دارد (سهم واقعی یا سهم مجازی معامله بدون سهم)؛ حجم فروش فقط از
  * معامله‌های خودش است. جمع کل «قرارداد قطعی» تعداد معامله‌های یکتاست،
@@ -152,8 +156,8 @@ export async function GET() {
 
   // ردیف «دفتر» — با همان resolveSplit معامله‌ها، نه محاسبه جدا؛
   // totals بالا فقط جمع ردیف‌های مشاوران است، پس ردیف دفتر بعد از آن
-  // ساخته می‌شود تا جمع کل دو بار حساب نشود. commissionTotal ردیف دفتر
-  // همیشه با totals.officeTotal برابر است.
+  // ساخته می‌شود. commissionTotal ردیف دفتر همیشه با totals.officeTotal
+  // برابر است — و جمع کل کمیسیون پایین‌تر سهم دفتر را هم می‌گیرد.
   const officeRow = (() => {
     let dealsCompleted = 0;
     let dealsWithCommission = 0;
@@ -188,5 +192,19 @@ export async function GET() {
     };
   })();
 
-  return NextResponse.json(serializeBigInt({ users: [...rows, officeRow], totals: { ...totals, dealsCompleted: completedDealsTotal, officeTotal, externalTotal, commissionGrandTotal } }));
+  // جمع کل کمیسیون سهم دفتر را هم می‌گیرد (مشاورها + دفتر)؛ تعداد
+  // قرارداد و حجم فروش همان مقادیر متمایز معامله‌ها می‌مانند تا معامله‌ها
+  // دو بار حساب نشوند. تعاون بیرونی در جمع کل نمی‌آید.
+  const totalsWithOffice = {
+    ...totals,
+    dealsCompleted: completedDealsTotal,
+    commissionTotal: totals.commissionTotal + officeRow.commissionTotal,
+    commissionPaid: totals.commissionPaid + officeRow.commissionPaid,
+    commissionUnpaid: totals.commissionUnpaid + officeRow.commissionUnpaid,
+    officeTotal,
+    externalTotal,
+    commissionGrandTotal,
+  };
+
+  return NextResponse.json(serializeBigInt({ users: [...rows, officeRow], totals: totalsWithOffice }));
 }

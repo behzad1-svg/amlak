@@ -58,7 +58,21 @@ function setSession(user: { id: string; name: string; role: string } | null) {
 //     base 30M -> office 30M, no advisor share
 // Office row: deals 3, withCommission 3, volume 18bn,
 //   total 50+36+30 = 116M, paid 36+30 = 66M, unpaid 50M.
-function fixtureDeals() {
+type FixtureShare = { id: string; userId: string | null; name: string; pct: number; settled: boolean; settledAt: null };
+type FixtureDeal = {
+  agentId: string;
+  status: string;
+  commissionToman: bigint;
+  sellerShiriniToman: bigint | null;
+  buyerShiriniToman: bigint | null;
+  discountToman: bigint | null;
+  commissionPaid: boolean;
+  dealSalePriceToman: bigint;
+  officePct: number;
+  agent: { id: string; name: string };
+  shares: FixtureShare[];
+};
+function fixtureDeals(): FixtureDeal[] {
   return [
     {
       agentId: OWNER.id,
@@ -165,10 +179,14 @@ describe("GET /api/accounting/agents — office row", () => {
     expect(b.dealsCompleted).toBe(2);
     expect(BigInt(b.commissionTotal)).toBe(BigInt(24_000_000));
     expect(BigInt(b.commissionPaid)).toBe(BigInt(24_000_000));
-    // Totals stay the advisor-rows sum; the office row is not double-counted.
-    expect(BigInt(json.totals.commissionTotal)).toBe(BigInt(74_000_000));
-    expect(BigInt(json.totals.commissionPaid)).toBe(BigInt(24_000_000));
-    expect(BigInt(json.totals.commissionUnpaid)).toBe(BigInt(50_000_000));
+    // Totals include the office share (advisors + office): 74M + 116M.
+    // Contract count and sale volume stay the distinct-deal values,
+    // not the row sums — the office row covers the same deals.
+    expect(BigInt(json.totals.commissionTotal)).toBe(BigInt(190_000_000));
+    expect(BigInt(json.totals.commissionPaid)).toBe(BigInt(90_000_000));
+    expect(BigInt(json.totals.commissionUnpaid)).toBe(BigInt(100_000_000));
+    expect(json.totals.dealsCompleted).toBe(4);
+    expect(BigInt(json.totals.saleVolume)).toBe(BigInt(20_000_000_000));
     // Office row comes last, after the advisor rows.
     expect(json.users[json.users.length - 1].id).toBe("office");
   });
@@ -182,6 +200,30 @@ describe("GET /api/accounting/agents — office row", () => {
     expect(BigInt(office.commissionTotal)).toBe(BigInt(0));
     expect(office.dealsCompleted).toBe(0);
     expect(BigInt(json.totals.officeTotal)).toBe(BigInt(0));
+    expect(BigInt(json.totals.commissionTotal)).toBe(BigInt(0));
+    expect(BigInt(json.totals.commissionPaid)).toBe(BigInt(0));
+    expect(BigInt(json.totals.commissionUnpaid)).toBe(BigInt(0));
+    expect(json.totals.dealsCompleted).toBe(0);
+  });
+
+  it("totals exclude external (co-op) shares — office + advisors only", async () => {
+    setSession(OWNER);
+    // D2 with agentB's share reduced to 30% and an external co-op share
+    // of 10% (6M of the 60M base): office 60% + 30% + 10% = 100%.
+    // Advisor total drops to 68M, office stays 116M, externalTotal is 6M
+    // on the side and never enters the grand total.
+    const deals = fixtureDeals();
+    deals[1].shares = [
+      { id: "s1", userId: AGENT_B.id, name: AGENT_B.name, pct: 30, settled: true, settledAt: null },
+      { id: "s2", userId: null, name: "املاک بیرونی", pct: 10, settled: false, settledAt: null },
+    ];
+    prismaMock.deal.findMany.mockResolvedValue(deals);
+    const json = await (await GET()).json();
+    expect(BigInt(json.totals.externalTotal)).toBe(BigInt(6_000_000));
+    expect(BigInt(json.totals.commissionTotal)).toBe(BigInt(184_000_000));
+    expect(BigInt(json.totals.commissionPaid)).toBe(BigInt(84_000_000));
+    expect(BigInt(json.totals.commissionUnpaid)).toBe(BigInt(100_000_000));
+    expect(BigInt(json.totals.commissionGrandTotal)).toBe(BigInt(190_000_000));
   });
 
   it("AGENT gets 403 — no office row, no other advisors' rows leak", async () => {
