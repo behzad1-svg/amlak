@@ -537,10 +537,10 @@ export default function CustomersPage() {
                         <div className="mt-2 flex items-center gap-1.5">
                           {overdue ? (
                             <Badge className="bg-[var(--pomegranate-soft)] text-[var(--pomegranate)] border-[var(--pomegranate-line)] text-[11px]">
-                              عقب‌افتاده · <DateText value={c.nextFollowUpAt} />
+                              عقب‌افتاده · <DateText value={c.nextFollowUpAt} withTime />
                             </Badge>
                           ) : c.nextFollowUpAt ? (
-                            <span className="text-[11px] text-[var(--ink-3)]">پیگیری <DateText value={c.nextFollowUpAt} /></span>
+                            <span className="text-[11px] text-[var(--ink-3)]">پیگیری <DateText value={c.nextFollowUpAt} withTime /></span>
                           ) : (
                             <span className="text-[11px] text-[var(--ink-3)]/60">بدون پیگیری</span>
                           )}

@@ -755,7 +755,7 @@ export default function CustomerDetailPage() {
               <div className="mb-3 rounded-[12px] border border-dashed border-[var(--line-2)] bg-white px-3 py-4 text-center">
                 <p className="text-sm text-[var(--ink-3)]">
                   {c.nextFollowUpAt
-                    ? (<>پیگیری بعدی: <DateText value={c.nextFollowUpAt} /> — برای ثبت در لیست، تاریخ را از پایین اضافه کنید</>)
+                    ? (<>پیگیری بعدی: <DateText value={c.nextFollowUpAt} withTime /> — برای ثبت در لیست، تاریخ را از پایین اضافه کنید</>)
                     : "هنوز پیگیری ثبت نشده"}
                 </p>
               </div>
@@ -794,7 +794,7 @@ export default function CustomerDetailPage() {
                           }}
                         />
                         <span className={`flex-1 ${f.done ? "line-through text-[var(--ink-3)]" : isOverdue ? "text-[var(--pomegranate)] font-medium" : ""}`}>
-                          <DateText value={f.dueAt} />
+                          <DateText value={f.dueAt} withTime />
                           {f.note ? ` — ${f.note}` : ""}
                           {isNext && (
                             <span className="mr-2 rounded-full bg-[var(--ink)] px-2 py-0.5 text-[10px] text-white">بعدی</span>

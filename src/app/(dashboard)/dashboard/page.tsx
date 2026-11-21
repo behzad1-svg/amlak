@@ -79,7 +79,7 @@ function DayScheduleCard({ title, schedule, accent }: { title: string; schedule:
                 schedule.followUps.map((c) => (
                   <Link key={c.id} href={`/customers/${c.id}`} className="mb-1 flex items-center justify-between gap-3 rounded-[12px] bg-[var(--paper-2)] px-3 py-2 last:mb-0">
                     <span className="min-w-0 truncate text-[13px] font-medium">{c.name}</span>
-                    <span className="shrink-0 text-[12px] text-[var(--ink-3)]"><DateText value={c.nextFollowUpAt} /></span>
+                    <span className="shrink-0 text-[12px] text-[var(--ink-3)]"><DateText value={c.nextFollowUpAt} withTime /></span>
                   </Link>
                 ))
               )}
@@ -161,7 +161,7 @@ export default async function DashboardPage() {
                     </div>
                     <div className="mt-1 flex items-center gap-2 text-[12px] text-[var(--ink-3)]">
                       <Badge className="bg-[var(--pomegranate-soft)] text-[var(--pomegranate)] border-[var(--pomegranate-line)]">{CUSTOMER_STAGE_LABELS[c.stage] ?? c.stage}</Badge>
-                      <span>پیگیری: <DateText value={c.nextFollowUpAt} /></span>
+                      <span>پیگیری: <DateText value={c.nextFollowUpAt} withTime /></span>
                     </div>
                   </div>
                   <span className="hidden sm:inline-flex items-center gap-1 rounded-full border border-[var(--line)] bg-white px-2.5 py-1 text-[11px] font-medium"><Eye className="h-3.5 w-3.5" /> مشاهده</span>
