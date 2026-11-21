@@ -5,15 +5,92 @@ import Link from "next/link";
 import { redirect } from "next/navigation";
 import { headers } from "next/headers";
 import { getSessionFromCookies } from "@/lib/auth";
-import { getDashboardData } from "@/lib/dashboard";
+import { getDashboardData, type DashboardDaySchedule } from "@/lib/dashboard";
+import { formatJalaliDayMonth, getTehranWeekdayLong } from "@/lib/jalali";
 import { Header } from "@/components/layout/Header";
 import { Card, CardHeader, CardTitle } from "@/components/ui/Card";
 import { Badge } from "@/components/ui/Badge";
 import { CUSTOMER_STAGE_LABELS } from "@/lib/constants";
-import { AlertTriangle, Clock, Users, ArrowUpLeft, Eye, CalendarCheck, ListChecks } from "lucide-react";
+import { AlertTriangle, Clock, Users, ArrowUpLeft, Eye, CalendarCheck, CalendarClock, ListChecks } from "lucide-react";
 import { AdvertiseTodayCard } from "@/components/dashboard/AdvertiseTodayCard";
 import { TodayBadge } from "@/components/ui/TodayBadge";
 import { DateText } from "@/components/ui/DateText";
+
+// کارت برنامهٔ یک روز آینده (فردا / پس‌فردا): بازدیدها، کارت‌های جلسه و
+// پیگیری‌های سررسید آن روز. اگر روز خالی باشد، خالی بودنش با جملهٔ واضح
+// گفته می‌شود؛ اگر فقط بخشی خالی باشد، همان بخش «نیست» می‌خورد.
+function DayScheduleCard({ title, schedule }: { title: string; schedule: DashboardDaySchedule }) {
+  const total = schedule.viewings.length + schedule.sessionCards.length + schedule.followUpsTotal;
+  const dateLabel = `${getTehranWeekdayLong(schedule.dayStart)} ${formatJalaliDayMonth(schedule.dayStart)}`;
+  return (
+    <Card className="p-0 overflow-hidden">
+      <CardHeader className="px-4 pt-4">
+        <CardTitle className="flex items-center gap-2"><span className="flex h-7 w-7 items-center justify-center rounded-[10px] bg-[var(--ink)] text-white"><CalendarCheck className="h-4 w-4" /></span> {title}</CardTitle>
+        <span className="rounded-full border border-[var(--line)] bg-[var(--paper-2)] px-2 py-0.5 text-[11px] font-bold">{dateLabel}</span>
+        <span className="rounded-full border border-[var(--line)] bg-[var(--paper-2)] px-2 py-0.5 text-[11px] font-bold">{total}</span>
+      </CardHeader>
+      <div className="px-4 pb-4">
+        {total === 0 ? (
+          <p className="py-6 text-center text-[13px] text-[var(--ink-3)]">برای {title} چیزی برنامه‌ریزی نشده است.</p>
+        ) : (
+          <div className="space-y-4">
+            <div>
+              <div className="mb-1 flex items-center justify-between">
+                <span className="text-[12px] font-bold text-[var(--ink-2)]">بازدیدها</span>
+                <span className="text-[11px] text-[var(--ink-3)]">{schedule.viewings.length} مورد</span>
+              </div>
+              {schedule.viewings.length === 0 ? (
+                <p className="text-[12px] text-[var(--ink-3)]">بازدیدی نیست.</p>
+              ) : (
+                schedule.viewings.map((v) => (
+                  <div key={v.id} className="mb-1 flex items-center justify-between gap-3 rounded-[12px] bg-[var(--paper-2)] px-3 py-2 last:mb-0">
+                    <span className="min-w-0 truncate text-[13px] font-medium">{v.customer.name} — {v.property.title}</span>
+                    <span className="shrink-0 text-[12px] text-[var(--ink-3)]"><DateText value={v.startAt} withTime /></span>
+                  </div>
+                ))
+              )}
+            </div>
+            <div>
+              <div className="mb-1 flex items-center justify-between">
+                <span className="text-[12px] font-bold text-[var(--ink-2)]">کارت‌های جلسه</span>
+                <span className="text-[11px] text-[var(--ink-3)]">{schedule.sessionCards.length} مورد</span>
+              </div>
+              {schedule.sessionCards.length === 0 ? (
+                <p className="text-[12px] text-[var(--ink-3)]">کارت جلسه‌ای نیست.</p>
+              ) : (
+                schedule.sessionCards.map((s) => (
+                  <div key={s.id} className="mb-1 flex items-center justify-between gap-3 rounded-[12px] bg-[var(--paper-2)] px-3 py-2 last:mb-0">
+                    <span className="min-w-0 truncate text-[13px] font-medium">{s.customer.name}{s.property ? ` — ${s.property.title}` : ""}</span>
+                    <span className="shrink-0 text-[12px] text-[var(--ink-3)]"><DateText value={s.scheduledAt} withTime /></span>
+                  </div>
+                ))
+              )}
+            </div>
+            <div>
+              <div className="mb-1 flex items-center justify-between">
+                <span className="text-[12px] font-bold text-[var(--ink-2)]">پیگیری‌ها</span>
+                <span className="text-[11px] text-[var(--ink-3)]">{schedule.followUpsTotal} مورد</span>
+              </div>
+              {schedule.followUps.length === 0 ? (
+                <p className="text-[12px] text-[var(--ink-3)]">پیگیری‌ای نیست.</p>
+              ) : (
+                schedule.followUps.map((c) => (
+                  <div key={c.id} className="mb-1 flex items-center justify-between gap-3 rounded-[12px] bg-[var(--paper-2)] px-3 py-2 last:mb-0">
+                    <span className="min-w-0 truncate text-[13px] font-medium">{c.name}</span>
+                    <span className="shrink-0 text-[12px] text-[var(--ink-3)]"><DateText value={c.nextFollowUpAt} /></span>
+                  </div>
+                ))
+              )}
+              {schedule.followUpsTotal > schedule.followUps.length && (
+                <p className="pt-1 text-center text-[12px] text-[var(--ink-3)]">نمایش {schedule.followUps.length} از {schedule.followUpsTotal} مورد</p>
+              )}
+            </div>
+          </div>
+        )}
+      </div>
+    </Card>
+  );
+}
 
 export default async function DashboardPage() {
   const session = await getSessionFromCookies();
@@ -107,7 +184,7 @@ export default async function DashboardPage() {
           </div>
         )}
 
-        <div className="grid gap-4 lg:grid-cols-2">
+        <div className="grid gap-4 lg:grid-cols-3">
           <Card className="p-0 overflow-hidden">
             <CardHeader className="px-4 pt-4">
               <CardTitle className="flex items-center gap-2"><span className="flex h-7 w-7 items-center justify-center rounded-[10px] bg-[var(--ink)] text-white"><Clock className="h-4 w-4" /></span> پیگیری امروز</CardTitle>
@@ -141,6 +218,29 @@ export default async function DashboardPage() {
               ))}
             </div>
           </Card>
+
+          <Card className="p-0 overflow-hidden">
+            <CardHeader className="px-4 pt-4">
+              <CardTitle className="flex items-center gap-2"><span className="flex h-7 w-7 items-center justify-center rounded-[10px] bg-teal-700 text-white"><CalendarClock className="h-4 w-4" /></span> کارت‌های جلسهٔ امروز</CardTitle>
+              <span className="rounded-full border border-[var(--line)] bg-[var(--paper-2)] px-2 py-0.5 text-[11px] font-bold">{data.sessionCardsToday.length}</span>
+            </CardHeader>
+            <div className="px-2 pb-2">
+              {data.sessionCardsToday.length === 0 ? <p className="px-3 py-6 text-center text-[13px] text-[var(--ink-3)]">کارت جلسه‌ای برای امروز ثبت نشده است.</p> : data.sessionCardsToday.map((s) => (
+                <div key={s.id} className="flex items-center justify-between gap-3 rounded-[12px] px-3 py-2.5 hover:bg-[var(--paper-2)]">
+                  <div className="min-w-0">
+                    <div className="truncate text-[13.5px] font-medium">{s.customer.name}{s.property ? ` — ${s.property.title}` : ""}</div>
+                    <div className="text-[12px] text-[var(--ink-3)]"><DateText value={s.scheduledAt} withTime /></div>
+                  </div>
+                </div>
+              ))}
+            </div>
+          </Card>
+        </div>
+
+        {/* برنامهٔ فردا و پس‌فردا — همان قاعدهٔ برنامهٔ امروز */}
+        <div className="grid gap-4 lg:grid-cols-2">
+          <DayScheduleCard title="فردا" schedule={data.tomorrow} />
+          <DayScheduleCard title="پس‌فردا" schedule={data.dayAfter} />
         </div>
 
         <AdvertiseTodayCard />

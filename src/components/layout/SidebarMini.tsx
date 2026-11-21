@@ -1,13 +1,12 @@
 "use client";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { LayoutDashboard, CalendarCheck, Users, BookUser, Building2, Bell, GitMerge, CalendarClock, BarChart3, Settings, PanelLeftOpen, UserCog, TrendingUp, Wallet } from "lucide-react";
+import { LayoutDashboard, Users, BookUser, Building2, Bell, GitMerge, CalendarClock, BarChart3, Settings, PanelLeftOpen, UserCog, TrendingUp, Wallet } from "lucide-react";
 import { cn } from "@/lib/utils";
 import Image from "next/image";
 
 const nav = [
   { href: "/dashboard", icon: LayoutDashboard },
-  { href: "/today", icon: CalendarCheck },
   { href: "/customers", icon: Users },
   { href: "/properties", icon: Building2 },
   { href: "/notifications", icon: Bell },

@@ -3,6 +3,7 @@
 // پشت سر هم بود — ۸٫۸ ثانیه). لیست‌ها سقف ۱۰۰ ردیف دارند و تعداد واقعی
 // جداگانه برگردانده می‌شود تا شمارنده‌ها صادقانه بمانند.
 import { prisma } from "@/lib/prisma";
+import { tehranDayBoundsOffset } from "@/lib/jalali";
 
 export type DashboardTeamStat = {
   id: string;
@@ -33,6 +34,15 @@ export type DashboardTeamStat = {
   };
 };
 
+export type DashboardDaySchedule = {
+  /** شروع روز به وقت تهران — برای برچسب تاریخ کارت */
+  dayStart: Date;
+  viewings: { id: string; startAt: Date; customer: { name: string }; property: { title: string } }[];
+  sessionCards: { id: string; scheduledAt: Date; status: string; customer: { name: string }; property: { title: string } | null }[];
+  followUps: { id: string; name: string; nextFollowUpAt: Date | null }[];
+  followUpsTotal: number;
+};
+
 export type DashboardData = {
   overdueCustomers: { id: string; name: string; phone: string; stage: string; nextFollowUpAt: Date | null }[];
   overdueTotal: number;
@@ -42,10 +52,80 @@ export type DashboardData = {
   needsReviewTotal: number;
   tasks: { id: string; title: string; dueAt: Date | null }[];
   viewings: { id: string; startAt: Date; customer: { name: string }; property: { title: string } }[];
+  /** کارت‌های جلسهٔ امروز — از نمای «امروز» به داشبورد آمده */
+  sessionCardsToday: DashboardDaySchedule["sessionCards"];
+  /** برنامهٔ فردا و پس‌فردا — همان قاعدهٔ برنامهٔ امروز، برای یک روز کامل */
+  tomorrow: DashboardDaySchedule;
+  dayAfter: DashboardDaySchedule;
   teamStats: DashboardTeamStat[] | null;
 };
 
 const LIST_LIMIT = 100;
+
+/**
+ * برنامهٔ یک روز کامل به وقت تهران: بازدیدها، کارت‌های جلسه و پیگیری‌های
+ * سررسید آن روز — همان قاعدهٔ برنامهٔ امروز. مشاور فقط موردهای خودش را
+ * می‌بیند؛ مدیر همه را.
+ */
+async function getDaySchedule(
+  start: Date,
+  end: Date,
+  userId: string,
+  isOwner: boolean
+): Promise<DashboardDaySchedule> {
+  const viewingWhere: Record<string, unknown> = {
+    startAt: { gte: start, lte: end },
+  };
+  if (!isOwner) viewingWhere.agentId = userId;
+
+  const sessionWhere: Record<string, unknown> = {
+    scheduledAt: { gte: start, lte: end },
+    status: { in: ["PENDING", "CONFIRMED"] },
+  };
+  if (!isOwner) {
+    sessionWhere.OR = [
+      { advisorId: userId },
+      { coAdvisors: { some: { userId } } },
+    ];
+  }
+
+  const followUpWhere: Record<string, unknown> = {
+    deletedAt: null,
+    stage: { not: "LOST" },
+    nextFollowUpAt: { gte: start, lte: end },
+  };
+  if (!isOwner) followUpWhere.assignedAgentId = userId;
+
+  const [viewings, sessionCards, followUps, followUpsTotal] = await Promise.all([
+    prisma.viewing.findMany({
+      where: viewingWhere,
+      select: { id: true, startAt: true, customer: { select: { name: true } }, property: { select: { title: true } } },
+      orderBy: { startAt: "asc" },
+      take: 50,
+    }),
+    prisma.sessionCard.findMany({
+      where: sessionWhere,
+      select: {
+        id: true,
+        scheduledAt: true,
+        status: true,
+        customer: { select: { name: true } },
+        property: { select: { title: true } },
+      },
+      orderBy: { scheduledAt: "asc" },
+      take: 50,
+    }),
+    prisma.customer.findMany({
+      where: followUpWhere,
+      select: { id: true, name: true, nextFollowUpAt: true },
+      orderBy: { nextFollowUpAt: "asc" },
+      take: LIST_LIMIT,
+    }),
+    prisma.customer.count({ where: followUpWhere }),
+  ]);
+
+  return { dayStart: start, viewings, sessionCards, followUps, followUpsTotal };
+}
 
 export async function getDashboardData(userId: string, isOwner: boolean): Promise<DashboardData> {
   const now = new Date();
@@ -72,7 +152,24 @@ export async function getDashboardData(userId: string, isOwner: boolean): Promis
   const reviewWhere: Record<string, unknown> = { deletedAt: null, needsManagerReview: true };
   if (!isOwner) reviewWhere.assignedAgentId = userId;
 
-  const [overdueCustomers, overdueTotal, todayFollowUps, todayTotal, needsReview, needsReviewTotal, tasks, viewings, teamStats] =
+  // کارت‌های جلسهٔ امروز — همان قاعدهٔ نمای «امروز»: در انتظار یا تأییدشده،
+  // مشاور یا هم‌مشاور کارت باشد.
+  const sessionTodayWhere: Record<string, unknown> = {
+    scheduledAt: { gte: todayStart, lte: todayEnd },
+    status: { in: ["PENDING", "CONFIRMED"] },
+  };
+  if (!isOwner) {
+    sessionTodayWhere.OR = [
+      { advisorId: userId },
+      { coAdvisors: { some: { userId } } },
+    ];
+  }
+
+  // بازهٔ فردا و پس‌فردا به وقت تهران — پویا، نه هاردکد.
+  const { start: tomorrowStart, end: tomorrowEnd } = tehranDayBoundsOffset(now, 1);
+  const { start: dayAfterStart, end: dayAfterEnd } = tehranDayBoundsOffset(now, 2);
+
+  const [overdueCustomers, overdueTotal, todayFollowUps, todayTotal, needsReview, needsReviewTotal, tasks, viewings, sessionCardsToday, tomorrow, dayAfter, teamStats] =
     await Promise.all([
       prisma.customer.findMany({
         where: overdueWhere,
@@ -106,10 +203,24 @@ export async function getDashboardData(userId: string, isOwner: boolean): Promis
         orderBy: { startAt: "asc" },
         take: 50,
       }),
+      prisma.sessionCard.findMany({
+        where: sessionTodayWhere,
+        select: {
+          id: true,
+          scheduledAt: true,
+          status: true,
+          customer: { select: { name: true } },
+          property: { select: { title: true } },
+        },
+        orderBy: { scheduledAt: "asc" },
+        take: 50,
+      }),
+      getDaySchedule(tomorrowStart, tomorrowEnd, userId, isOwner),
+      getDaySchedule(dayAfterStart, dayAfterEnd, userId, isOwner),
       isOwner ? getTeamStats(weekAgo, monthAgo) : Promise.resolve(null),
     ]);
 
-  return { overdueCustomers, overdueTotal, todayFollowUps, todayTotal, needsReview, needsReviewTotal, tasks, viewings, teamStats };
+  return { overdueCustomers, overdueTotal, todayFollowUps, todayTotal, needsReview, needsReviewTotal, tasks, viewings, sessionCardsToday, tomorrow, dayAfter, teamStats };
 }
 
 async function getTeamStats(weekAgo: Date, monthAgo: Date): Promise<DashboardTeamStat[]> {

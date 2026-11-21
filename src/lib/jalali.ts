@@ -91,3 +91,32 @@ export function isToday(date: Date | string | null | undefined): boolean {
 export function isPastJalaliDate(jy: number, jm: number, jd: number, today: JalaliDate = getTodayJalali()): boolean {
   return compareJalali({ jy, jm, jd }, today) < 0;
 }
+
+/** تهران UTC+3:30 است و از ۲۰۲۲ ساعت تابستانی ندارد — آفست ثابت امن است. */
+const TEHRAN_OFFSET_MS = 3.5 * 60 * 60 * 1000;
+
+/** بازهٔ یک روز به وقت تهران: از ۰۰:۰۰ تا ۲۳:۵۹:۵۹٫۹۹۹ */
+export function tehranDayBounds(now: Date = new Date()): { start: Date; end: Date } {
+  const shifted = new Date(now.getTime() + TEHRAN_OFFSET_MS);
+  const startShifted = new Date(
+    Date.UTC(shifted.getUTCFullYear(), shifted.getUTCMonth(), shifted.getUTCDate())
+  );
+  const start = new Date(startShifted.getTime() - TEHRAN_OFFSET_MS);
+  const end = new Date(start.getTime() + 24 * 60 * 60 * 1000 - 1);
+  return { start, end };
+}
+
+/**
+ * بازهٔ یک روز به وقت تهران با فاصله از امروز: ۰ یعنی امروز، ۱ یعنی فردا،
+ * ۲ یعنی پس‌فردا. تهران ساعت تابستانی ندارد، پس جابه‌جایی ۲۴ ساعته دقیق است.
+ */
+export function tehranDayBoundsOffset(now: Date = new Date(), dayOffset = 0): { start: Date; end: Date } {
+  return tehranDayBounds(new Date(now.getTime() + dayOffset * 24 * 60 * 60 * 1000));
+}
+
+/** روز و ماه شمسی بدون سال، مثل «۱ آذر» — برای عنوان کارت‌های فردا/پس‌فردا. */
+export function formatJalaliDayMonth(date: Date | string | null | undefined): string {
+  const j = toJalali(date);
+  if (!j) return "—";
+  return toPersianDigits(`${j.jd} ${MONTH_NAMES[j.jm - 1]}`);
+}

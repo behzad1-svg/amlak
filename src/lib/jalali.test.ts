@@ -3,6 +3,7 @@ import {
   compareJalali,
   formatJalali,
   formatJalaliDateTime,
+  formatJalaliDayMonth,
   formatJalaliShort,
   getJalaliDaysInMonth,
   getTodayJalali,
@@ -10,6 +11,8 @@ import {
   isToday,
   isValidJalaliDate,
   jalaliToGregorian,
+  tehranDayBounds,
+  tehranDayBoundsOffset,
   toJalali,
   toPersianDigits,
 } from "./jalali";
@@ -168,5 +171,73 @@ describe("isPastJalaliDate", () => {
     expect(isPastJalaliDate(1405, 7, 30, today)).toBe(true);
     expect(isPastJalaliDate(1405, 8, 30, today)).toBe(false);
     expect(isPastJalaliDate(1405, 9, 1, today)).toBe(false);
+  });
+});
+
+describe("tehranDayBounds", () => {
+  it("starts the Tehran day at 20:30 UTC the day before", () => {
+    // 2026-11-21 00:00 UTC = 03:30 Tehran on 30 Aban
+    const { start, end } = tehranDayBounds(new Date("2026-11-21T00:00:00Z"));
+    expect(start.toISOString()).toBe("2026-11-20T20:30:00.000Z");
+    expect(end.toISOString()).toBe("2026-11-21T20:29:59.999Z");
+  });
+
+  it("a late UTC evening is still the same Tehran day", () => {
+    // 2026-11-21 20:00 UTC = 23:30 Tehran on 30 Aban
+    const { start } = tehranDayBounds(new Date("2026-11-21T20:00:00Z"));
+    expect(start.toISOString()).toBe("2026-11-20T20:30:00.000Z");
+  });
+
+  it("just after Tehran midnight starts a new day", () => {
+    // 2026-11-21 20:30 UTC = 2026-11-22 00:00 Tehran
+    const { start, end } = tehranDayBounds(new Date("2026-11-21T20:30:00Z"));
+    expect(start.toISOString()).toBe("2026-11-21T20:30:00.000Z");
+    expect(end.toISOString()).toBe("2026-11-22T20:29:59.999Z");
+  });
+});
+
+describe("tehranDayBoundsOffset", () => {
+  it("tomorrow starts at Tehran midnight after today", () => {
+    // 2026-11-21 07:00 UTC = 10:30 Tehran, Sat 30 Aban
+    const now = new Date("2026-11-21T07:00:00Z");
+    const { start, end } = tehranDayBoundsOffset(now, 1);
+    expect(start.toISOString()).toBe("2026-11-21T20:30:00.000Z"); // 00:00 Tehran, 1 Azar
+    expect(end.toISOString()).toBe("2026-11-22T20:29:59.999Z");
+  });
+
+  it("day after tomorrow is 2 Azar", () => {
+    const now = new Date("2026-11-21T07:00:00Z");
+    const { start, end } = tehranDayBoundsOffset(now, 2);
+    expect(start.toISOString()).toBe("2026-11-22T20:30:00.000Z"); // 00:00 Tehran, 2 Azar
+    expect(end.toISOString()).toBe("2026-11-23T20:29:59.999Z");
+  });
+
+  it("offset 0 is the same as today", () => {
+    const now = new Date("2026-11-21T07:00:00Z");
+    const a = tehranDayBoundsOffset(now, 0);
+    const b = tehranDayBounds(now);
+    expect(a.start.toISOString()).toBe(b.start.toISOString());
+    expect(a.end.toISOString()).toBe(b.end.toISOString());
+  });
+
+  it("a morning viewing tomorrow falls inside the tomorrow window only", () => {
+    const now = new Date("2026-11-21T07:00:00Z");
+    const tomorrow = tehranDayBoundsOffset(now, 1);
+    const today = tehranDayBounds(now);
+    const viewing = new Date("2026-11-22T00:00:00Z"); // 03:30 Tehran, 1 Azar
+    expect(viewing.getTime()).toBeGreaterThanOrEqual(tomorrow.start.getTime());
+    expect(viewing.getTime()).toBeLessThanOrEqual(tomorrow.end.getTime());
+    expect(viewing.getTime()).toBeGreaterThan(today.end.getTime());
+  });
+});
+
+describe("formatJalaliDayMonth", () => {
+  it("formats day and month without year", () => {
+    expect(formatJalaliDayMonth(new Date(2026, 10, 22))).toBe("۱ آذر");
+    expect(formatJalaliDayMonth(new Date(2026, 10, 16))).toBe("۲۵ آبان");
+  });
+
+  it("returns a dash for missing input", () => {
+    expect(formatJalaliDayMonth(null)).toBe("—");
   });
 });
