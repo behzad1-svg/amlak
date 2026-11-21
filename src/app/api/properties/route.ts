@@ -329,6 +329,18 @@ export async function POST(req: NextRequest) {
     },
   });
 
+  // قیمت اولیهٔ فایل — نقطهٔ شروع تاریخچه قیمت
+  const initialPrices = [
+    { field: "SALE_PRICE", value: property.salePriceToman },
+    { field: "DEPOSIT", value: property.depositToman },
+    { field: "MONTHLY_RENT", value: property.monthlyRentToman },
+  ].filter((p) => p.value !== null);
+  if (initialPrices.length > 0) {
+    await prisma.priceHistory.createMany({
+      data: initialPrices.map((p) => ({ propertyId: property.id, field: p.field, oldValue: null, newValue: p.value, changedById: session.user.id })),
+    });
+  }
+
   await createAuditLog({ actorId: session.user.id, action: "PROPERTY_CREATED", entityType: "Property", entityId: property.id, newValue: { code: property.code, title: d.title } as never });
   await prisma.activity.create({ data: { type: "NOTE", agentId: session.user.id, propertyId: property.id, description: `فایل جدید ${property.code}: ${d.title}` } });
 

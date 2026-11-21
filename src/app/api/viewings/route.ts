@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { getSessionFromCookies } from "@/lib/auth";
 import { viewingCreateSchema } from "@/lib/validation";
+import { VISIT_RATING_LABELS } from "@/lib/constants";
 import { serializeBigInt } from "@/lib/utils";
 import { canAccessCustomer } from "@/lib/access";
 import { hasRestrictedAccess } from "@/lib/access";
@@ -61,6 +62,7 @@ export async function POST(req: NextRequest) {
   const d = parsed.data;
   if (d.endAt && new Date(d.endAt) <= new Date(d.startAt)) return NextResponse.json({ error: "زمان پایان باید بعد از شروع باشد" }, { status: 400 });
   if (d.status === "DONE" && !d.endAt) return NextResponse.json({ error: "برای بازدید انجام‌شده، زمان پایان الزامی است" }, { status: 400 });
+  if (d.rating && d.status !== "DONE") return NextResponse.json({ error: "گزارش بازدید فقط برای بازدید انجام‌شده ثبت می‌شود" }, { status: 400 });
 
   // نسبت دادن بازدید به مشاور — فقط مدیر
   let agentId = session.user.id;
@@ -92,6 +94,9 @@ export async function POST(req: NextRequest) {
       endAt: d.endAt ? new Date(d.endAt) : null,
       status: (d.status as never) ?? "SCHEDULED",
       feedback: d.feedback,
+      rating: d.status === "DONE" ? ((d.rating as never) ?? null) : null,
+      reportComment: d.reportComment ?? null,
+      reportedAt: d.rating ? new Date() : null,
     },
   });
   await createAuditLog({
@@ -103,13 +108,17 @@ export async function POST(req: NextRequest) {
   });
   // یادداشت در پرونده فایل + مشتری تا فعالیت مشاور دیده شود
   const statusLabel = viewing.status === "DONE" ? "بازدید انجام شد" : "بازدید ثبت شد";
+  const ratingLabel = viewing.rating ? VISIT_RATING_LABELS[viewing.rating] ?? viewing.rating : null;
   await prisma.activity.create({
     data: {
       type: viewing.status === "DONE" ? "VIEWING_DONE" : "NOTE",
       agentId,
       customerId: d.customerId,
       propertyId: d.propertyId,
-      description: d.feedback ? `${statusLabel}: ${d.feedback}` : statusLabel,
+      description:
+        d.feedback || ratingLabel
+          ? `${statusLabel}${ratingLabel ? ` — ${ratingLabel}` : ""}${d.feedback ? `: ${d.feedback}` : ""}${viewing.reportComment ? ` — «${viewing.reportComment}»` : ""}`
+          : statusLabel,
     },
   });
   return NextResponse.json(serializeBigInt(viewing), { status: 201 });

@@ -151,6 +151,27 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
   if (d.nextOwnerFollowUpAt !== undefined) updateData.nextOwnerFollowUpAt = d.nextOwnerFollowUpAt ? new Date(d.nextOwnerFollowUpAt as string) : null;
 
   const property = await prisma.property.update({ where: { id }, data: updateData });
+
+  // تاریخچه قیمت — هر تغییر قیمت فروش/رهن/اجاره با قیمت قبل و بعد ثبت می‌شود؛
+  // قیمت معامله جدا می‌ماند و اینجا ثبت نمی‌شود.
+  const priceFields = [
+    { key: "salePriceToman", field: "SALE_PRICE" },
+    { key: "depositToman", field: "DEPOSIT" },
+    { key: "monthlyRentToman", field: "MONTHLY_RENT" },
+  ] as const;
+  const historyRows = [];
+  for (const { key, field } of priceFields) {
+    if (!(key in updateData)) continue;
+    const oldVal = existing[key] as bigint | null;
+    const newVal = updateData[key] as bigint | null;
+    if (oldVal !== newVal) {
+      historyRows.push({ propertyId: id, field, oldValue: oldVal, newValue: newVal, changedById: session.user.id });
+    }
+  }
+  if (historyRows.length > 0) {
+    await prisma.priceHistory.createMany({ data: historyRows });
+  }
+
   await createAuditLog({ actorId: session.user.id, action: "PROPERTY_UPDATED", entityType: "Property", entityId: id });
 
   // همگام‌سازی لیست تیک‌خورده مشاورها (از فرم ویرایش)

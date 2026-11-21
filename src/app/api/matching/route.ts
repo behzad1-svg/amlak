@@ -4,7 +4,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { getSessionFromCookies } from "@/lib/auth";
-import { findMatchesForCustomer, findMatchesForProperty } from "@/lib/matching";
+import { findMatchesForCustomer, findMatchesForProperty, MatchBreakdownItem } from "@/lib/matching";
 import { canAccessCustomer, canAccessPropertyFull, hasRestrictedAccess } from "@/lib/access";
 
 type MatchItem = {
@@ -14,6 +14,7 @@ type MatchItem = {
   sub: string | null;
   score: number;
   reasons: string[];
+  breakdown: MatchBreakdownItem[];
 };
 
 // Same view rule as properties/[id]: OWNER, lister, office file,
@@ -51,7 +52,7 @@ export async function GET(req: NextRequest) {
         | undefined;
       if (!prop) continue;
       if (!(await canViewProperty(session.user, prop))) continue;
-      items.push({ id: m.id, kind: "Property", label: prop.title, sub: prop.region, score: m.score, reasons: m.reasons });
+      items.push({ id: m.id, kind: "Property", label: prop.title, sub: prop.region, score: m.score, reasons: m.reasons, breakdown: m.breakdown });
     }
     return NextResponse.json({ matches: items });
   }
@@ -68,7 +69,7 @@ export async function GET(req: NextRequest) {
     const cust = m.customer as { id: string; name: string; assignedAgentId: string } | undefined;
     if (!cust) continue;
     if (!canAccessCustomer(session.user, cust)) continue;
-    items.push({ id: m.id, kind: "Customer", label: cust.name, sub: null, score: m.score, reasons: m.reasons });
+    items.push({ id: m.id, kind: "Customer", label: cust.name, sub: null, score: m.score, reasons: m.reasons, breakdown: m.breakdown });
   }
   return NextResponse.json({ matches: items });
 }
