@@ -755,7 +755,7 @@ export default function CustomerDetailPage() {
               <div className="mb-3 rounded-[12px] border border-dashed border-[var(--line-2)] bg-white px-3 py-4 text-center">
                 <p className="text-sm text-[var(--ink-3)]">
                   {c.nextFollowUpAt
-                    ? `پیگیری بعدی: ${formatDate(c.nextFollowUpAt)} — برای ثبت در لیست، تاریخ را از پایین اضافه کنید`
+                    ? (<>پیگیری بعدی: <DateText value={c.nextFollowUpAt} /> — برای ثبت در لیست، تاریخ را از پایین اضافه کنید</>)
                     : "هنوز پیگیری ثبت نشده"}
                 </p>
               </div>
@@ -1078,7 +1078,7 @@ export default function CustomerDetailPage() {
                       className="rounded-[12px] border border-[var(--line)] bg-white px-2 py-2 text-right hover:bg-[var(--paper-2)] disabled:opacity-50"
                     >
                       <span className="block text-[12.5px] font-bold">{q.label}{quickSaving === q.key ? " ..." : ""}</span>
-                      <span className="block text-[11px] text-[var(--ink-3)]">پیگیری {formatDate(isoInDays(q.days))}</span>
+                      <span className="block text-[11px] text-[var(--ink-3)]">پیگیری <DateText value={isoInDays(q.days)} /></span>
                     </button>
                   ))}
                 </div>

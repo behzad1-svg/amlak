@@ -137,7 +137,7 @@ export default async function TodayPage({
                 {f.customerName}
               </Link>
               <span className="text-[12px] text-[var(--ink-3)]" dir="ltr">{f.customerPhone}</span>
-              <span className="text-[12px] text-[var(--pomegranate)]">سررسید {formatDate(f.dueAt)}</span>
+              <span className="text-[12px] text-[var(--pomegranate)]">سررسید <DateText value={f.dueAt} /></span>
               {f.note && <span className="w-full text-[12px] text-[var(--ink-2)]">{f.note}</span>}
             </div>
           ))}

@@ -9,7 +9,6 @@ import { getDashboardData } from "@/lib/dashboard";
 import { Header } from "@/components/layout/Header";
 import { Card, CardHeader, CardTitle } from "@/components/ui/Card";
 import { Badge } from "@/components/ui/Badge";
-import { formatDate, formatDateTime } from "@/lib/utils";
 import { CUSTOMER_STAGE_LABELS } from "@/lib/constants";
 import { AlertTriangle, Clock, Users, ArrowUpLeft, Eye, CalendarCheck, ListChecks } from "lucide-react";
 import { AdvertiseTodayCard } from "@/components/dashboard/AdvertiseTodayCard";
@@ -85,7 +84,7 @@ export default async function DashboardPage() {
                     </div>
                     <div className="mt-1 flex items-center gap-2 text-[12px] text-[var(--ink-3)]">
                       <Badge className="bg-[var(--pomegranate-soft)] text-[var(--pomegranate)] border-[var(--pomegranate-line)]">{CUSTOMER_STAGE_LABELS[c.stage] ?? c.stage}</Badge>
-                      <span>پیگیری: {formatDate(c.nextFollowUpAt)}</span>
+                      <span>پیگیری: <DateText value={c.nextFollowUpAt} /></span>
                     </div>
                   </div>
                   <span className="hidden sm:inline-flex items-center gap-1 rounded-full border border-[var(--line)] bg-white px-2.5 py-1 text-[11px] font-medium"><Eye className="h-3.5 w-3.5" /> مشاهده</span>
@@ -136,7 +135,7 @@ export default async function DashboardPage() {
                 <div key={v.id} className="flex items-center justify-between gap-3 rounded-[12px] px-3 py-2.5 hover:bg-[var(--paper-2)]">
                   <div className="min-w-0">
                     <div className="truncate text-[13.5px] font-medium">{v.customer.name} — {v.property.title}</div>
-                    <div className="text-[12px] text-[var(--ink-3)]">{formatDateTime(v.startAt)}</div>
+                    <div className="text-[12px] text-[var(--ink-3)]"><DateText value={v.startAt} withTime /></div>
                   </div>
                 </div>
               ))}
