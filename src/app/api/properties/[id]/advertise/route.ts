@@ -77,12 +77,15 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
     entityId: id,
     newValue: { agentId } as never,
   });
-  // اعلان برای همه مدیرها — تا مدیر ببیند هر مشاور چه فایلی را آگهی کرده
+  // اعلان برای همه مدیرها — تا مدیر ببیند هر مشاور چه فایلی را آگهی کرده.
+  // ثبت‌کننده وقتی خودش مدیر هم هست، اعلان جداگانه خودش را می‌گیرد (پایین) —
+  // پس از فهرست مدیرها حذف می‌شود تا دو اعلان یکسان نگیرد (باگ ۱۴۰۵/۰۸/۳۰).
   const owners = await prisma.user.findMany({ where: { role: "OWNER", active: true }, select: { id: true } });
   const fileLabel = property.code ? `${property.code} — ${property.title}` : property.title;
-  if (owners.length > 0) {
+  const notifyOwners = isGrantee ? owners.filter((o) => o.id !== property.listedById) : owners;
+  if (notifyOwners.length > 0) {
     await prisma.notification.createMany({
-      data: owners.map((o) => ({
+      data: notifyOwners.map((o) => ({
         userId: o.id,
         type: "ADVERTISED" as never,
         priority: "NORMAL" as never,

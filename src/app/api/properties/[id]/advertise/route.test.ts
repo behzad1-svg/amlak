@@ -113,6 +113,28 @@ describe("POST /api/properties/[id]/advertise — lister, OWNER, or ticked advis
     expect(prismaMock.notification.createMany).toHaveBeenCalled();
   });
 
+  it("registrar who is also an OWNER gets exactly one notification, not two", async () => {
+    setSession(AGENT_B);
+    prismaMock.property.findUnique.mockResolvedValue({ ...teamVisibleFile(), listedById: OWNER.id });
+    prismaMock.propertyAccess.findFirst.mockResolvedValue({ id: "acc1" });
+    prismaMock.user.findMany.mockResolvedValue([{ id: OWNER.id }, { id: "u-owner2" }]);
+    const res = await POST(postReq(), params);
+    expect(res.status).toBe(200);
+    // اعلان جداگانه ثبت‌کننده — دقیقاً یک بار
+    expect(prismaMock.notification.create).toHaveBeenCalledTimes(1);
+    expect(prismaMock.notification.create).toHaveBeenCalledWith(
+      expect.objectContaining({
+        data: expect.objectContaining({ userId: OWNER.id, type: "ADVERTISED", relatedId: "p1" }),
+      })
+    );
+    // اعلان مدیرها — بدون ثبت‌کننده، تا دو اعلان یکسان نگیرد
+    expect(prismaMock.notification.createMany).toHaveBeenCalledTimes(1);
+    const manyArg = prismaMock.notification.createMany.mock.calls[0][0] as {
+      data: { userId: string }[];
+    };
+    expect(manyArg.data.map((d) => d.userId)).toEqual(["u-owner2"]);
+  });
+
   it("403 for a revoked grant — only active (unrevoked) grants count", async () => {
     setSession(AGENT_B);
     prismaMock.property.findUnique.mockResolvedValue(teamVisibleFile());
