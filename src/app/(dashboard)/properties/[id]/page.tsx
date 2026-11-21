@@ -72,6 +72,7 @@ type Prop = Record<string, unknown> & {
   appraisedAt?: string | null;
   isOfficeFile?: boolean;
   isAdvertised?: boolean;
+  canAdvertise?: boolean;
   listedBy?: { id: string; name: string } | null;
   owner?: { id: string; name: string; phone?: string } | null;
   appraisedBy?: { id: string; name: string } | null;
@@ -531,12 +532,14 @@ export default function PropertyDetailPage() {
                 />
               </dd>
             </div>
-            <div className="flex items-center justify-between gap-3 py-2 border-b border-[var(--line)] last:border-0">
-              <dt className="shrink-0 text-[12.5px] text-[var(--ink-3)]">آگهی</dt>
-              <dd>
-                <AdvertiseButton propertyId={p.id} onChanged={load} />
-              </dd>
-            </div>
+            {p.canAdvertise ? (
+              <div className="flex items-center justify-between gap-3 py-2 border-b border-[var(--line)] last:border-0">
+                <dt className="shrink-0 text-[12.5px] text-[var(--ink-3)]">آگهی</dt>
+                <dd>
+                  <AdvertiseButton propertyId={p.id} onChanged={load} />
+                </dd>
+              </div>
+            ) : null}
           </dl>
         </Card>
 

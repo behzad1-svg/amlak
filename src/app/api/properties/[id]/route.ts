@@ -66,6 +66,13 @@ export async function GET(_req: NextRequest, { params }: { params: Promise<{ id:
     delete (result as Record<string, unknown>).accessList;
   }
 
+  // پرچم آگهی برای دکمه «آگهی کردم» در صفحه فایل — همان شرط سرور در advertise/route:
+  // مدیر، ثبت‌کننده، یا مشاور دارای دسترسی صریح (تیک‌خورده)؛ بیننده TEAM_VISIBLE بدون تیک false
+  (result as Record<string, unknown>).canAdvertise =
+    session.user.role === "OWNER" ||
+    property.listedById === session.user.id ||
+    hasGrant;
+
   // no-store صریح: پاسخ GET فایل نباید در CDN/مرورگر کش شود، وگرنه بعد از
   // ذخیره قیمت صفحه کهنه می‌ماند تا ریلود دستی (F4).
   return NextResponse.json(serializeBigInt(result), {

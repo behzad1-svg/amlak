@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { getSessionFromCookies } from "@/lib/auth";
+import { hasRestrictedAccess } from "@/lib/access";
 import { serializeBigInt } from "@/lib/utils";
 import { createAuditLog } from "@/lib/audit";
 
@@ -34,9 +35,17 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
   const property = await prisma.property.findUnique({ where: { id } });
   if (!property || property.deletedAt) return NextResponse.json({ error: "فایل یافت نشد" }, { status: 404 });
 
-  // Only owner/lister can edit — same rule as PATCH on properties/[id] (IDOR fix 2026-11-21)
-  if (session.user.role !== "OWNER" && property.listedById !== session.user.id) {
-    return NextResponse.json({ error: "دسترسی ندارید" }, { status: 403 });
+  // ثبت‌کننده، مدیر، یا مشاوری که تیک دسترسی کامل دارد (دسترسی صریح، فعال و منقضی‌نشده)
+  // می‌تواند آگهی کند — قانون بهزاد ۱۴۰۵/۰۸/۳۰: تیک = دیدن کامل + آگهی.
+  // بیننده TEAM_VISIBLE بدون تیک فقط نمای ماسک‌شده را می‌بیند و اجازه آگهی ندارد؛
+  // بیننده فایل دفتر هم بدون تیک نمی‌تواند آگهی کند.
+  const isGrantee =
+    session.user.role !== "OWNER" && property.listedById !== session.user.id;
+  if (isGrantee) {
+    const hasGrant = await hasRestrictedAccess(prisma as never, property.id, session.user.id);
+    if (!hasGrant) {
+      return NextResponse.json({ error: "دسترسی ندارید" }, { status: 403 });
+    }
   }
 
   // تکرار همان روز — یک Activity در هر روز تقویمی تهران برای هر (مشاور، فایل)
@@ -70,8 +79,8 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
   });
   // اعلان برای همه مدیرها — تا مدیر ببیند هر مشاور چه فایلی را آگهی کرده
   const owners = await prisma.user.findMany({ where: { role: "OWNER", active: true }, select: { id: true } });
+  const fileLabel = property.code ? `${property.code} — ${property.title}` : property.title;
   if (owners.length > 0) {
-    const fileLabel = property.code ? `${property.code} — ${property.title}` : property.title;
     await prisma.notification.createMany({
       data: owners.map((o) => ({
         userId: o.id,
@@ -81,6 +90,19 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
         relatedId: id,
         message: `${agent?.name ?? "مشاور"} فایل ${fileLabel} را آگهی کرد.`,
       })),
+    });
+  }
+  // اعلان برای ثبت‌کننده فایل وقتی مشاور دارای دسترسی (تیک‌خورده) آگهی می‌کند — تا بداند فایلش آگهی شد
+  if (isGrantee) {
+    await prisma.notification.create({
+      data: {
+        userId: property.listedById,
+        type: "ADVERTISED" as never,
+        priority: "NORMAL" as never,
+        relatedType: "Property",
+        relatedId: id,
+        message: `${agent?.name ?? "مشاور"} فایل ${fileLabel} را آگهی کرد.`,
+      },
     });
   }
   return NextResponse.json(serializeBigInt({ property: updated, activity }));
