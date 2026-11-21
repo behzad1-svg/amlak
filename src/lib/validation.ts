@@ -206,6 +206,9 @@ export const viewingCreateSchema = z.object({
   endAt: z.string().optional().nullable(),
   status: z.enum(["SCHEDULED", "DONE", "CANCELED"]).optional(),
   feedback: z.string().max(2000).optional().nullable(),
+  /// گزارش سه‌ضربه‌ای بازدید — فقط با ثبت بازدید انجام‌شده معنا دارد
+  rating: z.enum(["LIKED", "MIXED", "NOT_INTERESTED"]).optional(),
+  reportComment: z.string().max(500).optional().nullable(),
 });
 
 /// کارت جلسه — هماهنگی پیش از قرارداد بین مشاور و مدیر
@@ -338,4 +341,13 @@ export const viewingUpdateSchema = z.object({
   feedback: z.string().max(2000).optional().nullable(),
   startAt: z.string().optional(),
   endAt: z.string().optional().nullable(),
+  /// گزارش سه‌ضربه‌ای بازدید
+  rating: z.enum(["LIKED", "MIXED", "NOT_INTERESTED"]).optional().nullable(),
+  reportComment: z.string().max(500).optional().nullable(),
+});
+
+/// رد کردن تطبیق («علاقه‌ای ندارد»)
+export const matchDismissSchema = z.object({
+  customerId: z.string().min(1),
+  propertyId: z.string().min(1),
 });

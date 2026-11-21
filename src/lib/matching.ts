@@ -1,10 +1,25 @@
 import { prisma } from "./prisma";
 import { MATCHING_CONFIG } from "./constants";
 
+export type MatchCriterionFit = "fit" | "miss" | "na";
+
+export interface MatchBreakdownItem {
+  key: "budget" | "size" | "beds" | "dealType" | "type" | "area";
+  label: string;
+  /** component score 0-100, or null when the customer did not specify it */
+  score: number | null;
+  /** weighted contribution to the final score (points) */
+  points: number;
+  weight: number;
+  fit: MatchCriterionFit;
+}
+
 export interface MatchResult {
   id: string;
   score: number;
   reasons: string[];
+  /** per-criterion explanation of the score: which criteria fit, which miss */
+  breakdown: MatchBreakdownItem[];
   property?: unknown;
   customer?: unknown;
 }
@@ -115,22 +130,41 @@ function bedsScore(custBeds: number | null, propBeds: number | null): number | n
   return Math.max(0, 100 - diff * 25);
 }
 
-function finalScore(parts: { budget: number | null; size: number | null; beds: number | null }): { score: number; reasons: string[] } {
-  const reasons: string[] = [];
+function finalScore(parts: { budget: number | null; size: number | null; beds: number | null }): {
+  score: number;
+  reasons: string[];
+  breakdown: MatchBreakdownItem[];
+} {
   const weights = [
     { key: "budget" as const, label: "بودجه", w: MATCHING_CONFIG.budgetWeight, v: parts.budget },
     { key: "size" as const, label: "متراژ", w: MATCHING_CONFIG.sizeWeight, v: parts.size },
     { key: "beds" as const, label: "خواب", w: MATCHING_CONFIG.bedsWeight, v: parts.beds },
-  ].filter((x) => x.v !== null);
+  ];
+  // امتیاز ۷۰ به بالا یعنی معیار «جور درآمده»؛ زیر ۷۰ یعنی امتیاز را پایین کشیده؛
+  // null یعنی مشتری آن را مشخص نکرده و در امتیاز نهایی حساب نشده است.
+  const breakdown: MatchBreakdownItem[] = weights.map((x) => ({
+    key: x.key,
+    label: x.label,
+    score: x.v,
+    points: 0,
+    weight: x.w,
+    fit: x.v === null ? "na" : x.v >= 70 ? "fit" : "miss",
+  }));
+  const present = weights.filter((x) => x.v !== null);
 
-  if (weights.length === 0) {
-    return { score: 80, reasons: ["تطابق منطقه و نوع"] };
+  if (present.length === 0) {
+    return { score: 80, reasons: ["تطابق منطقه و نوع"], breakdown };
   }
 
-  const totalW = weights.reduce((s, x) => s + x.w, 0);
-  const score = Math.round(weights.reduce((s, x) => s + (x.v as number) * x.w, 0) / totalW);
-  for (const x of weights) reasons.push(`${x.label} ${x.v}%`);
-  return { score, reasons };
+  const totalW = present.reduce((s, x) => s + x.w, 0);
+  const score = Math.round(present.reduce((s, x) => s + (x.v as number) * x.w, 0) / totalW);
+  const reasons: string[] = [];
+  for (const x of present) {
+    reasons.push(`${x.label} ${x.v}%`);
+    const item = breakdown.find((b) => b.key === x.key);
+    if (item) item.points = Math.round(((x.v as number) * x.w) / totalW);
+  }
+  return { score, reasons, breakdown };
 }
 
 type CustLike = {
@@ -163,7 +197,7 @@ function effectiveAreas(cust: CustLike): string[] {
   return cust.preferredArea ? [cust.preferredArea] : [];
 }
 
-export function scorePair(cust: CustLike, prop: PropLike): { score: number; reasons: string[] } | null {
+export function scorePair(cust: CustLike, prop: PropLike): { score: number; reasons: string[]; breakdown: MatchBreakdownItem[] } | null {
   if (cust.preferredDealType && cust.preferredDealType !== prop.dealType) return null;
   if (cust.preferredType && cust.preferredType !== prop.type) return null;
   const areas = effectiveAreas(cust);
@@ -191,13 +225,24 @@ export function scorePair(cust: CustLike, prop: PropLike): { score: number; reas
   const bedScore = bedsScore(cust.preferredBeds, prop.beds);
 
   const reasons: string[] = [];
-  if (cust.preferredDealType) reasons.push("نوع معامله ✓");
-  if (cust.preferredType) reasons.push("نوع ملک ✓");
-  if (areas.length > 0) reasons.push("منطقه ✓");
+  // فیلترهای سخت — حتماً جور درآمده‌اند، وگرنه تا اینجا نمی‌رسیدیم
+  const hardFilters: MatchBreakdownItem[] = [];
+  if (cust.preferredDealType) {
+    reasons.push("نوع معامله ✓");
+    hardFilters.push({ key: "dealType", label: "نوع معامله", score: 100, points: 0, weight: 0, fit: "fit" });
+  }
+  if (cust.preferredType) {
+    reasons.push("نوع ملک ✓");
+    hardFilters.push({ key: "type", label: "نوع ملک", score: 100, points: 0, weight: 0, fit: "fit" });
+  }
+  if (areas.length > 0) {
+    reasons.push("منطقه ✓");
+    hardFilters.push({ key: "area", label: "منطقه", score: 100, points: 0, weight: 0, fit: "fit" });
+  }
 
-  const { score, reasons: scoreReasons } = finalScore({ budget: bScore, size: sScore, beds: bedScore });
+  const { score, reasons: scoreReasons, breakdown } = finalScore({ budget: bScore, size: sScore, beds: bedScore });
   reasons.push(...scoreReasons);
-  return { score, reasons };
+  return { score, reasons, breakdown: [...hardFilters, ...breakdown] };
 }
 
 export async function findMatchesForCustomer(customerId: string): Promise<MatchResult[]> {
@@ -232,12 +277,20 @@ export async function findMatchesForCustomer(customerId: string): Promise<MatchR
     },
   });
 
+  // تطبیق‌های «علاقه‌ای ندارد» از لیست پنهان می‌شوند — داده پاک نمی‌شود
+  const dismissed = await prisma.matchDismissal.findMany({
+    where: { customerId },
+    select: { propertyId: true },
+  });
+  const dismissedIds = new Set(dismissed.map((d) => d.propertyId));
+
   const results: MatchResult[] = [];
   for (const prop of properties) {
+    if (dismissedIds.has(prop.id)) continue;
     const scored = scorePair(cust, prop as unknown as PropLike);
     if (!scored) continue;
     if (scored.score >= MATCHING_CONFIG.threshold) {
-      results.push({ id: prop.id, score: scored.score, reasons: scored.reasons, property: prop });
+      results.push({ id: prop.id, score: scored.score, reasons: scored.reasons, breakdown: scored.breakdown, property: prop });
     }
   }
 
@@ -265,16 +318,38 @@ export async function findMatchesForProperty(propertyId: string): Promise<MatchR
     },
   });
 
+  // تطبیق‌های «علاقه‌ای ندارد» از لیست پنهان می‌شوند — داده پاک نمی‌شود
+  const dismissed = await prisma.matchDismissal.findMany({
+    where: { propertyId },
+    select: { customerId: true },
+  });
+  const dismissedIds = new Set(dismissed.map((d) => d.customerId));
+
   const results: MatchResult[] = [];
   for (const cust of customers) {
+    if (dismissedIds.has(cust.id)) continue;
     const scored = scorePair(cust as unknown as CustLike, prop);
     if (!scored) continue;
     if (scored.score >= MATCHING_CONFIG.threshold) {
-      results.push({ id: cust.id, score: scored.score, reasons: scored.reasons, customer: cust });
+      results.push({ id: cust.id, score: scored.score, reasons: scored.reasons, breakdown: scored.breakdown, customer: cust });
     }
   }
 
   return results.sort((a, b) => b.score - a.score);
+}
+
+/// رد کردن یک تطبیق («علاقه‌ای ندارد») — فقط ردیف رد ذخیره می‌شود؛
+/// مشتری و فایل سر جایشان می‌مانند و با لغو رد، تطبیق دوباره دیده می‌شود.
+export async function dismissMatch(customerId: string, propertyId: string, dismissedById: string) {
+  await prisma.matchDismissal.upsert({
+    where: { customerId_propertyId: { customerId, propertyId } },
+    create: { customerId, propertyId, dismissedById },
+    update: {},
+  });
+}
+
+export async function undismissMatch(customerId: string, propertyId: string) {
+  await prisma.matchDismissal.deleteMany({ where: { customerId, propertyId } });
 }
 
 export async function createMatchNotifications(

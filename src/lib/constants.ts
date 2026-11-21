@@ -247,6 +247,20 @@ export function getStaleInfo(
   return days > limit ? { days, limit } : null;
 }
 
+/** برچسب‌های گزارش سه‌ضربه‌ای بازدید */
+export const VISIT_RATING_LABELS: Record<string, string> = {
+  LIKED: "خوشش آمد",
+  MIXED: "متوسط",
+  NOT_INTERESTED: "خوشش نیامد",
+};
+
+/** رنگ برچسب گزارش بازدید */
+export const VISIT_RATING_COLORS: Record<string, string> = {
+  LIKED: "bg-emerald-100 text-emerald-800 border-emerald-300",
+  MIXED: "bg-amber-100 text-amber-800 border-amber-300",
+  NOT_INTERESTED: "bg-red-100 text-red-800 border-red-300",
+};
+
 export const MATCHING_CONFIG = {
   // بودجه بیشترین وزن را دارد (بهزاد، ۲۵ آبان)
   budgetWeight: 0.6,

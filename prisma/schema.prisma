@@ -73,6 +73,13 @@ enum ViewingStatus {
   CANCELED
 }
 
+/// نتیجهٔ گزارش سه‌ضربه‌ای بازدید — خوشش آمد / متوسط / خوشش نیامد
+enum VisitRating {
+  LIKED
+  MIXED
+  NOT_INTERESTED
+}
+
 enum SessionCardStatus {
   PENDING
   CONFIRMED
@@ -169,6 +176,8 @@ model User {
   transfersFrom  CustomerTransfer[] @relation("TransferFrom")
   transfersTo    CustomerTransfer[] @relation("TransferTo")
   transfersBy    CustomerTransfer[] @relation("TransferBy")
+  matchDismissals MatchDismissal[] @relation("MatchDismissedBy")
+  priceHistoryChanges PriceHistory[] @relation("PriceHistoryChangedBy")
   sessionCards   SessionCard[]      @relation("SessionCardAdvisor")
   sessionCardCoAdvising SessionCardCoAdvisor[] @relation("SessionCardCoAdvisorUser")
   contractManagedSessionCards SessionCard[] @relation("SessionCardContractManager")
@@ -362,6 +371,7 @@ model Property {
   deals    Deal[]
   activities Activity[]
   sessionCards SessionCard[]
+  priceHistory PriceHistory[]
 
   @@index([listedById])
   @@index([region])
@@ -421,6 +431,10 @@ model Viewing {
   endAt      DateTime?
   status     ViewingStatus @default(SCHEDULED)
   feedback   String?
+  /// گزارش سه‌ضربه‌ای بازدید (بعد از انجام بازدید ثبت می‌شود)
+  rating        VisitRating?
+  reportComment String?
+  reportedAt    DateTime?
   createdAt  DateTime      @default(now())
   updatedAt  DateTime      @updatedAt
 
@@ -636,6 +650,38 @@ model Activity {
   @@index([propertyId, createdAt])
 }
 
+
+/// «علاقه‌ای ندارد» روی یک تطبیق — تطبیق از لیست‌ها پنهان می‌شود، ولی داده
+/// پاک نمی‌شود؛ با لغو رد، تطبیق دوباره دیده می‌شود.
+model MatchDismissal {
+  id            String   @id @default(cuid())
+  customerId    String
+  propertyId    String
+  dismissedById String
+  dismissedBy   User     @relation("MatchDismissedBy", fields: [dismissedById], references: [id])
+  createdAt     DateTime @default(now())
+
+  @@unique([customerId, propertyId])
+  @@index([customerId])
+  @@index([propertyId])
+}
+
+/// تاریخچه قیمت فایل — هر تغییر قیمت (فروش/رهن/اجاره) با قیمت قبل و بعد،
+/// زمان تغییر و ثبت‌کننده؛ قیمت معامله جدا می‌ماند و اینجا ثبت نمی‌شود.
+model PriceHistory {
+  id          String   @id @default(cuid())
+  propertyId  String
+  property    Property @relation(fields: [propertyId], references: [id], onDelete: Cascade)
+  /// SALE_PRICE | DEPOSIT | MONTHLY_RENT
+  field       String
+  oldValue    BigInt?
+  newValue    BigInt?
+  changedById String
+  changedBy   User     @relation("PriceHistoryChangedBy", fields: [changedById], references: [id])
+  createdAt   DateTime @default(now())
+
+  @@index([propertyId, createdAt])
+}
 
 /// ثبت خطاهای سمت سرور برای مشاهده توسط مدیر (نقد ۶ — مشاهده‌پذیری).
 /// اگر جدول در دیتابیس نباشد، logApiError به console.error برمی‌گردد و خطا نمی‌دهد.

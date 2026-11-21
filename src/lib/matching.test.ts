@@ -114,3 +114,68 @@ describe("deleteMatchNotificationsForSource", () => {
     });
   });
 });
+
+describe("scorePair breakdown", () => {
+  const fullCust = {
+    preferredDealType: "SALE",
+    preferredType: "APARTMENT",
+    preferredArea: "x",
+    preferredAreas: ["x"],
+    preferredBeds: 2,
+    preferredSizeMin: 90,
+    preferredSizeMax: 120,
+    budgetMin: null,
+    budgetMax: BigInt(10_000_000_000),
+    budgetMaxMonthly: null,
+  };
+  const fullProp = {
+    dealType: "SALE",
+    type: "APARTMENT",
+    region: "x",
+    salePriceToman: BigInt(10_000_000_000),
+    depositToman: null,
+    monthlyRentToman: null,
+    sizeSqm: 100,
+    beds: 2,
+  };
+
+  it("explains which criteria fit, with points summing to the score", () => {
+    const r = scorePair(fullCust, fullProp)!;
+    expect(r.score).toBe(100);
+    const budget = r.breakdown.find((b) => b.key === "budget")!;
+    expect(budget.fit).toBe("fit");
+    expect(budget.score).toBe(100);
+    expect(budget.points).toBe(60);
+    expect(r.breakdown.find((b) => b.key === "size")!.points).toBe(25);
+    expect(r.breakdown.find((b) => b.key === "beds")!.points).toBe(15);
+    const area = r.breakdown.find((b) => b.key === "area")!;
+    expect(area.fit).toBe("fit");
+    expect(area.weight).toBe(0);
+    expect(area.points).toBe(0);
+    const pointsSum = r.breakdown.reduce((s, b) => s + b.points, 0);
+    expect(pointsSum).toBe(r.score);
+  });
+
+  it("marks a far-off size as a miss that drags the score down", () => {
+    const r = scorePair(fullCust, { ...fullProp, sizeSqm: 200 })!;
+    const size = r.breakdown.find((b) => b.key === "size")!;
+    expect(size.fit).toBe("miss");
+    expect(size.score).toBe(0);
+    expect(size.points).toBe(0);
+    expect(r.score).toBe(75);
+    const pointsSum = r.breakdown.reduce((s, b) => s + b.points, 0);
+    expect(pointsSum).toBe(r.score);
+  });
+
+  it("marks unspecified criteria as na and excludes them from the score", () => {
+    const r = scorePair(
+      { ...fullCust, preferredBeds: null, preferredSizeMin: null, preferredSizeMax: null },
+      fullProp
+    )!;
+    expect(r.score).toBe(100);
+    expect(r.breakdown.find((b) => b.key === "size")!.fit).toBe("na");
+    expect(r.breakdown.find((b) => b.key === "beds")!.fit).toBe("na");
+    const budget = r.breakdown.find((b) => b.key === "budget")!;
+    expect(budget.points).toBe(100);
+  });
+});
