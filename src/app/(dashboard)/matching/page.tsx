@@ -171,7 +171,7 @@ function MatchDropdown({ relatedType, relatedId }: { relatedType: string; relate
                   onClick={() => void dismissMatch(m)}
                   className="rounded-md border border-zinc-300 bg-white px-2 py-1 text-[11px] text-zinc-600 hover:bg-zinc-50"
                 >
-                  علاقه\u200Cای ندارد
+                  {"علاقه\u200Cای ندارد"}
                 </button>
               </div>
             </div>
