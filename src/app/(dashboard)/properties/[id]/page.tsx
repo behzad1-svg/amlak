@@ -413,7 +413,9 @@ export default function PropertyDetailPage() {
         subtitle={`${p.code ? `${p.code} · ` : ""}${p.region} · ${typeLabel}`}
         action={
           <div className="flex gap-2">
-            <Button variant="outline" onClick={() => setEditing(!editing)}>{editing ? "انصراف" : "ویرایش"}</Button>
+            {canManageAccess && (
+              <Button variant="outline" onClick={() => setEditing(!editing)}>{editing ? "انصراف" : "ویرایش"}</Button>
+            )}
             {canArchive && (
               <Button variant="outline" onClick={() => setConfirmAction("archive")}>{p.status === "ARCHIVED" ? "بازگردانی" : "بایگانی"}</Button>
             )}

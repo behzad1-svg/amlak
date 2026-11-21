@@ -123,8 +123,10 @@ export async function POST(req: NextRequest) {
     where: { phone: d.phone, deletedAt: null },
   });
   if (clash) {
+    // existingId فقط وقتی برگردد که رکورد مال خودِ درخواست‌دهنده (یا مدیر) باشد — IDOR fix 2026-11-21
+    const ownClash = session.user.role === "OWNER" || clash.ownerId === session.user.id;
     return NextResponse.json(
-      { error: "این شماره در دفترچه تلفن ثبت شده است", existingId: clash.id },
+      { error: "این شماره در دفترچه تلفن ثبت شده است", ...(ownClash ? { existingId: clash.id } : {}) },
       { status: 409 },
     );
   }
@@ -150,19 +152,27 @@ export async function POST(req: NextRequest) {
     ownerId: session.user.id,
   };
 
+  // بازیابی رکورد حذف‌شده فقط وقتی مال خودِ ثبت‌کننده (یا مدیر) باشد؛
+  // وگرنه رکورد تازه ساخته می‌شود تا مالکیت دیگری تصاحب نشود — IDOR fix 2026-11-21
+  const restorableMatch =
+    deletedMatch && (session.user.role === "OWNER" || deletedMatch.ownerId === session.user.id)
+      ? deletedMatch
+      : null;
+
   let contact: Awaited<ReturnType<typeof prisma.phonebookContact.create>>;
   try {
-    contact = deletedMatch
+    contact = restorableMatch
       ? await prisma.phonebookContact.update({
-          where: { id: deletedMatch.id },
+          where: { id: restorableMatch.id },
           data: { ...data, deletedAt: null },
         })
       : await prisma.phonebookContact.create({ data });
   } catch (e) {
     if ((e as { code?: string }).code === "P2002") {
       const again = await prisma.phonebookContact.findFirst({ where: { phone: d.phone } });
+      const ownClash = !!again && (session.user.role === "OWNER" || again.ownerId === session.user.id);
       return NextResponse.json(
-        { error: "این شماره در دفترچه تلفن ثبت شده است", existingId: again?.id ?? null },
+        { error: "این شماره در دفترچه تلفن ثبت شده است", ...(ownClash ? { existingId: again?.id ?? null } : {}) },
         { status: 409 },
       );
     }
@@ -171,7 +181,7 @@ export async function POST(req: NextRequest) {
 
   await createAuditLog({
     actorId: session.user.id,
-    action: deletedMatch ? "PHONEBOOK_RESTORED" : "PHONEBOOK_CREATED",
+    action: restorableMatch ? "PHONEBOOK_RESTORED" : "PHONEBOOK_CREATED",
     entityType: "PhonebookContact",
     entityId: contact.id,
     newValue: { name: d.name } as never,

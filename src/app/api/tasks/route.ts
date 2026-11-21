@@ -4,6 +4,7 @@ import { getSessionFromCookies } from "@/lib/auth";
 import { taskCreateSchema, findInvalidQueryParam } from "@/lib/validation";
 import { serializeBigInt } from "@/lib/utils";
 import { createAuditLog } from "@/lib/audit";
+import { canAccessCustomer } from "@/lib/access";
 
 export async function GET(req: NextRequest) {
   const session = await getSessionFromCookies();
@@ -35,6 +36,13 @@ export async function POST(req: NextRequest) {
   const parsed = taskCreateSchema.safeParse(body);
   if (!parsed.success) return NextResponse.json({ error: parsed.error.issues[0].message }, { status: 400 });
   const d = parsed.data;
+  // گارد: اگر به مشتری اشاره شده، باید دسترسی داشته باشد (مثل activities POST) — IDOR fix 2026-11-21
+  if (session.user.role !== "OWNER" && d.customerId) {
+    const customer = await prisma.customer.findUnique({ where: { id: d.customerId } });
+    if (!customer || !canAccessCustomer(session.user, customer)) {
+      return NextResponse.json({ error: "به این مشتری دسترسی ندارید" }, { status: 403 });
+    }
+  }
   const task = await prisma.task.create({
     data: { title: d.title, dueAt: d.dueAt ? new Date(d.dueAt) : null, priority: d.priority ?? 0, customerId: d.customerId, relatedType: d.relatedType, relatedId: d.relatedId, assignedAgentId: session.user.id },
   });

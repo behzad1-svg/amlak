@@ -247,10 +247,13 @@ export async function POST(req: NextRequest) {
     where: { phone: d.phone, deletedAt: null, ...(isOwner ? { type: "OWNER" } : { type: { not: "OWNER" } }) },
   });
   if (phoneClash) {
+    // existingId فقط وقتی برگردد که رکورد تکراری مال خودِ درخواست‌دهنده (یا مدیر) باشد؛
+    // وگرنه شمارهٔ دیگری را لو می‌دهد (اوراکل) — IDOR fix 2026-11-21
+    const ownClash = session.user.role === "OWNER" || phoneClash.assignedAgentId === session.user.id;
     return NextResponse.json(
       {
         error: isOwner ? "مالک با این شماره قبلا ثبت شده است" : "مشتری با این شماره قبلا ثبت شده است",
-        existingId: phoneClash.id,
+        ...(ownClash ? { existingId: phoneClash.id } : {}),
       },
       { status: 409 }
     );
@@ -301,11 +304,18 @@ export async function POST(req: NextRequest) {
     assignedAgentId,
   };
 
+  // بازیابی رکورد حذف‌شده فقط وقتی مال خودِ ثبت‌کننده (یا مدیر) باشد؛
+  // وگرنه رکورد تازه ساخته می‌شود تا مالکیت دیگری تصاحب نشود — IDOR fix 2026-11-21
+  const restorableMatch =
+    deletedMatch && (session.user.role === "OWNER" || deletedMatch.assignedAgentId === session.user.id)
+      ? deletedMatch
+      : null;
+
   let customer: Awaited<ReturnType<typeof prisma.customer.create>>;
   try {
-    customer = deletedMatch
+    customer = restorableMatch
       ? await prisma.customer.update({
-          where: { id: deletedMatch.id },
+          where: { id: restorableMatch.id },
           data: { ...customerData, deletedAt: null },
         })
       : await prisma.customer.create({ data: customerData });
@@ -317,10 +327,11 @@ export async function POST(req: NextRequest) {
       const clash = await prisma.customer.findFirst({
         where: { phone: d.phone, ...(isOwner ? { type: "OWNER" } : { type: { not: "OWNER" } }) },
       });
+      const ownClash = !!clash && (session.user.role === "OWNER" || clash.assignedAgentId === session.user.id);
       return NextResponse.json(
         {
           error: isOwner ? "مالک با این شماره قبلا ثبت شده است" : "مشتری با این شماره قبلا ثبت شده است",
-          existingId: clash?.id ?? null,
+          ...(ownClash ? { existingId: clash?.id ?? null } : {}),
         },
         { status: 409 }
       );
@@ -349,7 +360,7 @@ export async function POST(req: NextRequest) {
     try { await prisma.followUp.create({ data: { customerId: customer.id, dueAt: new Date(d.nextFollowUpAt) } }); } catch {}
   }
 
-    await createAuditLog({ actorId: session.user.id, action: deletedMatch ? "CUSTOMER_RESTORED" : "CUSTOMER_CREATED", entityType: "Customer", entityId: customer.id, newValue: { name: d.name } as never });
+    await createAuditLog({ actorId: session.user.id, action: restorableMatch ? "CUSTOMER_RESTORED" : "CUSTOMER_CREATED", entityType: "Customer", entityId: customer.id, newValue: { name: d.name } as never });
 
   // Matching — شکست تطبیق نباید بی‌صدا رد شود
   try { await runMatchingForCustomer(customer.id, session.user.id); } catch (e) {
@@ -357,7 +368,7 @@ export async function POST(req: NextRequest) {
   }
 
   // Activity
-  await prisma.activity.create({ data: { type: "STAGE_CHANGE", agentId: session.user.id, customerId: customer.id, description: deletedMatch ? `مشتری بازیابی شد: ${d.name}` : `مشتری جدید: ${d.name}`, newValue: d.stage ?? "INITIAL_CONTACT" } });
+  await prisma.activity.create({ data: { type: "STAGE_CHANGE", agentId: session.user.id, customerId: customer.id, description: restorableMatch ? `مشتری بازیابی شد: ${d.name}` : `مشتری جدید: ${d.name}`, newValue: d.stage ?? "INITIAL_CONTACT" } });
 
   return NextResponse.json(serializeBigInt(customer), { status: 201 });
 }

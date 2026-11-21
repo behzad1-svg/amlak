@@ -3,7 +3,6 @@ import { prisma } from "@/lib/prisma";
 import { getSessionFromCookies } from "@/lib/auth";
 import { serializeBigInt } from "@/lib/utils";
 import { createAuditLog } from "@/lib/audit";
-import { hasRestrictedAccess } from "@/lib/access";
 
 // تهران DST ندارد؛ اختلاف ثابت ۳:۳۰+ با UTC — مثل کرون یادآوری‌ها
 const TEHRAN_OFFSET_MS = 3.5 * 60 * 60 * 1000;
@@ -35,13 +34,8 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
   const property = await prisma.property.findUnique({ where: { id } });
   if (!property || property.deletedAt) return NextResponse.json({ error: "فایل یافت نشد" }, { status: 404 });
 
-  if (
-    session.user.role !== "OWNER" &&
-    property.listedById !== session.user.id &&
-    property.visibility !== "TEAM_VISIBLE" &&
-    !property.isOfficeFile &&
-    !(await hasRestrictedAccess(prisma as never, property.id, session.user.id))
-  ) {
+  // Only owner/lister can edit — same rule as PATCH on properties/[id] (IDOR fix 2026-11-21)
+  if (session.user.role !== "OWNER" && property.listedById !== session.user.id) {
     return NextResponse.json({ error: "دسترسی ندارید" }, { status: 403 });
   }
 

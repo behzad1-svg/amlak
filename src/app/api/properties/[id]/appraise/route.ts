@@ -25,7 +25,8 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
   const property = await prisma.property.findUnique({ where: { id } });
   if (!property || property.deletedAt) return NextResponse.json({ error: "فایل یافت نشد" }, { status: 404 });
 
-  if (session.user.role !== "OWNER" && property.listedById !== session.user.id && property.visibility !== "TEAM_VISIBLE") {
+  // Only owner/lister can edit — same rule as PATCH on properties/[id] (IDOR fix 2026-11-21)
+  if (session.user.role !== "OWNER" && property.listedById !== session.user.id) {
     return NextResponse.json({ error: "دسترسی ندارید" }, { status: 403 });
   }
 
