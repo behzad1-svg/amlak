@@ -45,8 +45,8 @@ type MatchItem = {
 // Dropdown of live matches next to the view button: matched files for a
 // customer card, matched customers for a property card. Fetched lazily
 // from /api/matching when opened, so the list never shows deleted items.
-// Each match shows its explained score (which criteria fit/miss), a
-// «not interested» dismissal, and a one-click deal action.
+// Each match shows its explained score (which criteria fit/miss) and a
+// «not interested» dismissal.
 function MatchDropdown({ relatedType, relatedId }: { relatedType: string; relatedId: string }) {
   const [open, setOpen] = useState(false);
   const [items, setItems] = useState<MatchItem[] | null>(null);
@@ -112,24 +112,6 @@ function MatchDropdown({ relatedType, relatedId }: { relatedType: string; relate
     }
   }
 
-  async function createDeal(m: MatchItem) {
-    setActionError("");
-    setActionMsg("");
-    const customerId = isCustomer ? relatedId : m.id;
-    const propertyId = isCustomer ? m.id : relatedId;
-    try {
-      await apiJson("/api/deals", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ customerId, propertyId, status: "PENDING", notes: "ثبت معامله از تطبیق" }),
-      });
-      setItems((prev) => (prev ?? []).filter((x) => x.id !== m.id));
-      setActionMsg("معامله در جریان ثبت شد — کمیسیون را مدیر در حسابداری تعیین می\u200Cکند.");
-    } catch (e) {
-      setActionError(errorMessage(e));
-    }
-  }
-
   return (
     <div ref={ref} className="relative inline-block">
       <button
@@ -190,13 +172,6 @@ function MatchDropdown({ relatedType, relatedId }: { relatedType: string; relate
                   className="rounded-md border border-zinc-300 bg-white px-2 py-1 text-[11px] text-zinc-600 hover:bg-zinc-50"
                 >
                   علاقه\u200Cای ندارد
-                </button>
-                <button
-                  type="button"
-                  onClick={() => void createDeal(m)}
-                  className="rounded-md border border-emerald-300 bg-emerald-50 px-2 py-1 text-[11px] font-medium text-emerald-800 hover:bg-emerald-100"
-                >
-                  ثبت معامله
                 </button>
               </div>
             </div>
