@@ -54,6 +54,8 @@ export type DashboardData = {
   viewings: { id: string; startAt: Date; customer: { name: string }; property: { title: string } }[];
   /** کارت‌های جلسهٔ امروز — از نمای «امروز» به داشبورد آمده */
   sessionCardsToday: DashboardDaySchedule["sessionCards"];
+  /** برنامهٔ امروز — کارت یکپارچه: بازدیدها + کارت‌های جلسه + پیگیری‌های سررسید کل روز تهران */
+  today: DashboardDaySchedule;
   /** برنامهٔ فردا و پس‌فردا — همان قاعدهٔ برنامهٔ امروز، برای یک روز کامل */
   tomorrow: DashboardDaySchedule;
   dayAfter: DashboardDaySchedule;
@@ -132,10 +134,11 @@ export async function getDashboardData(userId: string, isOwner: boolean): Promis
   const weekAgo = new Date(now.getTime() - 7 * 24 * 60 * 60 * 1000);
   const monthAgo = new Date(now.getTime() - 30 * 24 * 60 * 60 * 1000);
 
-  const todayEnd = new Date(now);
-  todayEnd.setHours(23, 59, 59, 999);
-  const todayStart = new Date(now);
-  todayStart.setHours(0, 0, 0, 0);
+  // بازهٔ امروز، فردا و پس‌فردا به وقت تهران — پویا، نه هاردکد و نه ساعت
+  // محلی سرور؛ «امروز» یعنی کل روز تهران، نه «از الان به بعد».
+  const { start: todayStart, end: todayEnd } = tehranDayBoundsOffset(now, 0);
+  const { start: tomorrowStart, end: tomorrowEnd } = tehranDayBoundsOffset(now, 1);
+  const { start: dayAfterStart, end: dayAfterEnd } = tehranDayBoundsOffset(now, 2);
 
   const overdueWhere: Record<string, unknown> = {
     deletedAt: null,
@@ -143,33 +146,10 @@ export async function getDashboardData(userId: string, isOwner: boolean): Promis
     nextFollowUpAt: { lt: now },
   };
   if (!isOwner) overdueWhere.assignedAgentId = userId;
-  const todayWhere: Record<string, unknown> = {
-    deletedAt: null,
-    stage: { not: "LOST" },
-    nextFollowUpAt: { gte: now, lte: todayEnd },
-  };
-  if (!isOwner) todayWhere.assignedAgentId = userId;
   const reviewWhere: Record<string, unknown> = { deletedAt: null, needsManagerReview: true };
   if (!isOwner) reviewWhere.assignedAgentId = userId;
 
-  // کارت‌های جلسهٔ امروز — همان قاعدهٔ نمای «امروز»: در انتظار یا تأییدشده،
-  // مشاور یا هم‌مشاور کارت باشد.
-  const sessionTodayWhere: Record<string, unknown> = {
-    scheduledAt: { gte: todayStart, lte: todayEnd },
-    status: { in: ["PENDING", "CONFIRMED"] },
-  };
-  if (!isOwner) {
-    sessionTodayWhere.OR = [
-      { advisorId: userId },
-      { coAdvisors: { some: { userId } } },
-    ];
-  }
-
-  // بازهٔ فردا و پس‌فردا به وقت تهران — پویا، نه هاردکد.
-  const { start: tomorrowStart, end: tomorrowEnd } = tehranDayBoundsOffset(now, 1);
-  const { start: dayAfterStart, end: dayAfterEnd } = tehranDayBoundsOffset(now, 2);
-
-  const [overdueCustomers, overdueTotal, todayFollowUps, todayTotal, needsReview, needsReviewTotal, tasks, viewings, sessionCardsToday, tomorrow, dayAfter, teamStats] =
+  const [overdueCustomers, overdueTotal, needsReview, needsReviewTotal, tasks, today, tomorrow, dayAfter, teamStats] =
     await Promise.all([
       prisma.customer.findMany({
         where: overdueWhere,
@@ -178,13 +158,6 @@ export async function getDashboardData(userId: string, isOwner: boolean): Promis
         take: LIST_LIMIT,
       }),
       prisma.customer.count({ where: overdueWhere }),
-      prisma.customer.findMany({
-        where: todayWhere,
-        select: { id: true, name: true, nextFollowUpAt: true },
-        orderBy: { nextFollowUpAt: "asc" },
-        take: LIST_LIMIT,
-      }),
-      prisma.customer.count({ where: todayWhere }),
       prisma.customer.findMany({
         where: reviewWhere,
         select: { id: true, name: true, managerReviewReason: true },
@@ -197,30 +170,28 @@ export async function getDashboardData(userId: string, isOwner: boolean): Promis
         orderBy: { dueAt: "asc" },
         take: 10,
       }),
-      prisma.viewing.findMany({
-        where: { agentId: isOwner ? undefined : userId, startAt: { gte: todayStart, lte: todayEnd } },
-        select: { id: true, startAt: true, customer: { select: { name: true } }, property: { select: { title: true } } },
-        orderBy: { startAt: "asc" },
-        take: 50,
-      }),
-      prisma.sessionCard.findMany({
-        where: sessionTodayWhere,
-        select: {
-          id: true,
-          scheduledAt: true,
-          status: true,
-          customer: { select: { name: true } },
-          property: { select: { title: true } },
-        },
-        orderBy: { scheduledAt: "asc" },
-        take: 50,
-      }),
+      getDaySchedule(todayStart, todayEnd, userId, isOwner),
       getDaySchedule(tomorrowStart, tomorrowEnd, userId, isOwner),
       getDaySchedule(dayAfterStart, dayAfterEnd, userId, isOwner),
       isOwner ? getTeamStats(weekAgo, monthAgo) : Promise.resolve(null),
     ]);
 
-  return { overdueCustomers, overdueTotal, todayFollowUps, todayTotal, needsReview, needsReviewTotal, tasks, viewings, sessionCardsToday, tomorrow, dayAfter, teamStats };
+  return {
+    overdueCustomers,
+    overdueTotal,
+    // فیلدهای جداگانهٔ امروز برای سازگاری با روت API — همان دادهٔ کارت یکپارچهٔ امروز
+    todayFollowUps: today.followUps,
+    todayTotal: today.followUpsTotal,
+    needsReview,
+    needsReviewTotal,
+    tasks,
+    viewings: today.viewings,
+    sessionCardsToday: today.sessionCards,
+    today,
+    tomorrow,
+    dayAfter,
+    teamStats,
+  };
 }
 
 async function getTeamStats(weekAgo: Date, monthAgo: Date): Promise<DashboardTeamStat[]> {

@@ -229,6 +229,16 @@ describe("tehranDayBoundsOffset", () => {
     expect(viewing.getTime()).toBeLessThanOrEqual(tomorrow.end.getTime());
     expect(viewing.getTime()).toBeGreaterThan(today.end.getTime());
   });
+
+  it("a follow-up due earlier today is still inside today's window (F2)", () => {
+    // 2026-11-21 11:30 UTC = 15:00 Tehran, Sat 30 Aban — the follow-up
+    // was due at 08:30 Tehran, i.e. BEFORE now, but still today.
+    const now = new Date("2026-11-21T11:30:00Z");
+    const today = tehranDayBoundsOffset(now, 0);
+    const followUp = new Date("2026-11-21T05:00:00Z"); // 08:30 Tehran
+    expect(followUp.getTime()).toBeGreaterThanOrEqual(today.start.getTime());
+    expect(followUp.getTime()).toBeLessThanOrEqual(today.end.getTime());
+  });
 });
 
 describe("formatJalaliDayMonth", () => {

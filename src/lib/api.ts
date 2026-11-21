@@ -26,7 +26,8 @@ function redirectToLogin() {
 export async function apiFetch(input: string, init?: RequestInit): Promise<Response> {
   let res: Response;
   try {
-    res = await fetch(input, init);
+    // no-store پیش‌فرض: فراخوانی‌های API نباید از کش مرورگر برگردند (F4).
+    res = await fetch(input, { ...init, cache: init?.cache ?? "no-store" });
   } catch {
     throw new ApiError(0, "ارتباط با سرور برقرار نشد — اینترنت را بررسی کنید و دوباره تلاش کنید.");
   }

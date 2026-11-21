@@ -173,21 +173,16 @@ export default function PropertyDetailPage() {
   };
 
   // نقد ۱ — بارگذاری با کمک‌کنندهٔ مرکزی؛ خطا پیام + تلاش دوباره دارد
+  // دو مرحله: اول فایل + تاریخچه قیمت (اگر این‌ها بگیرند صفحه تازه می‌شود)،
+  // بعد بخش‌های جانبی؛ خطای مرحلهٔ دوم صفحه را کهنه نمی‌کند (F4).
   const load = useCallback(async () => {
     setLoading(true);
     setLoadError(null);
     try {
-      const [propRes, actRes, visRes, custRes, usersRes, meRes, phRes] = await Promise.all([
+      const [propRes, phRes] = await Promise.all([
         apiJson<Prop>(`/api/properties/${id}`),
-        apiJson<Activity[]>(`/api/activities?propertyId=${id}`),
-        apiJson<Viewing[]>(`/api/viewings?propertyId=${id}`),
-        apiJson<{ customers?: { id: string; name: string; phone?: string }[] } | { id: string; name: string; phone?: string }[]>("/api/customers?limit=200"),
-        apiJson<{ id: string; name: string; role?: string; active?: boolean }[]>("/api/users"),
-        apiJson<{ user?: { id: string; permissions?: Record<string, boolean> } }>("/api/auth/me"),
         apiJson<PriceHistoryRow[]>(`/api/properties/${id}/price-history`),
       ]);
-      if (meRes?.user?.id) setMeId(meRes.user.id);
-      if (meRes?.user?.permissions) setMePermissions(meRes.user.permissions);
       if (propRes?.id) {
         setP(propRes);
         setAccessUserIds((propRes.accessList ?? []).map((a) => a.userId));
@@ -215,15 +210,30 @@ export default function PropertyDetailPage() {
           setPricePerSqm("");
         }
       }
+      setPriceHistory(Array.isArray(phRes) ? phRes : []);
+    } catch (e) {
+      setLoadError(errorMessage(e));
+      setLoading(false);
+      return;
+    }
+    try {
+      const [actRes, visRes, custRes, usersRes, meRes] = await Promise.all([
+        apiJson<Activity[]>(`/api/activities?propertyId=${id}`),
+        apiJson<Viewing[]>(`/api/viewings?propertyId=${id}`),
+        apiJson<{ customers?: { id: string; name: string; phone?: string }[] } | { id: string; name: string; phone?: string }[]>("/api/customers?limit=200"),
+        apiJson<{ id: string; name: string; role?: string; active?: boolean }[]>("/api/users"),
+        apiJson<{ user?: { id: string; permissions?: Record<string, boolean> } }>("/api/auth/me"),
+      ]);
+      if (meRes?.user?.id) setMeId(meRes.user.id);
+      if (meRes?.user?.permissions) setMePermissions(meRes.user.permissions);
       setActivities(Array.isArray(actRes) ? actRes : []);
       setViewings(Array.isArray(visRes) ? visRes : []);
-      setPriceHistory(Array.isArray(phRes) ? phRes : []);
       const custs = Array.isArray(custRes) ? custRes : custRes?.customers ?? [];
       setCustomers(custs.map((c: { id: string; name: string; phone?: string }) => ({ id: c.id, name: c.name, phone: c.phone })));
       const us = Array.isArray(usersRes) ? usersRes : [];
       setAgents(us.map((u: { id: string; name: string; role?: string; active?: boolean }) => ({ id: u.id, name: u.name, role: u.role, active: u.active })));
-    } catch (e) {
-      setLoadError(errorMessage(e));
+    } catch {
+      // بخش‌های جانبی نگرفتند؛ دادهٔ قبلی‌شان می‌ماند و صفحه کهنه نمی‌شود.
     } finally {
       setLoading(false);
     }
@@ -247,19 +257,27 @@ export default function PropertyDetailPage() {
     if (isOwner && form.listedById) body.listedById = form.listedById;
     if (canManageAccess) body.accessUserIds = accessUserIds;
     if (canManageAccess) body.isOfficeFile = isOfficeFile;
+    let updated: Prop | null = null;
     try {
-      await apiFetch(`/api/properties/${id}`, {
+      const res = await apiFetch(`/api/properties/${id}`, {
         method: "PATCH",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(body),
       });
+      // پاسخ PATCH خود فایلِ تازه است — قیمت روی صفحه بی‌درنگ تازه می‌شود،
+      // حتی اگر رفرش کامل بعدش به هر دلیل نگیرد (F4).
+      updated = (await res.json().catch(() => null)) as Prop | null;
     } catch (e) {
       setError(errorMessage(e));
       return;
     }
+    if (updated?.id) {
+      const fresh = updated;
+      setP((prev) => (prev ? { ...prev, ...fresh } : fresh));
+    }
     setEditing(false);
     flash("ذخیره شد");
-    load();
+    await load();
   }
 
   async function handleDelete() {

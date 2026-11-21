@@ -28,5 +28,8 @@ export async function GET(_req: NextRequest, { params }: { params: Promise<{ id:
     include: { changedBy: { select: { id: true, name: true } } },
     orderBy: { createdAt: "desc" },
   });
-  return NextResponse.json(serializeBigInt(rows));
+  // no-store صریح — همان دلیل F4 در روت GET فایل.
+  return NextResponse.json(serializeBigInt(rows), {
+    headers: { "Cache-Control": "private, no-store, max-age=0, must-revalidate" },
+  });
 }

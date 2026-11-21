@@ -66,7 +66,11 @@ export async function GET(_req: NextRequest, { params }: { params: Promise<{ id:
     delete (result as Record<string, unknown>).accessList;
   }
 
-  return NextResponse.json(serializeBigInt(result));
+  // no-store صریح: پاسخ GET فایل نباید در CDN/مرورگر کش شود، وگرنه بعد از
+  // ذخیره قیمت صفحه کهنه می‌ماند تا ریلود دستی (F4).
+  return NextResponse.json(serializeBigInt(result), {
+    headers: { "Cache-Control": "private, no-store, max-age=0, must-revalidate" },
+  });
 }
 
 export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id: string }> }) {

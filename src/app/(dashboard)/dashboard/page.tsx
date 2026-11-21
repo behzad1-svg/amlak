@@ -11,7 +11,7 @@ import { Header } from "@/components/layout/Header";
 import { Card, CardHeader, CardTitle } from "@/components/ui/Card";
 import { Badge } from "@/components/ui/Badge";
 import { CUSTOMER_STAGE_LABELS } from "@/lib/constants";
-import { AlertTriangle, Clock, Users, ArrowUpLeft, Eye, CalendarCheck, CalendarClock, ListChecks } from "lucide-react";
+import { AlertTriangle, Users, ArrowUpLeft, Eye, CalendarCheck, ListChecks } from "lucide-react";
 import { AdvertiseTodayCard } from "@/components/dashboard/AdvertiseTodayCard";
 import { TodayBadge } from "@/components/ui/TodayBadge";
 import { DateText } from "@/components/ui/DateText";
@@ -19,14 +19,16 @@ import { DateText } from "@/components/ui/DateText";
 // کارت برنامهٔ یک روز آینده (فردا / پس‌فردا): بازدیدها، کارت‌های جلسه و
 // پیگیری‌های سررسید آن روز. اگر روز خالی باشد، خالی بودنش با جملهٔ واضح
 // گفته می‌شود؛ اگر فقط بخشی خالی باشد، همان بخش «نیست» می‌خورد.
-function DayScheduleCard({ title, schedule }: { title: string; schedule: DashboardDaySchedule }) {
+// accent با CSS دستی: قرمز (اناری) برای امروز، آبی برای فردا/پس‌فردا.
+function DayScheduleCard({ title, schedule, accent }: { title: string; schedule: DashboardDaySchedule; accent: "red" | "blue" }) {
   const total = schedule.viewings.length + schedule.sessionCards.length + schedule.followUpsTotal;
   const dateLabel = `${getTehranWeekdayLong(schedule.dayStart)} ${formatJalaliDayMonth(schedule.dayStart)}`;
+  const isToday = accent === "red";
   return (
-    <Card className="p-0 overflow-hidden">
+    <Card className={isToday ? "p-0 overflow-hidden border-[var(--pomegranate-line)]" : "p-0 overflow-hidden"}>
       <CardHeader className="px-4 pt-4">
-        <CardTitle className="flex items-center gap-2"><span className="flex h-7 w-7 items-center justify-center rounded-[10px] bg-[var(--ink)] text-white"><CalendarCheck className="h-4 w-4" /></span> {title}</CardTitle>
-        <span className="rounded-full border border-[var(--line)] bg-[var(--paper-2)] px-2 py-0.5 text-[11px] font-bold">{dateLabel}</span>
+        <CardTitle className="flex items-center gap-2"><span className={isToday ? "flex h-7 w-7 items-center justify-center rounded-[10px] bg-[var(--pomegranate)] text-white" : "flex h-7 w-7 items-center justify-center rounded-[10px] bg-blue-600 text-white"}><CalendarCheck className="h-4 w-4" /></span> <span className={isToday ? "text-[var(--pomegranate)]" : undefined}>{title}</span></CardTitle>
+        <span className={isToday ? "rounded-full border border-[var(--pomegranate-line)] bg-[var(--pomegranate-soft)] px-2 py-0.5 text-[11px] font-bold text-[var(--pomegranate)]" : "rounded-full border border-[var(--line)] bg-[var(--paper-2)] px-2 py-0.5 text-[11px] font-bold"}>{dateLabel}</span>
         <span className="rounded-full border border-[var(--line)] bg-[var(--paper-2)] px-2 py-0.5 text-[11px] font-bold">{total}</span>
       </CardHeader>
       <div className="px-4 pb-4">
@@ -75,10 +77,10 @@ function DayScheduleCard({ title, schedule }: { title: string; schedule: Dashboa
                 <p className="text-[12px] text-[var(--ink-3)]">پیگیری‌ای نیست.</p>
               ) : (
                 schedule.followUps.map((c) => (
-                  <div key={c.id} className="mb-1 flex items-center justify-between gap-3 rounded-[12px] bg-[var(--paper-2)] px-3 py-2 last:mb-0">
+                  <Link key={c.id} href={`/customers/${c.id}`} className="mb-1 flex items-center justify-between gap-3 rounded-[12px] bg-[var(--paper-2)] px-3 py-2 last:mb-0">
                     <span className="min-w-0 truncate text-[13px] font-medium">{c.name}</span>
                     <span className="shrink-0 text-[12px] text-[var(--ink-3)]"><DateText value={c.nextFollowUpAt} /></span>
-                  </div>
+                  </Link>
                 ))
               )}
               {schedule.followUpsTotal > schedule.followUps.length && (
@@ -101,10 +103,8 @@ export default async function DashboardPage() {
   const data = await getDashboardData(session.user.id, session.user.role === "OWNER");
 
   const overdue = data.overdueCustomers;
-  const today = data.todayFollowUps;
   const needsReview = data.needsReview;
   const teamStats = data.teamStats;
-  const viewings = data.viewings;
   const tasks = data.tasks;
 
   return (
@@ -184,63 +184,11 @@ export default async function DashboardPage() {
           </div>
         )}
 
+        {/* برنامهٔ سه روز — امروز یکپارچه با تأکید قرمز، فردا و پس‌فردا آبی */}
         <div className="grid gap-4 lg:grid-cols-3">
-          <Card className="p-0 overflow-hidden">
-            <CardHeader className="px-4 pt-4">
-              <CardTitle className="flex items-center gap-2"><span className="flex h-7 w-7 items-center justify-center rounded-[10px] bg-[var(--ink)] text-white"><Clock className="h-4 w-4" /></span> پیگیری امروز</CardTitle>
-              <span className="rounded-full border border-[var(--line)] bg-[var(--paper-2)] px-2 py-0.5 text-[11px] font-bold">{data.todayTotal}</span>
-            </CardHeader>
-            <div className="px-2 pb-2">
-              {today.length === 0 ? <p className="px-3 py-6 text-center text-[13px] text-[var(--ink-3)]">موردی برای امروز نیست.</p> : today.map((c) => (
-                <Link key={c.id} href={`/customers/${c.id}`} className="flex items-center justify-between rounded-[12px] px-3 py-2.5 hover:bg-[var(--paper-2)]">
-                  <span className="min-w-0 truncate text-[13.5px] font-medium">{c.name}</span><span className="text-[12px] text-[var(--ink-3)]"><DateText value={c.nextFollowUpAt} /></span>
-                </Link>
-              ))}
-              {data.todayTotal > today.length && (
-                <p className="px-3 pb-2 text-center text-[12px] text-[var(--ink-3)]">نمایش {today.length} از {data.todayTotal} مورد</p>
-              )}
-            </div>
-          </Card>
-
-          <Card className="p-0 overflow-hidden">
-            <CardHeader className="px-4 pt-4">
-              <CardTitle className="flex items-center gap-2"><span className="flex h-7 w-7 items-center justify-center rounded-[10px] bg-[var(--sea)] text-white"><CalendarCheck className="h-4 w-4" /></span> بازدیدهای امروز</CardTitle>
-              <span className="rounded-full border border-[var(--line)] bg-[var(--paper-2)] px-2 py-0.5 text-[11px] font-bold">{viewings.length}</span>
-            </CardHeader>
-            <div className="px-2 pb-2">
-              {viewings.length === 0 ? <p className="px-3 py-6 text-center text-[13px] text-[var(--ink-3)]">بازدیدی برای امروز ثبت نشده است.</p> : viewings.map((v) => (
-                <div key={v.id} className="flex items-center justify-between gap-3 rounded-[12px] px-3 py-2.5 hover:bg-[var(--paper-2)]">
-                  <div className="min-w-0">
-                    <div className="truncate text-[13.5px] font-medium">{v.customer.name} — {v.property.title}</div>
-                    <div className="text-[12px] text-[var(--ink-3)]"><DateText value={v.startAt} withTime /></div>
-                  </div>
-                </div>
-              ))}
-            </div>
-          </Card>
-
-          <Card className="p-0 overflow-hidden">
-            <CardHeader className="px-4 pt-4">
-              <CardTitle className="flex items-center gap-2"><span className="flex h-7 w-7 items-center justify-center rounded-[10px] bg-teal-700 text-white"><CalendarClock className="h-4 w-4" /></span> کارت‌های جلسهٔ امروز</CardTitle>
-              <span className="rounded-full border border-[var(--line)] bg-[var(--paper-2)] px-2 py-0.5 text-[11px] font-bold">{data.sessionCardsToday.length}</span>
-            </CardHeader>
-            <div className="px-2 pb-2">
-              {data.sessionCardsToday.length === 0 ? <p className="px-3 py-6 text-center text-[13px] text-[var(--ink-3)]">کارت جلسه‌ای برای امروز ثبت نشده است.</p> : data.sessionCardsToday.map((s) => (
-                <div key={s.id} className="flex items-center justify-between gap-3 rounded-[12px] px-3 py-2.5 hover:bg-[var(--paper-2)]">
-                  <div className="min-w-0">
-                    <div className="truncate text-[13.5px] font-medium">{s.customer.name}{s.property ? ` — ${s.property.title}` : ""}</div>
-                    <div className="text-[12px] text-[var(--ink-3)]"><DateText value={s.scheduledAt} withTime /></div>
-                  </div>
-                </div>
-              ))}
-            </div>
-          </Card>
-        </div>
-
-        {/* برنامهٔ فردا و پس‌فردا — همان قاعدهٔ برنامهٔ امروز */}
-        <div className="grid gap-4 lg:grid-cols-2">
-          <DayScheduleCard title="فردا" schedule={data.tomorrow} />
-          <DayScheduleCard title="پس‌فردا" schedule={data.dayAfter} />
+          <DayScheduleCard title="امروز" schedule={data.today} accent="red" />
+          <DayScheduleCard title="فردا" schedule={data.tomorrow} accent="blue" />
+          <DayScheduleCard title="پس‌فردا" schedule={data.dayAfter} accent="blue" />
         </div>
 
         <AdvertiseTodayCard />
