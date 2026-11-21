@@ -20,7 +20,8 @@ const JalaliDatePicker = dynamic(
   () => import("@/components/ui/JalaliDatePicker").then((m) => m.JalaliDatePicker),
   { ssr: false, loading: () => <div className="h-10 rounded-[12px] border border-[var(--line)] bg-[var(--paper-2)] animate-pulse" /> }
 );
-import { formatDate, toEnDigits } from "@/lib/utils";
+import { formatDate, toEnDigits, toFaDigits } from "@/lib/utils";
+import { VisitReportButtons, VisitRatingPicker, type VisitRating } from "@/components/viewings/VisitReport";
 import { MoneyText } from "@/components/ui/MoneyText";
 import { formatTomanWithWords } from "@/lib/money";
 import { calcPerMetre, calcTotal } from "@/lib/pricePerSqm";
@@ -91,8 +92,25 @@ type Viewing = {
   endAt?: string | null;
   status: string;
   feedback?: string | null;
+  rating?: string | null;
+  reportComment?: string | null;
   customer?: { id: string; name: string };
   agent?: { id: string; name: string };
+};
+
+type PriceHistoryRow = {
+  id: string;
+  field: string;
+  oldValue?: string | null;
+  newValue?: string | null;
+  createdAt: string;
+  changedBy?: { id: string; name: string } | null;
+};
+
+const PRICE_FIELD_LABELS: Record<string, string> = {
+  SALE_PRICE: "قیمت فروش",
+  DEPOSIT: "رهن",
+  MONTHLY_RENT: "اجاره ماهانه",
 };
 
 function Row({ label, value }: { label: string; value: React.ReactNode }) {
@@ -141,6 +159,9 @@ export default function PropertyDetailPage() {
   const [visFeedback, setVisFeedback] = useState("");
   const [visAgent, setVisAgent] = useState("");
   const [visStatus, setVisStatus] = useState("SCHEDULED");
+  const [visRating, setVisRating] = useState<VisitRating | "">("");
+  const [visReportComment, setVisReportComment] = useState("");
+  const [priceHistory, setPriceHistory] = useState<PriceHistoryRow[]>([]);
   const [savingVis, setSavingVis] = useState(false);
 
   // پیام موفقیت خودبه‌خود پاک می‌شود؛ پیام خطا تا اقدام بعدی می‌ماند
@@ -155,13 +176,14 @@ export default function PropertyDetailPage() {
     setLoading(true);
     setLoadError(null);
     try {
-      const [propRes, actRes, visRes, custRes, usersRes, meRes] = await Promise.all([
+      const [propRes, actRes, visRes, custRes, usersRes, meRes, phRes] = await Promise.all([
         apiJson<Prop>(`/api/properties/${id}`),
         apiJson<Activity[]>(`/api/activities?propertyId=${id}`),
         apiJson<Viewing[]>(`/api/viewings?propertyId=${id}`),
         apiJson<{ customers?: { id: string; name: string; phone?: string }[] } | { id: string; name: string; phone?: string }[]>("/api/customers?limit=200"),
         apiJson<{ id: string; name: string; role?: string; active?: boolean }[]>("/api/users"),
         apiJson<{ user?: { id: string; permissions?: Record<string, boolean> } }>("/api/auth/me"),
+        apiJson<PriceHistoryRow[]>(`/api/properties/${id}/price-history`),
       ]);
       if (meRes?.user?.id) setMeId(meRes.user.id);
       if (meRes?.user?.permissions) setMePermissions(meRes.user.permissions);
@@ -194,6 +216,7 @@ export default function PropertyDetailPage() {
       }
       setActivities(Array.isArray(actRes) ? actRes : []);
       setViewings(Array.isArray(visRes) ? visRes : []);
+      setPriceHistory(Array.isArray(phRes) ? phRes : []);
       const custs = Array.isArray(custRes) ? custRes : custRes?.customers ?? [];
       setCustomers(custs.map((c: { id: string; name: string; phone?: string }) => ({ id: c.id, name: c.name, phone: c.phone })));
       const us = Array.isArray(usersRes) ? usersRes : [];
@@ -304,6 +327,10 @@ export default function PropertyDetailPage() {
     };
     if (isOwner && visAgent) body.agentId = visAgent;
     if (visStatus === "DONE") body.endAt = visDate;
+    if (visStatus === "DONE" && visRating) {
+      body.rating = visRating;
+      body.reportComment = visReportComment.trim() || null;
+    }
     try {
       await apiFetch("/api/viewings", {
         method: "POST",
@@ -317,6 +344,8 @@ export default function PropertyDetailPage() {
     }
     setSavingVis(false);
     setVisFeedback("");
+    setVisRating("");
+    setVisReportComment("");
     flash("بازدید ثبت شد");
     load();
   }
@@ -485,6 +514,34 @@ export default function PropertyDetailPage() {
           </dl>
         </Card>
 
+        {/* تاریخچه قیمت */}
+        <Card>
+          <h3 className="font-semibold mb-3">تاریخچه قیمت</h3>
+          {priceHistory.length === 0 ? (
+            <p className="text-sm text-[var(--ink-3)]">هنوز تغییری ثبت نشده است.</p>
+          ) : (
+            <div className="space-y-2">
+              {priceHistory.map((h) => (
+                <div key={h.id} className="rounded-[12px] border border-[var(--line)] px-3 py-2 text-[13px]">
+                  <div className="flex flex-wrap items-center gap-2">
+                    <span className="font-bold">{PRICE_FIELD_LABELS[h.field] ?? h.field}</span>
+                    {h.oldValue != null ? (
+                      <>
+                        <MoneyText value={h.oldValue} />
+                        <span className="text-[var(--ink-3)]">←</span>
+                      </>
+                    ) : (
+                      <span className="text-[var(--ink-3)]">قیمت اولیه:</span>
+                    )}
+                    <MoneyText value={h.newValue} />
+                    <span className="mr-auto text-[12px] text-[var(--ink-3)]">{h.changedBy?.name ?? "—"} · {formatDate(h.createdAt)}</span>
+                  </div>
+                </div>
+              ))}
+            </div>
+          )}
+        </Card>
+
         {editing && (
           <Card>
             <h3 className="font-semibold mb-3">ویرایش فایل</h3>
@@ -617,11 +674,38 @@ export default function PropertyDetailPage() {
                 placeholder="مثلا: @رضا رفتیم بازدید، خونه خیلی کثیف بود"
               />
             </div>
+            {visStatus === "DONE" && (
+              <div className="md:col-span-2">
+                <Label>نظر مشتری</Label>
+                <div className="mt-1"><VisitRatingPicker value={visRating} onChange={setVisRating} /></div>
+                {visRating && (
+                  <Input
+                    className="mt-2"
+                    value={visReportComment}
+                    onChange={(e) => setVisReportComment(e.target.value)}
+                    placeholder="یک جمله نظر (اختیاری)"
+                  />
+                )}
+              </div>
+            )}
           </div>
           <div className="mt-3">
             <Button onClick={addViewing} disabled={savingVis}>{savingVis ? "..." : "ثبت بازدید"}</Button>
           </div>
 
+          {(() => {
+            const rated = viewings.filter((v) => v.rating);
+            if (rated.length === 0) return null;
+            const liked = rated.filter((v) => v.rating === "LIKED").length;
+            const mixed = rated.filter((v) => v.rating === "MIXED").length;
+            const disliked = rated.filter((v) => v.rating === "NOT_INTERESTED").length;
+            return (
+              <div className="mt-4 rounded-[12px] border border-[var(--line)] bg-[var(--paper-2)] px-3 py-2 text-[13px]">
+                <span className="font-bold">بازخورد بازدیدها: </span>
+                {toFaDigits(String(rated.length))} بازدید گزارش شده — {toFaDigits(String(liked))} خوشش آمد، {toFaDigits(String(mixed))} متوسط، {toFaDigits(String(disliked))} خوشش نیامد
+              </div>
+            );
+          })()}
           {viewings.length > 0 && (
             <div className="mt-4 space-y-2">
               <div className="text-[12px] font-bold text-[var(--ink-2)]">بازدیدهای ثبت‌شده ({viewings.length})</div>
@@ -638,6 +722,10 @@ export default function PropertyDetailPage() {
                     <span className="text-[12px] text-[var(--ink-3)]">مشاور: {v.agent?.name ?? "—"}</span>
                   </div>
                   {v.feedback && <div className="mt-1 text-[var(--ink-2)]">{v.feedback}</div>}
+                  <VisitReportButtons
+                    viewing={v}
+                    onReported={(uv) => setViewings((prev) => prev.map((x) => (x.id === uv.id ? { ...x, rating: uv.rating, reportComment: uv.reportComment } : x)))}
+                  />
                 </div>
               ))}
             </div>

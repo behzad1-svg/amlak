@@ -12,7 +12,8 @@ import { Button } from "@/components/ui/Button";
 import { Badge } from "@/components/ui/Badge";
 import { PageError, PageSkeleton } from "@/components/ui/LoadState";
 import { apiFetch, apiJson, errorMessage } from "@/lib/api";
-import { formatDate } from "@/lib/utils";
+import { formatDate, toFaDigits } from "@/lib/utils";
+import type { MatchBreakdownItem } from "@/lib/matching";
 
 const PRIORITY_LABELS: Record<string, string> = {
   HIGH: "مهم",
@@ -38,16 +39,21 @@ type MatchItem = {
   sub: string | null;
   score: number;
   reasons: string[];
+  breakdown: MatchBreakdownItem[];
 };
 
 // Dropdown of live matches next to the view button: matched files for a
 // customer card, matched customers for a property card. Fetched lazily
 // from /api/matching when opened, so the list never shows deleted items.
+// Each match shows its explained score (which criteria fit/miss), a
+// «not interested» dismissal, and a one-click deal action.
 function MatchDropdown({ relatedType, relatedId }: { relatedType: string; relatedId: string }) {
   const [open, setOpen] = useState(false);
   const [items, setItems] = useState<MatchItem[] | null>(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
+  const [actionError, setActionError] = useState("");
+  const [actionMsg, setActionMsg] = useState("");
   const ref = useRef<HTMLDivElement>(null);
   const isCustomer = relatedType === "Customer";
   const label = isCustomer ? "فایل\u200Cهای تطبیق\u200Cخورده" : "مشتری\u200Cهای تطبیق\u200Cخورده";
@@ -88,6 +94,42 @@ function MatchDropdown({ relatedType, relatedId }: { relatedType: string; relate
     };
   }, [open]);
 
+  async function dismissMatch(m: MatchItem) {
+    setActionError("");
+    setActionMsg("");
+    const customerId = isCustomer ? relatedId : m.id;
+    const propertyId = isCustomer ? m.id : relatedId;
+    try {
+      await apiFetch("/api/matching/dismiss", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ customerId, propertyId }),
+      });
+      setItems((prev) => (prev ?? []).filter((x) => x.id !== m.id));
+      setActionMsg("تطبیق رد شد و از لیست پنهان شد.");
+    } catch (e) {
+      setActionError(errorMessage(e));
+    }
+  }
+
+  async function createDeal(m: MatchItem) {
+    setActionError("");
+    setActionMsg("");
+    const customerId = isCustomer ? relatedId : m.id;
+    const propertyId = isCustomer ? m.id : relatedId;
+    try {
+      await apiJson("/api/deals", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ customerId, propertyId, status: "PENDING", notes: "ثبت معامله از تطبیق" }),
+      });
+      setItems((prev) => (prev ?? []).filter((x) => x.id !== m.id));
+      setActionMsg("معامله در جریان ثبت شد — کمیسیون را مدیر در حسابداری تعیین می\u200Cکند.");
+    } catch (e) {
+      setActionError(errorMessage(e));
+    }
+  }
+
   return (
     <div ref={ref} className="relative inline-block">
       <button
@@ -99,27 +141,65 @@ function MatchDropdown({ relatedType, relatedId }: { relatedType: string; relate
         {label} ▾
       </button>
       {open && (
-        <div className="absolute right-0 z-40 mt-1 max-h-80 w-72 overflow-auto rounded-lg border border-[var(--line)] bg-white shadow-lg">
+        <div className="absolute right-0 z-40 mt-1 max-h-96 w-80 overflow-auto rounded-lg border border-[var(--line)] bg-white shadow-lg">
           {loading && <p className="px-3 py-2 text-xs text-zinc-400">در حال بارگذاری…</p>}
           {error && <p className="px-3 py-2 text-xs text-red-600" role="alert">{error}</p>}
+          {actionError && <p className="px-3 py-2 text-xs text-red-600" role="alert">{actionError}</p>}
+          {actionMsg && <p className="px-3 py-2 text-xs text-emerald-700">{actionMsg}</p>}
           {!loading && !error && items !== null && items.length === 0 && (
             <p className="px-3 py-2 text-xs text-zinc-400">تطبیقی نیست</p>
           )}
           {!loading && !error && items?.map((m) => (
-            <Link
-              key={m.id}
-              href={m.kind === "Property" ? `/properties/${m.id}` : `/customers/${m.id}`}
-              onClick={() => setOpen(false)}
-              className="block border-b border-[var(--line)] px-3 py-2 last:border-0 hover:bg-amber-50"
-            >
-              <span className="flex items-center justify-between gap-2 text-xs font-medium text-[var(--ink)]">
-                <span className="truncate">{m.label}{m.sub ? ` · ${m.sub}` : ""}</span>
-                <span className="shrink-0 rounded bg-amber-100 px-1.5 py-0.5 text-amber-800">{m.score}٪</span>
-              </span>
-              {m.reasons.length > 0 && (
-                <span className="mt-0.5 block truncate text-[11px] text-zinc-400">{m.reasons.join("، ")}</span>
-              )}
-            </Link>
+            <div key={m.id} className="border-b border-[var(--line)] last:border-0">
+              <Link
+                href={m.kind === "Property" ? `/properties/${m.id}` : `/customers/${m.id}`}
+                onClick={() => setOpen(false)}
+                className="block px-3 py-2 hover:bg-amber-50"
+              >
+                <span className="flex items-center justify-between gap-2 text-xs font-medium text-[var(--ink)]">
+                  <span className="truncate">{m.label}{m.sub ? ` · ${m.sub}` : ""}</span>
+                  <span className="shrink-0 rounded bg-amber-100 px-1.5 py-0.5 text-amber-800">{m.score}٪</span>
+                </span>
+                {m.breakdown && m.breakdown.length > 0 && (
+                  <span className="mt-1 flex flex-wrap gap-1">
+                    {m.breakdown.map((b) => (
+                      <span
+                        key={b.key}
+                        className={`rounded px-1.5 py-0.5 text-[11px] font-medium ${
+                          b.fit === "fit"
+                            ? "bg-emerald-100 text-emerald-800"
+                            : b.fit === "miss"
+                              ? "bg-red-100 text-red-800"
+                              : "bg-zinc-100 text-zinc-500"
+                        }`}
+                      >
+                        {b.label} {b.fit === "fit" ? "✓" : b.fit === "miss" ? "✗" : "—"}
+                        {b.points > 0 ? ` · ${toFaDigits(String(b.points))}` : ""}
+                      </span>
+                    ))}
+                  </span>
+                )}
+                {m.reasons.length > 0 && (
+                  <span className="mt-0.5 block truncate text-[11px] text-zinc-400">{m.reasons.join("، ")}</span>
+                )}
+              </Link>
+              <div className="flex flex-wrap gap-2 px-3 pb-2">
+                <button
+                  type="button"
+                  onClick={() => void dismissMatch(m)}
+                  className="rounded-md border border-zinc-300 bg-white px-2 py-1 text-[11px] text-zinc-600 hover:bg-zinc-50"
+                >
+                  علاقه\u200Cای ندارد
+                </button>
+                <button
+                  type="button"
+                  onClick={() => void createDeal(m)}
+                  className="rounded-md border border-emerald-300 bg-emerald-50 px-2 py-1 text-[11px] font-medium text-emerald-800 hover:bg-emerald-100"
+                >
+                  ثبت معامله
+                </button>
+              </div>
+            </div>
           ))}
         </div>
       )}

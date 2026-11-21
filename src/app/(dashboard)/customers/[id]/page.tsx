@@ -16,6 +16,7 @@ import { SearchSelect, type SearchOption } from "@/components/ui/SearchSelect";
 import { MultiRegionPicker } from "@/components/ui/MultiRegionPicker";
 import { PageError, PageSkeleton } from "@/components/ui/LoadState";
 import { apiFetch, apiJson, errorMessage } from "@/lib/api";
+import { VisitReportButtons, VisitRatingPicker, type VisitRating } from "@/components/viewings/VisitReport";
 
 // نقد ۹ — مودال و انتخابگر تاریخ با next/dynamic تنبل بارگذاری می‌شوند
 const JalaliDatePicker = dynamic(
@@ -84,6 +85,8 @@ type Viewing = {
   endAt?: string | null;
   status: string;
   feedback?: string | null;
+  rating?: string | null;
+  reportComment?: string | null;
   property?: { id: string; title: string; code?: string | null } | null;
   agent?: { id: string; name: string } | null;
 };
@@ -164,6 +167,8 @@ export default function CustomerDetailPage() {
   const [visFeedback, setVisFeedback] = useState("");
   const [visAgent, setVisAgent] = useState("");
   const [visStatus, setVisStatus] = useState("SCHEDULED");
+  const [visRating, setVisRating] = useState<VisitRating | "">("");
+  const [visReportComment, setVisReportComment] = useState("");
   const [savingVis, setSavingVis] = useState(false);
   const [visPropertyOptions, setVisPropertyOptions] = useState<SearchOption[]>([]);
   const [visPropertyTotal, setVisPropertyTotal] = useState<number | null>(null);
@@ -412,6 +417,10 @@ export default function CustomerDetailPage() {
     };
     if (isOwner && visAgent) body.agentId = visAgent;
     if (visStatus === "DONE") body.endAt = visDate;
+    if (visStatus === "DONE" && visRating) {
+      body.rating = visRating;
+      body.reportComment = visReportComment.trim() || null;
+    }
     try {
       await apiFetch("/api/viewings", {
         method: "POST",
@@ -425,6 +434,8 @@ export default function CustomerDetailPage() {
     }
     setSavingVis(false);
     setVisFeedback("");
+    setVisRating("");
+    setVisReportComment("");
     setOutcomeMsg("بازدید ثبت شد");
     setTimeout(() => setOutcomeMsg(""), 3500);
     load();
@@ -1168,6 +1179,20 @@ export default function CustomerDetailPage() {
                   placeholder="مثلا: رفتیم بازدید، مشتری پسندید"
                 />
               </div>
+              {visStatus === "DONE" && (
+                <div className="md:col-span-2">
+                  <Label>نظر مشتری</Label>
+                  <div className="mt-1"><VisitRatingPicker value={visRating} onChange={setVisRating} /></div>
+                  {visRating && (
+                    <Input
+                      className="mt-2"
+                      value={visReportComment}
+                      onChange={(e) => setVisReportComment(e.target.value)}
+                      placeholder="یک جمله نظر (اختیاری)"
+                    />
+                  )}
+                </div>
+              )}
             </div>
             <div className="mt-3">
               <Button onClick={addViewing} disabled={savingVis}>{savingVis ? "..." : "ثبت بازدید"}</Button>
@@ -1189,6 +1214,10 @@ export default function CustomerDetailPage() {
                       <span className="text-[12px] text-[var(--ink-3)]">مشاور: {v.agent?.name ?? "—"}</span>
                     </div>
                     {v.feedback && <div className="mt-1 text-[var(--ink-2)]">{v.feedback}</div>}
+                    <VisitReportButtons
+                      viewing={v}
+                      onReported={(uv) => setViewings((prev) => prev.map((x) => (x.id === uv.id ? { ...x, rating: uv.rating, reportComment: uv.reportComment } : x)))}
+                    />
                   </div>
                 ))}
               </div>

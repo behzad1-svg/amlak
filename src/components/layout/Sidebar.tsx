@@ -1,12 +1,13 @@
 "use client";
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
-import { LayoutDashboard, Users, BookUser, Building2, Bell, GitMerge, CalendarClock, LogOut, BarChart3, Settings, UserCog, TrendingUp, Wallet } from "lucide-react";
+import { LayoutDashboard, CalendarCheck, Users, BookUser, Building2, Bell, GitMerge, CalendarClock, LogOut, BarChart3, Settings, UserCog, TrendingUp, Wallet } from "lucide-react";
 import { cn } from "@/lib/utils";
 import Image from "next/image";
 
 const nav = [
   { href: "/dashboard", label: "داشبورد", icon: LayoutDashboard },
+  { href: "/today", label: "امروز", icon: CalendarCheck },
   { href: "/customers", label: "مشتریان", icon: Users },
   { href: "/properties", label: "فایل‌ها", icon: Building2 },
   { href: "/notifications", label: "اعلان‌ها", icon: Bell },
