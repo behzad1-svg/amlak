@@ -145,6 +145,8 @@ export default function PropertyDetailPage() {
   const [confirmAction, setConfirmAction] = useState<"delete" | "archive" | null>(null);
   const [form, setForm] = useState<Record<string, string>>({});
   const [pricePerSqm, setPricePerSqm] = useState("");
+  // بار اول که بخش‌های جانبی گرفتند؛ اگر در بار اول نگیرند، خطا نشان داده می‌شود
+  const loadedOnce = useRef(false);
   const lastPriceField = useRef<"total" | "perMetre" | null>(null);
   const [error, setError] = useState("");
   const [msg, setMsg] = useState("");
@@ -232,8 +234,11 @@ export default function PropertyDetailPage() {
       setCustomers(custs.map((c: { id: string; name: string; phone?: string }) => ({ id: c.id, name: c.name, phone: c.phone })));
       const us = Array.isArray(usersRes) ? usersRes : [];
       setAgents(us.map((u: { id: string; name: string; role?: string; active?: boolean }) => ({ id: u.id, name: u.name, role: u.role, active: u.active })));
+      loadedOnce.current = true;
     } catch {
       // بخش‌های جانبی نگرفتند؛ دادهٔ قبلی‌شان می‌ماند و صفحه کهنه نمی‌شود.
+      // در بار اول ولی کاربر باید بداند بخشی (مثلاً فهرست مشتری‌ها) خالی است.
+      if (!loadedOnce.current) setError("برخی بخش‌های صفحه بارگذاری نشد — صفحه را رفرش کنید");
     } finally {
       setLoading(false);
     }
