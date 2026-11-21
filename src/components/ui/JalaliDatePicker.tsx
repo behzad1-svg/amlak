@@ -3,7 +3,7 @@ import { useState, useMemo } from "react";
 import { ChevronLeft, ChevronRight } from "lucide-react";
 import { toJalali, jalaliToGregorian, getJalaliDaysInMonth, isValidJalaliDate, compareJalali, getTodayJalali } from "@/lib/jalali";
 import type { JalaliDate } from "@/lib/jalali";
-import { isJalaliHoliday } from "@/lib/holidays";
+import { dayCellClassName, getDayCellState } from "@/lib/datePickerCell";
 import { cn, toFaDigits } from "@/lib/utils";
 import { Modal } from "@/components/ui/Modal";
 
@@ -55,6 +55,9 @@ export function JalaliDatePicker({
   const [view, setView] = useState(() => getInitialView(value));
 
   const selected = useMemo(() => (value ? toJalali(value) : null), [value]);
+
+  // امروز تهران — برای حلقهٔ قرمز سلول امروز
+  const todayJ = useMemo(() => getTodayJalali(), []);
 
   // Lower bound for selection: today in Tehran by default, so past days are
   // not selectable. Every current use of this picker schedules future work
@@ -174,28 +177,28 @@ export function JalaliDatePicker({
             </div>
             <div className="grid grid-cols-7 gap-1 text-center">
               {WEEKDAYS.map((w, i) => <span key={w} className={cn("py-1 text-[11px] font-medium text-[var(--ink-3)]", i === 6 && "text-red-600")}>{w}</span>)}
-              {cells.map((d, i) =>
-                d === null ? <span key={`e-${i}`} /> : (
+              {cells.map((d, i) => {
+                if (d === null) return <span key={`e-${i}`} />;
+                const cellState = getDayCellState({
+                  day: { jy: view.jy, jm: view.jm, jd: d },
+                  today: todayJ,
+                  minDate: minJ,
+                  selected,
+                });
+                return (
                   <button
                     key={d}
                     type="button"
                     onClick={() => pickDay(d)}
                     disabled={isDisabledDay(d)}
                     aria-disabled={isDisabledDay(d) || undefined}
-                    aria-label={toFaDigits(`${d} ${MONTH_NAMES[view.jm - 1]} ${view.jy}`)}
-                    className={cn("min-h-10 rounded-[10px] py-1.5 text-[13px]",
-                      isDisabledDay(d)
-                        ? "cursor-not-allowed text-zinc-300"
-                        : "hover:bg-[var(--paper-2)]",
-                      !isDisabledDay(d) && selected && selected.jy === view.jy && selected.jm === view.jm && selected.jd === d
-                        ? "bg-[var(--pomegranate)] text-white hover:bg-[var(--pomegranate)]"
-                        : !isDisabledDay(d) && isJalaliHoliday(view.jy, view.jm, d) && "text-red-600"
-                    )}
+                    aria-label={toFaDigits(`${d} ${MONTH_NAMES[view.jm - 1]} ${view.jy}`) + (cellState.today ? " (امروز)" : "") + (cellState.friday ? " (جمعه)" : "")}
+                    className={dayCellClassName(cellState)}
                   >
                     {toFaDigits(String(d))}
                   </button>
-                )
-              )}
+                );
+              })}
             </div>
             <button type="button" onClick={goToday} className="mt-3 w-full rounded-[10px] border border-[var(--line)] bg-[var(--paper-2)] px-3 py-1.5 text-[12.5px] font-bold hover:bg-[var(--paper)]">
               امروز

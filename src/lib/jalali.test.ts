@@ -7,6 +7,7 @@ import {
   getJalaliDaysInMonth,
   getTodayJalali,
   isPastJalaliDate,
+  isToday,
   isValidJalaliDate,
   jalaliToGregorian,
   toJalali,
@@ -121,6 +122,33 @@ describe("getTodayJalali", () => {
 
   it("converts Nowruz correctly", () => {
     expect(getTodayJalali(new Date("2026-03-21T00:00:00Z"))).toEqual({ jy: 1405, jm: 1, jd: 1 });
+  });
+});
+
+describe("isToday", () => {
+  // ظهر روز جاری تهران؛ با جابه‌جایی ۲۴ ساعته دیروز/فردا ساخته می‌شود تا
+  // مرز ماه و اختلاف منطقهٔ زمانی اجراکنندهٔ تست دردسر نشود.
+  function noonToday(): Date {
+    const t = getTodayJalali();
+    const d = jalaliToGregorian(t.jy, t.jm, t.jd);
+    d.setHours(12, 0, 0, 0);
+    return d;
+  }
+
+  it("امروز تهران را امروز می‌داند", () => {
+    expect(isToday(noonToday().toISOString())).toBe(true);
+  });
+
+  it("دیروز و فردا امروز نیستند", () => {
+    const d = noonToday();
+    expect(isToday(new Date(d.getTime() - 86_400_000).toISOString())).toBe(false);
+    expect(isToday(new Date(d.getTime() + 86_400_000).toISOString())).toBe(false);
+  });
+
+  it("مقدار خالی امروز نیست", () => {
+    expect(isToday(null)).toBe(false);
+    expect(isToday(undefined)).toBe(false);
+    expect(isToday("")).toBe(false);
   });
 });
 

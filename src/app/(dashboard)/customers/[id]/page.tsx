@@ -8,6 +8,7 @@ import { ConfirmDialog } from "@/components/ui/ConfirmDialog";
 import { Input, Textarea, Select, Label, PhoneInput } from "@/components/ui/Input";
 import { Card } from "@/components/ui/Card";
 import { Badge } from "@/components/ui/Badge";
+import { DateText } from "@/components/ui/DateText";
 import dynamic from "next/dynamic";
 import { formatDate, toFaDigits } from "@/lib/utils";
 import { MoneyText } from "@/components/ui/MoneyText";
@@ -793,7 +794,7 @@ export default function CustomerDetailPage() {
                           }}
                         />
                         <span className={`flex-1 ${f.done ? "line-through text-[var(--ink-3)]" : isOverdue ? "text-[var(--pomegranate)] font-medium" : ""}`}>
-                          {formatDate(f.dueAt)}
+                          <DateText value={f.dueAt} />
                           {f.note ? ` — ${f.note}` : ""}
                           {isNext && (
                             <span className="mr-2 rounded-full bg-[var(--ink)] px-2 py-0.5 text-[10px] text-white">بعدی</span>
@@ -1205,7 +1206,7 @@ export default function CustomerDetailPage() {
                   <div key={v.id} className="rounded-[12px] border border-[var(--line)] px-3 py-2 text-[13px]">
                     <div className="flex flex-wrap items-center gap-2">
                       <Badge className="text-[11px]">{v.status === "DONE" ? "انجام شد" : v.status === "CANCELED" ? "لغو" : "قرار بازدید"}</Badge>
-                      <span className="font-bold">{formatDate(v.startAt)}</span>
+                      <DateText value={v.startAt} className="font-bold" />
                       {v.property && (
                         <Link href={`/properties/${v.property.id}`} className="text-[var(--ink-2)] hover:underline">
                           {v.property.code ? `${v.property.code} — ` : ""}{v.property.title}

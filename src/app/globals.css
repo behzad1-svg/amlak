@@ -123,6 +123,10 @@ body {
 [data-theme="dark"] .text-\[\#3B5B7A\],
 [data-theme="dark"] .text-\[\#2B5AA0\] { color: #8FB4D9; }
 [data-theme="dark"] .border-red-200 { border-color: #5A2A33; }
+/* روزهای غیرفعال تقویم (text-zinc-300) در تم تاریک روشن دیده می‌شوند و مثل روز فعال به نظر می‌رسند — در تاریک هم باید آشکارا کم‌رنگ باشند */
+[data-theme="dark"] .text-zinc-300 { color: #55637A; }
+/* حلقهٔ قرمز «امروز» در تم تاریک هم باید قرمز روشن دیده شود */
+[data-theme="dark"] .ring-red-500 { --tw-ring-color: #F87171; }
 [data-theme="dark"] .border-amber-200 { border-color: #4A3A1A; }
 [data-theme="dark"] .border-amber-300 { border-color: #5C4A1F; }
 [data-theme="dark"] .border-emerald-200,

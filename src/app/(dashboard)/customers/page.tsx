@@ -7,6 +7,7 @@ import Link from "next/link";
 import { Header } from "@/components/layout/Header";
 import { Button } from "@/components/ui/Button";
 import { Badge } from "@/components/ui/Badge";
+import { DateText } from "@/components/ui/DateText";
 import { Input, Select } from "@/components/ui/Input";
 import { PageSkeleton } from "@/components/ui/LoadState";
 import { useRole } from "@/hooks/useRole";
@@ -539,7 +540,7 @@ export default function CustomersPage() {
                               عقب‌افتاده · {formatDate(c.nextFollowUpAt)}
                             </Badge>
                           ) : c.nextFollowUpAt ? (
-                            <span className="text-[11px] text-[var(--ink-3)]">پیگیری {formatDate(c.nextFollowUpAt)}</span>
+                            <span className="text-[11px] text-[var(--ink-3)]">پیگیری <DateText value={c.nextFollowUpAt} /></span>
                           ) : (
                             <span className="text-[11px] text-[var(--ink-3)]/60">بدون پیگیری</span>
                           )}

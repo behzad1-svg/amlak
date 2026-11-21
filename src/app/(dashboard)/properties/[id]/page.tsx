@@ -5,6 +5,7 @@ import { useParams, useRouter } from "next/navigation";
 import { Header } from "@/components/layout/Header";
 import { Card } from "@/components/ui/Card";
 import { Badge } from "@/components/ui/Badge";
+import { DateText } from "@/components/ui/DateText";
 import { Button } from "@/components/ui/Button";
 import { ConfirmDialog } from "@/components/ui/ConfirmDialog";
 import { Input, NumberInput, Select, Label, Textarea } from "@/components/ui/Input";
@@ -713,7 +714,7 @@ export default function PropertyDetailPage() {
                 <div key={v.id} className="rounded-[12px] border border-[var(--line)] px-3 py-2 text-[13px]">
                   <div className="flex flex-wrap items-center gap-2">
                     <Badge className="text-[11px]">{v.status === "DONE" ? "انجام شد" : v.status === "CANCELED" ? "لغو" : "برنامه‌ریزی"}</Badge>
-                    <span className="font-bold">{formatDate(v.startAt)}</span>
+                    <DateText value={v.startAt} className="font-bold" />
                     {v.customer && (
                       <Link href={`/customers/${v.customer.id}`} className="text-[var(--ink-2)] hover:underline">
                         {v.customer.name}

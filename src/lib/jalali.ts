@@ -78,6 +78,15 @@ export function compareJalali(a: JalaliDate, b: JalaliDate): number {
   return a.jd - b.jd;
 }
 
+// Is this date today in Tehran? Uses the same conversion as the display
+// formatters, so the check always agrees with the rendered date.
+export function isToday(date: Date | string | null | undefined): boolean {
+  const j = toJalali(date);
+  if (!j) return false;
+  const t = getTodayJalali();
+  return j.jy === t.jy && j.jm === t.jm && j.jd === t.jd;
+}
+
 // Is this Jalali day before today (Tehran)?
 export function isPastJalaliDate(jy: number, jm: number, jd: number, today: JalaliDate = getTodayJalali()): boolean {
   return compareJalali({ jy, jm, jd }, today) < 0;

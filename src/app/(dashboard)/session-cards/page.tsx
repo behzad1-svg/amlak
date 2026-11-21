@@ -9,13 +9,14 @@ import { Header } from "@/components/layout/Header";
 import { Card } from "@/components/ui/Card";
 import { Button } from "@/components/ui/Button";
 import { Badge } from "@/components/ui/Badge";
+import { DateText } from "@/components/ui/DateText";
 import { PageError, PageSkeleton } from "@/components/ui/LoadState";
 import { Input, Select, Textarea, Label } from "@/components/ui/Input";
 import { MoneyInput } from "@/components/ui/MoneyInput";
 import { SearchSelect, type SearchOption } from "@/components/ui/SearchSelect";
 import { MultiOptionPicker } from "@/components/ui/MultiOptionPicker";
 import { apiFetch, apiJson, errorMessage } from "@/lib/api";
-import { formatDateTime, formatToman, toFaDigits } from "@/lib/utils";
+import { formatToman, toFaDigits } from "@/lib/utils";
 import { useRole } from "@/hooks/useRole";
 
 const JalaliDatePicker = dynamic(
@@ -609,7 +610,7 @@ export default function SessionCardsPage() {
                         {c.property?.owner ? ` · مالک: ${c.property.owner.name}` : ""}
                       </p>
                       <p className="text-xs text-zinc-400 mt-1">
-                        جلسه: {formatDateTime(c.scheduledAt)} · سازنده: {c.advisor.name}
+                        جلسه: <DateText value={c.scheduledAt} withTime /> · سازنده: {c.advisor.name}
                       </p>
                     </div>
                     <span className="shrink-0 text-lg text-zinc-400">{expanded ? "−" : "+"}</span>

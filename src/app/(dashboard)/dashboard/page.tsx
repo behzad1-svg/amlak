@@ -14,6 +14,7 @@ import { CUSTOMER_STAGE_LABELS } from "@/lib/constants";
 import { AlertTriangle, Clock, Users, ArrowUpLeft, Eye, CalendarCheck, ListChecks } from "lucide-react";
 import { AdvertiseTodayCard } from "@/components/dashboard/AdvertiseTodayCard";
 import { TodayBadge } from "@/components/ui/TodayBadge";
+import { DateText } from "@/components/ui/DateText";
 
 export default async function DashboardPage() {
   const session = await getSessionFromCookies();
@@ -116,7 +117,7 @@ export default async function DashboardPage() {
             <div className="px-2 pb-2">
               {today.length === 0 ? <p className="px-3 py-6 text-center text-[13px] text-[var(--ink-3)]">موردی برای امروز نیست.</p> : today.map((c) => (
                 <Link key={c.id} href={`/customers/${c.id}`} className="flex items-center justify-between rounded-[12px] px-3 py-2.5 hover:bg-[var(--paper-2)]">
-                  <span className="min-w-0 truncate text-[13.5px] font-medium">{c.name}</span><span className="text-[12px] text-[var(--ink-3)]">{formatDate(c.nextFollowUpAt)}</span>
+                  <span className="min-w-0 truncate text-[13.5px] font-medium">{c.name}</span><span className="text-[12px] text-[var(--ink-3)]"><DateText value={c.nextFollowUpAt} /></span>
                 </Link>
               ))}
               {data.todayTotal > today.length && (
@@ -155,7 +156,7 @@ export default async function DashboardPage() {
               {tasks.map((t) => (
                 <div key={t.id} className="flex items-center justify-between gap-3 rounded-[12px] px-3 py-2.5 hover:bg-[var(--paper-2)]">
                   <span className="min-w-0 truncate text-[13.5px] font-medium">{t.title}</span>
-                  <span className="shrink-0 text-[12px] text-[var(--ink-3)]">{t.dueAt ? formatDate(t.dueAt) : "بدون مهلت"}</span>
+                  <span className="shrink-0 text-[12px] text-[var(--ink-3)]">{t.dueAt ? <DateText value={t.dueAt} /> : "بدون مهلت"}</span>
                 </div>
               ))}
             </div>

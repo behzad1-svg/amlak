@@ -13,6 +13,7 @@ import { formatDate, toFaDigits } from "@/lib/utils";
 import { CUSTOMER_STAGE_LABELS } from "@/lib/constants";
 import { TodayAgentFilter } from "@/components/today/TodayAgentFilter";
 import { TodayBadge } from "@/components/ui/TodayBadge";
+import { DateText } from "@/components/ui/DateText";
 
 function formatTime(d: Date | string): string {
   return new Intl.DateTimeFormat("fa-IR", {
@@ -191,7 +192,7 @@ export default async function TodayPage({
         <Section title="بازدیدهای بدون گزارش" total={data.visitsAwaitingReport.total} empty="همهٔ بازدیدهای انجام‌شده گزارش دارند.">
           {data.visitsAwaitingReport.items.map((v) => (
             <div key={v.id} className="flex flex-wrap items-center gap-2 rounded-[12px] border border-[var(--line)] px-3 py-2 text-[13px]">
-              <span className="font-bold">{formatDate(v.startAt)}</span>
+              <DateText value={v.startAt} className="font-bold" />
               <Link href={`/customers/${v.customerId}`} className="text-[var(--ink-2)] hover:underline">
                 {v.customerName}
               </Link>
