@@ -12,6 +12,7 @@ import { Badge } from "@/components/ui/Badge";
 import { formatDate, toFaDigits } from "@/lib/utils";
 import { CUSTOMER_STAGE_LABELS } from "@/lib/constants";
 import { TodayAgentFilter } from "@/components/today/TodayAgentFilter";
+import { TodayBadge } from "@/components/ui/TodayBadge";
 
 function formatTime(d: Date | string): string {
   return new Intl.DateTimeFormat("fa-IR", {
@@ -74,7 +75,12 @@ export default async function TodayPage({
       <Header
         title="امروز"
         subtitle="کارهای امروزت — اول این‌ها را انجام بده"
-        action={isOwner ? <TodayAgentFilter agents={agents} value={agentId} /> : undefined}
+        action={
+          <div className="flex flex-wrap items-center gap-3">
+            <TodayBadge />
+            {isOwner ? <TodayAgentFilter agents={agents} value={agentId} /> : null}
+          </div>
+        }
       />
       <div className="p-4 sm:p-6 space-y-4 max-w-3xl">
         <Section title="بازدیدهای امروز" total={data.viewingsToday.total} empty="برای امروز بازدیدی نداری.">

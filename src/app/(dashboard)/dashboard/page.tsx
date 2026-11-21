@@ -13,6 +13,7 @@ import { formatDate, formatDateTime } from "@/lib/utils";
 import { CUSTOMER_STAGE_LABELS } from "@/lib/constants";
 import { AlertTriangle, Clock, Users, ArrowUpLeft, Eye, CalendarCheck, ListChecks } from "lucide-react";
 import { AdvertiseTodayCard } from "@/components/dashboard/AdvertiseTodayCard";
+import { TodayBadge } from "@/components/ui/TodayBadge";
 
 export default async function DashboardPage() {
   const session = await getSessionFromCookies();
@@ -31,7 +32,7 @@ export default async function DashboardPage() {
 
   return (
     <div>
-      <Header title="داشبورد" subtitle="نگاه امروز — چه چیزی عقب افتاده، چه چیزی در نوبت است" />
+      <Header title="داشبورد" subtitle="نگاه امروز — چه چیزی عقب افتاده، چه چیزی در نوبت است" action={<TodayBadge />} />
 
       <div className="p-4 sm:p-6 space-y-6 max-w-[1120px]">
         {/* Stats strip — شمارنده‌ها تعداد واقعی‌اند، نه طول لیست بریده‌شده */}

@@ -1,9 +1,12 @@
 import { describe, expect, it } from "vitest";
 import {
+  compareJalali,
   formatJalali,
   formatJalaliDateTime,
   formatJalaliShort,
   getJalaliDaysInMonth,
+  getTodayJalali,
+  isPastJalaliDate,
   isValidJalaliDate,
   jalaliToGregorian,
   toJalali,
@@ -101,5 +104,41 @@ describe("isValidJalaliDate", () => {
     expect(isValidJalaliDate(1405, 7, 31)).toBe(false);
     expect(isValidJalaliDate(1405, 12, 30)).toBe(false);
     expect(isValidJalaliDate(1405, 13, 1)).toBe(false);
+  });
+});
+describe("getTodayJalali", () => {
+  it("returns the Tehran Jalali date for a fixed instant", () => {
+    expect(getTodayJalali(new Date("2026-11-21T06:30:00Z"))).toEqual({ jy: 1405, jm: 8, jd: 30 });
+  });
+
+  it("stays on the same Jalali day just after midnight Tehran time", () => {
+    expect(getTodayJalali(new Date("2026-11-20T21:00:00Z"))).toEqual({ jy: 1405, jm: 8, jd: 30 });
+  });
+
+  it("is still the previous Jalali day just before midnight Tehran time", () => {
+    expect(getTodayJalali(new Date("2026-11-20T20:00:00Z"))).toEqual({ jy: 1405, jm: 8, jd: 29 });
+  });
+
+  it("converts Nowruz correctly", () => {
+    expect(getTodayJalali(new Date("2026-03-21T00:00:00Z"))).toEqual({ jy: 1405, jm: 1, jd: 1 });
+  });
+});
+
+describe("compareJalali", () => {
+  it("orders by year, then month, then day", () => {
+    expect(compareJalali({ jy: 1405, jm: 8, jd: 30 }, { jy: 1405, jm: 8, jd: 30 })).toBe(0);
+    expect(compareJalali({ jy: 1405, jm: 8, jd: 29 }, { jy: 1405, jm: 8, jd: 30 })).toBeLessThan(0);
+    expect(compareJalali({ jy: 1405, jm: 9, jd: 1 }, { jy: 1405, jm: 8, jd: 30 })).toBeGreaterThan(0);
+    expect(compareJalali({ jy: 1404, jm: 12, jd: 29 }, { jy: 1405, jm: 1, jd: 1 })).toBeLessThan(0);
+  });
+});
+
+describe("isPastJalaliDate", () => {
+  const today = { jy: 1405, jm: 8, jd: 30 };
+  it("is true for yesterday and earlier, false for today and later", () => {
+    expect(isPastJalaliDate(1405, 8, 29, today)).toBe(true);
+    expect(isPastJalaliDate(1405, 7, 30, today)).toBe(true);
+    expect(isPastJalaliDate(1405, 8, 30, today)).toBe(false);
+    expect(isPastJalaliDate(1405, 9, 1, today)).toBe(false);
   });
 });

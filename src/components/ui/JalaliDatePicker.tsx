@@ -1,7 +1,8 @@
 "use client";
 import { useState, useMemo } from "react";
 import { ChevronLeft, ChevronRight } from "lucide-react";
-import { toJalali, jalaliToGregorian, getJalaliDaysInMonth, isValidJalaliDate } from "@/lib/jalali";
+import { toJalali, jalaliToGregorian, getJalaliDaysInMonth, isValidJalaliDate, compareJalali, getTodayJalali } from "@/lib/jalali";
+import type { JalaliDate } from "@/lib/jalali";
 import { isJalaliHoliday } from "@/lib/holidays";
 import { cn, toFaDigits } from "@/lib/utils";
 import { Modal } from "@/components/ui/Modal";
@@ -15,11 +16,11 @@ function getWeekdayOffset(jy: number, jm: number): number {
 }
 
 // بازهٔ سال‌ها برای انتخابگر سریع سال (تاریخ‌های دور مثل سال تولد)
-function jalaliYearOptions(): number[] {
+function jalaliYearOptions(minYear?: number): number[] {
   const now = toJalali(new Date());
   const current = now ? now.jy : 1404;
   const years: number[] = [];
-  for (let y = 1300; y <= current + 2; y++) years.push(y);
+  for (let y = minYear ?? 1300; y <= current + 2; y++) years.push(y);
   return years;
 }
 
@@ -37,18 +38,43 @@ export function JalaliDatePicker({
   onChange,
   placeholder = "انتخاب تاریخ",
   id,
+  minDate,
+  allowPast = false,
 }: {
   value: string | null;
   onChange: (iso: string | null) => void;
   placeholder?: string;
   /** نقد ۱۰ — id برای اتصال برچسب (htmlFor) به دکمهٔ بازکننده */
   id?: string;
+  /** Lowest selectable date (ISO); default is today */
+  minDate?: string | null;
+  /** When true, past days are selectable too (for inputs that are not scheduling) */
+  allowPast?: boolean;
 }) {
   const [open, setOpen] = useState(false);
   const [view, setView] = useState(() => getInitialView(value));
 
   const selected = useMemo(() => (value ? toJalali(value) : null), [value]);
-  const yearOptions = useMemo(() => jalaliYearOptions(), []);
+
+  // Lower bound for selection: today in Tehran by default, so past days are
+  // not selectable. Every current use of this picker schedules future work
+  // (follow-up, viewing, session card, next activity), so none opts out.
+  const minJ: JalaliDate | null = useMemo(() => {
+    if (allowPast) return null;
+    if (minDate) return toJalali(minDate);
+    return getTodayJalali();
+  }, [allowPast, minDate]);
+
+  const yearOptions = useMemo(() => {
+    const years = jalaliYearOptions(minJ ? minJ.jy : undefined);
+    // If the current value sits in a year before the lower bound (e.g. an
+    // overdue follow-up being rescheduled), keep that year listed so the
+    // visible month does not render empty.
+    if (view.jy < (minJ?.jy ?? -Infinity) && !years.includes(view.jy)) {
+      return [view.jy, ...years];
+    }
+    return years;
+  }, [minJ, view.jy]);
 
 
   function handleOpen(next: boolean) {
@@ -62,7 +88,18 @@ export function JalaliDatePicker({
     return toFaDigits(`${selected.jy}/${String(selected.jm).padStart(2, "0")}/${String(selected.jd).padStart(2, "0")}`);
   }
 
+  function isDisabledDay(jd: number): boolean {
+    if (!minJ) return false;
+    return compareJalali({ jy: view.jy, jm: view.jm, jd }, minJ) < 0;
+  }
+
+  // At or before the minimum month: the previous-month button is disabled
+  // so the calendar cannot be moved back into past days.
+  const atOrBeforeMinMonth =
+    !!minJ && (view.jy < minJ.jy || (view.jy === minJ.jy && view.jm <= minJ.jm));
+
   function pickDay(jd: number) {
+    if (isDisabledDay(jd)) return;
     if (!isValidJalaliDate(view.jy, view.jm, jd)) return;
     const d = jalaliToGregorian(view.jy, view.jm, jd);
     d.setHours(12, 0, 0, 0);
@@ -81,6 +118,7 @@ export function JalaliDatePicker({
   }
 
   function prevMonth() {
+    if (atOrBeforeMinMonth) return;
     setView((v) => (v.jm === 1 ? { jy: v.jy - 1, jm: 12 } : { jy: v.jy, jm: v.jm - 1 }));
   }
   function nextMonth() {
@@ -118,7 +156,7 @@ export function JalaliDatePicker({
           trapFocus={false}
         >
             <div className="flex items-center justify-between mb-3">
-              <button type="button" onClick={prevMonth} aria-label="ماه قبل" className="rounded-[10px] p-1.5 hover:bg-[var(--paper-2)]"><ChevronRight className="h-4 w-4" /></button>
+              <button type="button" onClick={prevMonth} aria-label="ماه قبل" disabled={atOrBeforeMinMonth} className="rounded-[10px] p-1.5 hover:bg-[var(--paper-2)] disabled:cursor-not-allowed disabled:opacity-30 disabled:hover:bg-transparent"><ChevronRight className="h-4 w-4" /></button>
               <span className="flex items-center gap-1.5 text-[13px] font-bold">
                 {MONTH_NAMES[view.jm - 1]}
                 <select
@@ -142,11 +180,16 @@ export function JalaliDatePicker({
                     key={d}
                     type="button"
                     onClick={() => pickDay(d)}
+                    disabled={isDisabledDay(d)}
+                    aria-disabled={isDisabledDay(d) || undefined}
                     aria-label={toFaDigits(`${d} ${MONTH_NAMES[view.jm - 1]} ${view.jy}`)}
-                    className={cn("min-h-10 rounded-[10px] py-1.5 text-[13px] hover:bg-[var(--paper-2)]",
-                      selected && selected.jy === view.jy && selected.jm === view.jm && selected.jd === d
+                    className={cn("min-h-10 rounded-[10px] py-1.5 text-[13px]",
+                      isDisabledDay(d)
+                        ? "cursor-not-allowed text-zinc-300"
+                        : "hover:bg-[var(--paper-2)]",
+                      !isDisabledDay(d) && selected && selected.jy === view.jy && selected.jm === view.jm && selected.jd === d
                         ? "bg-[var(--pomegranate)] text-white hover:bg-[var(--pomegranate)]"
-                        : isJalaliHoliday(view.jy, view.jm, d) && "text-red-600"
+                        : !isDisabledDay(d) && isJalaliHoliday(view.jy, view.jm, d) && "text-red-600"
                     )}
                   >
                     {toFaDigits(String(d))}

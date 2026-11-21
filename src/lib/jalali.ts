@@ -1,7 +1,7 @@
 import * as jalaali from "jalaali-js";
 
 const PERSIAN_DIGITS = ["۰", "۱", "۲", "۳", "۴", "۵", "۶", "۷", "۸", "۹"];
-const MONTH_NAMES = ["فروردین", "اردیبهشت", "خرداد", "تیر", "مرداد", "شهریور", "مهر", "آبان", "آذر", "دی", "بهمن", "اسفند"];
+export const MONTH_NAMES = ["فروردین", "اردیبهشت", "خرداد", "تیر", "مرداد", "شهریور", "مهر", "آبان", "آذر", "دی", "بهمن", "اسفند"];
 
 export function toPersianDigits(str: string): string {
   return str.replace(/\d/g, (d) => PERSIAN_DIGITS[parseInt(d)]);
@@ -48,4 +48,37 @@ export function getJalaliDaysInMonth(jy: number, jm: number): number {
 
 export function isValidJalaliDate(jy: number, jm: number, jd: number): boolean {
   return jalaali.isValidJalaaliDate(jy, jm, jd);
+}
+export type JalaliDate = { jy: number; jm: number; jd: number };
+
+// Jalali date of today in Tehran, independent of the server or browser time zone
+export function getTodayJalali(now: Date = new Date()): JalaliDate {
+  const parts = new Intl.DateTimeFormat("en-u-ca-persian-nu-latn", {
+    timeZone: "Asia/Tehran",
+    year: "numeric",
+    month: "numeric",
+    day: "numeric",
+  }).formatToParts(now);
+  const get = (type: string): number => {
+    const p = parts.find((x) => x.type === type);
+    return p ? Number(p.value) : NaN;
+  };
+  return { jy: get("year"), jm: get("month"), jd: get("day") };
+}
+
+// Weekday name of today in Tehran, e.g. "شنبه"
+export function getTehranWeekdayLong(now: Date = new Date()): string {
+  return new Intl.DateTimeFormat("fa-IR", { timeZone: "Asia/Tehran", weekday: "long" }).format(now);
+}
+
+// Compare two Jalali dates: negative means a is before b
+export function compareJalali(a: JalaliDate, b: JalaliDate): number {
+  if (a.jy !== b.jy) return a.jy - b.jy;
+  if (a.jm !== b.jm) return a.jm - b.jm;
+  return a.jd - b.jd;
+}
+
+// Is this Jalali day before today (Tehran)?
+export function isPastJalaliDate(jy: number, jm: number, jd: number, today: JalaliDate = getTodayJalali()): boolean {
+  return compareJalali({ jy, jm, jd }, today) < 0;
 }
