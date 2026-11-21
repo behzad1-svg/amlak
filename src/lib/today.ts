@@ -1,6 +1,6 @@
 // نمای «امروز» — صفحهٔ صبحگاهی مشاور: بازدیدها و کارت‌های جلسهٔ امروز،
-// پیگیری‌های عقب‌افتاده، لیدهای بی‌جواب، فایل‌های بدون بازدید در ۳۰ روز،
-// و بازدیدهای انجام‌شده که هنوز گزارش ندارند.
+// پیگیری‌های سررسید امروز، پیگیری‌های عقب‌افتاده، لیدهای بی‌جواب،
+// فایل‌های بدون بازدید در ۳۰ روز، و بازدیدهای انجام‌شده که هنوز گزارش ندارند.
 // همهٔ کوئری‌ها موازی و با سقف لیست؛ تعداد واقعی جداگانه برگردانده می‌شود
 // تا شمارنده‌ها صادقانه بمانند (الگوی lib/dashboard.ts).
 import { prisma } from "@/lib/prisma";
@@ -23,6 +23,16 @@ export function tehranDayBounds(now: Date = new Date()): { start: Date; end: Dat
   const start = new Date(startShifted.getTime() - TEHRAN_OFFSET_MS);
   const end = new Date(start.getTime() + 24 * 60 * 60 * 1000 - 1);
   return { start, end };
+}
+
+/**
+ * بازهٔ «پیگیری‌های امروز»: از همین حالا تا پایان امروز به وقت تهران.
+ * همان قاعدهٔ داشبورد است (nextFollowUpAt بین now و پایان امروز)؛
+ * پایینِ بازه now است تا با «عقب‌افتاده» (کمتر از now) هم‌پوشانی نداشته باشد.
+ */
+export function todayFollowUpWindow(now: Date = new Date()): { from: Date; to: Date } {
+  const { end } = tehranDayBounds(now);
+  return { from: now, to: end };
 }
 
 export type TodaySection<T> = { total: number; items: T[] };
@@ -89,6 +99,7 @@ export type TodayUnreportedViewing = {
 export type TodayData = {
   viewingsToday: TodaySection<TodayViewing>;
   sessionCardsToday: TodaySection<TodaySessionCard>;
+  followUpsToday: TodaySection<TodayFollowUp>;
   overdueFollowUps: TodaySection<TodayFollowUp>;
   unansweredLeads: TodaySection<TodayLead>;
   staleProperties: TodaySection<TodayStaleProperty>;
@@ -140,6 +151,16 @@ export async function getTodayData(
   };
   if (scopeAgent) overdueCustomerWhere.assignedAgentId = scopeAgent;
 
+  // پیگیری‌های سررسید امروز — همان قاعدهٔ «پیگیری امروز» داشبورد:
+  // nextFollowUpAt از همین حالا تا پایان امروز (به وقت تهران).
+  const { from: todayFollowUpFrom, to: todayFollowUpTo } = todayFollowUpWindow(now);
+  const todayFollowUpWhere: Record<string, unknown> = {
+    deletedAt: null,
+    stage: { not: "LOST" },
+    nextFollowUpAt: { gte: todayFollowUpFrom, lte: todayFollowUpTo },
+  };
+  if (scopeAgent) todayFollowUpWhere.assignedAgentId = scopeAgent;
+
   const leadWhere: Record<string, unknown> = {
     deletedAt: null,
     stage: { in: ["NEW", "INITIAL_CONTACT"] },
@@ -163,6 +184,8 @@ export async function getTodayData(
     viewingsTodayTotal,
     sessionCardsToday,
     sessionCardsTodayTotal,
+    todayFollowUpCustomers,
+    todayFollowUpCustomersTotal,
     overdueFollowUps,
     overdueFollowUpsTotal,
     overdueCustomers,
@@ -199,6 +222,13 @@ export async function getTodayData(
       take: LIST_LIMIT,
     }),
     prisma.sessionCard.count({ where: sessionWhere }),
+    prisma.customer.findMany({
+      where: todayFollowUpWhere,
+      select: { id: true, name: true, phone: true, nextFollowUpAt: true },
+      orderBy: { nextFollowUpAt: "asc" },
+      take: LIST_LIMIT,
+    }),
+    prisma.customer.count({ where: todayFollowUpWhere }),
     prisma.followUp.findMany({
       where: followUpWhere,
       select: {
@@ -361,6 +391,20 @@ export async function getTodayData(
         propertyTitle: s.property?.title ?? null,
         advisorName: s.advisor.name,
       })),
+    },
+    followUpsToday: {
+      total: todayFollowUpCustomersTotal,
+      items: todayFollowUpCustomers
+        .filter((c) => c.nextFollowUpAt !== null)
+        .map((c) => ({
+          id: `cust-${c.id}`,
+          customerId: c.id,
+          customerName: c.name,
+          customerPhone: c.phone,
+          dueAt: c.nextFollowUpAt as Date,
+          note: null,
+          source: "nextFollowUp" as const,
+        })),
     },
     overdueFollowUps: {
       total: overdueFollowUpsTotal + mergedFollowUps.filter((m) => m.source === "nextFollowUp").length,

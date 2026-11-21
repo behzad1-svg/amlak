@@ -130,6 +130,24 @@ export default async function TodayPage({
           )}
         </Section>
 
+        <Section title="پیگیری‌های امروز" total={data.followUpsToday.total} empty="برای امروز پیگیری‌ای نداری.">
+          {data.followUpsToday.items.map((f) => (
+            <div key={f.id} className="flex flex-wrap items-center gap-2 rounded-[12px] border border-[var(--line)] px-3 py-2 text-[13px]">
+              <Link href={`/customers/${f.customerId}`} className="font-bold text-[var(--ink)] hover:underline">
+                {f.customerName}
+              </Link>
+              <span className="text-[12px] text-[var(--ink-3)]" dir="ltr">{f.customerPhone}</span>
+              <span className="text-[12px] text-[var(--ink-3)]">سررسید <DateText value={f.dueAt} /></span>
+              {f.note && <span className="w-full text-[12px] text-[var(--ink-2)]">{f.note}</span>}
+            </div>
+          ))}
+          {data.followUpsToday.total > data.followUpsToday.items.length && (
+            <p className="text-[12px] text-[var(--ink-3)]">
+              و {toFaDigits(String(data.followUpsToday.total - data.followUpsToday.items.length))} مورد دیگر
+            </p>
+          )}
+        </Section>
+
         <Section title="پیگیری‌های عقب‌افتاده" total={data.overdueFollowUps.total} empty="پیگیری عقب‌افتاده‌ای نداری.">
           {data.overdueFollowUps.items.map((f) => (
             <div key={f.id} className="flex flex-wrap items-center gap-2 rounded-[12px] border border-[var(--pomegranate-line)] bg-[var(--pomegranate-soft)] px-3 py-2 text-[13px]">
