@@ -13,6 +13,7 @@ import { Badge } from "@/components/ui/Badge";
 import { CUSTOMER_STAGE_LABELS } from "@/lib/constants";
 import { AlertTriangle, Users, ArrowUpLeft, Eye, CalendarCheck, ListChecks } from "lucide-react";
 import { AdvertiseTodayCard } from "@/components/dashboard/AdvertiseTodayCard";
+import { CommissionCalculator } from "@/components/dashboard/CommissionCalculator";
 import { TodayBadge } from "@/components/ui/TodayBadge";
 import { DateText } from "@/components/ui/DateText";
 
@@ -267,6 +268,8 @@ export default async function DashboardPage() {
             </div>
           </Card>
         )}
+
+        <CommissionCalculator />
       </div>
     </div>
   );
