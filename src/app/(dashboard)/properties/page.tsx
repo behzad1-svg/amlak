@@ -7,7 +7,6 @@ import { Badge } from "@/components/ui/Badge";
 import { Card } from "@/components/ui/Card";
 import { Input, Select } from "@/components/ui/Input";
 import { PROPERTY_TYPE_LABELS, PROPERTY_TYPE_CARD, PROPERTY_TYPE_BADGE, DEAL_TYPE_LABELS, PROPERTY_STATUS_LABELS, CUSTOMER_SOURCE_LABELS, CUSTOMER_SOURCE_OPTIONS } from "@/lib/constants";
-import { useRole } from "@/hooks/useRole";
 import { useApiList } from "@/hooks/useApiList";
 import { MoneyText } from "@/components/ui/MoneyText";
 import { PageError, PageSkeleton } from "@/components/ui/LoadState";
@@ -86,7 +85,6 @@ export default function PropertiesPage() {
   const [showAdvanced, setShowAdvanced] = useState(false);
   const [agents, setAgents] = useState<{ id: string; name: string }[]>([]);
   const [optionsError, setOptionsError] = useState<string | null>(null);
-  const { isOwner } = useRole();
 
   // نقد ۱ و ۳ — بارگذاری با هوک مرکزی useApiList؛ ۱۰۰ ردیف در هر صفحه
   // هوک پاسخ کهنه را کنار خواهد گذاشت
@@ -437,12 +435,10 @@ export default function PropertiesPage() {
               <option value="true">کارشناسی‌شده</option>
               <option value="false">کارشناسی نشده</option>
             </Select>
-            {isOwner && (
-              <Select value={filters.listedById} onChange={(e) => setFilters({ ...filters, listedById: e.target.value })}>
-                <option value="">همه مشاورها</option>
-                {agents.map((a) => <option key={a.id} value={a.id}>{a.name}</option>)}
-              </Select>
-            )}
+            <Select value={filters.listedById} onChange={(e) => setFilters({ ...filters, listedById: e.target.value })}>
+              <option value="">همه مشاورها</option>
+              {agents.map((a) => <option key={a.id} value={a.id}>{a.name}</option>)}
+            </Select>
             <Select value={filters.source} onChange={(e) => setFilters({ ...filters, source: e.target.value })}>
               <option value="">شیوه آشنایی (همه)</option>
               {CUSTOMER_SOURCE_OPTIONS.map((s) => <option key={s} value={s}>{CUSTOMER_SOURCE_LABELS[s] ?? s}</option>)}
