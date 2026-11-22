@@ -12,6 +12,7 @@ import { apiFetch, apiJson, errorMessage } from "@/lib/api";
 import { formatDate, formatToman, toEnDigits, toFaDigits } from "@/lib/utils";
 import { isValidJalaliDate, jalaliToGregorian } from "@/lib/jalali";
 import { DEFAULT_TAX_RATE_PCT } from "@/lib/constants";
+import { DEFAULT_SALE_COMMISSION_PCT, splitReceived } from "@/lib/commission";
 
 type Summary = {
   isOwner: boolean;
@@ -193,6 +194,8 @@ export default function AccountingPage() {
 
   // فرم ویرایش قیمت و کمیسیون (فقط مدیر، در تب کمیسیون‌ها)
   const [editingDeal, setEditingDeal] = useState<CommissionDeal | null>(null);
+  // پیش‌نمایش جزئیات کمیسیون — فقط خواندنی، بدون ورود به حالت ویرایش
+  const [previewDeal, setPreviewDeal] = useState<CommissionDeal | null>(null);
   const [editPrice, setEditPrice] = useState("");
   const [editDeposit, setEditDeposit] = useState("");
   const [editRent, setEditRent] = useState("");
@@ -201,6 +204,8 @@ export default function AccountingPage() {
   const [editSellerShirini, setEditSellerShirini] = useState("");
   const [editBuyerShirini, setEditBuyerShirini] = useState("");
   const [editDiscount, setEditDiscount] = useState("");
+  // مبلغ کل دریافتی از قرارداد — فقط کمکی برای تقسیم خودکار (فقط فروش)؛ ذخیره نمی‌شود
+  const [editReceived, setEditReceived] = useState("");
   const [editSaving, setEditSaving] = useState(false);
   const [editError, setEditError] = useState("");
 
@@ -337,6 +342,7 @@ export default function AccountingPage() {
     setEditSellerShirini(deal.sellerShiriniToman ?? "");
     setEditBuyerShirini(deal.buyerShiriniToman ?? "");
     setEditDiscount(deal.discountToman ?? "");
+    setEditReceived("");
     setEditError("");
     // سهم‌بندی: اگر سهم واقعی دارد همان را بیاور؛ وگرنه پیش‌فرض دفتر ۵۰٪ + مشاور معامله ۵۰٪ —
     // چه کمیسیون داشته باشد چه هنوز «تعیین نشده» باشد؛ وگرنه با محاسبه خودکار مبلغ از روی
@@ -468,6 +474,32 @@ export default function AccountingPage() {
     setEditDiscount(clean);
   }
 
+  // تقسیم خودکار دریافتی (فقط فروش): کمیسیون همیشه ۰٫۲۵٪ قیمت فروش است و
+  // مالیات ۱۰٪ فقط روی همان کمیسیون — درصدِ ذخیره‌شدهٔ معامله (مثلاً ۱٪)
+  // وارد این محاسبه نمی‌شود. بقیهٔ دریافتی به‌عنوان شیرینی فروشنده گذاشته
+  // می‌شود؛ اگر شیرینی خریدار است، مدیر جابه‌جا می‌کند.
+  function applyReceivedSplit(priceStr: string, receivedStr: string) {
+    if (editingDeal?.property.dealType !== "SALE") return;
+    const price = Number(priceStr);
+    const received = Number(receivedStr);
+    if (!Number.isFinite(price) || !Number.isFinite(received) || price <= 0 || received <= 0) return;
+    const split = splitReceived(price, received, DEFAULT_SALE_COMMISSION_PCT);
+    if (split.commission <= 0) return;
+    setEditPercent("0.25");
+    setEditAmount(String(split.commission));
+    setEditSellerShirini(String(split.shirini));
+    setEditBuyerShirini("");
+    if (editShares.length === 0 && editingDeal && !editingDeal.shares.some((s) => !s.virtual)) {
+      setEditShares([{ key: "s-new-0", userId: editingDeal.agent.id, name: editingDeal.agent.name, pct: "50", isExternal: false }]);
+    }
+  }
+
+  function onEditReceived(v: string) {
+    const clean = toEnDigits(v).replace(/[^0-9]/g, "");
+    setEditReceived(clean);
+    if (clean !== "") applyReceivedSplit(editPrice, clean);
+  }
+
   // محاسبه خودکار مبلغ کمیسیون از درصد × قیمت فروش (فقط فروش؛ اجاره دستی است).
   // فقط موقع تایپ قیمت یا درصد حساب می‌شود، پس مبلغ دستیِ ذخیره‌شده با باز شدن فرم عوض نمی‌شود.
   function calcCommissionAmount(price: string, percent: string): string | null {
@@ -482,8 +514,13 @@ export default function AccountingPage() {
     const clean = toEnDigits(v).replace(/[^0-9]/g, "");
     setEditPrice(clean);
     if (editingDeal?.property.dealType === "SALE") {
-      const next = calcCommissionAmount(clean, editPercent);
-      if (next !== null) setEditAmount(next);
+      // اگر دریافتی وارد شده، تقسیم ۰٫۲۵٪ دوباره حساب می‌شود؛ وگرنه مثل قبل درصد × قیمت
+      if (editReceived !== "") {
+        applyReceivedSplit(clean, editReceived);
+      } else {
+        const next = calcCommissionAmount(clean, editPercent);
+        if (next !== null) setEditAmount(next);
+      }
     }
   }
 
@@ -675,6 +712,22 @@ export default function AccountingPage() {
 
   /** مالیات فرم ویرایش روی مبلغ کمیسیون فعلی حساب می‌شود (نه روی مبنای خالص). */
   const editTax = Math.round(((Number(editAmount) || 0) * taxRate) / 100);
+
+  /** تقسیم زندهٔ دریافتی در فرم ویرایش — فقط فروش و وقتی قیمت و دریافتی هر دو وارد شده‌اند. */
+  const editReceivedSplit =
+    editingDeal?.property.dealType === "SALE" && editReceived !== "" && editPrice !== ""
+      ? splitReceived(Number(editPrice), Number(editReceived), DEFAULT_SALE_COMMISSION_PCT)
+      : null;
+
+  /** جزئیات پیش‌نمایش کمیسیون — فقط از مقادیر ذخیره‌شده خوانده می‌شود؛ چیزی ذخیره نمی‌کند. */
+  const previewCommission = previewDeal ? Number(previewDeal.commissionToman) || 0 : 0;
+  const previewSellerShirini = previewDeal ? Number(previewDeal.sellerShiriniToman) || 0 : 0;
+  const previewBuyerShirini = previewDeal ? Number(previewDeal.buyerShiriniToman) || 0 : 0;
+  const previewDiscount = previewDeal ? Number(previewDeal.discountToman) || 0 : 0;
+  const previewTax = Math.round((previewCommission * taxRate) / 100);
+  const previewTotal = previewCommission + previewSellerShirini + previewBuyerShirini - previewDiscount + previewTax;
+  const previewReceived = previewDeal?.commissionPaid ? previewTotal : 0;
+  const previewOutstanding = previewTotal - previewReceived;
 
   if (roleLoading) return <PageSkeleton rows={4} />;
   if (loading) return <PageSkeleton rows={4} />;
@@ -926,6 +979,13 @@ export default function AccountingPage() {
                           {isOwner && tab === "commissions" && d.commissionPaid && (
                             <div className="mt-1 text-[11px] text-[var(--ink-3)]">دریافت شده؛ برای تغییر اول دریافت را برگردان</div>
                           )}
+                          {isOwner && tab === "commissions" && (
+                            <div className="mt-1">
+                              <Button size="sm" variant="outline" onClick={() => setPreviewDeal(d)}>
+                                جزئیات
+                              </Button>
+                            </div>
+                          )}
                         </td>
                       </tr>
                     ))}
@@ -1139,6 +1199,22 @@ export default function AccountingPage() {
                     {editingDeal.property.salePriceToman ? (
                       <p className="mt-1 text-[11px] text-[var(--ink-3)]">قیمت فایل: {formatToman(editingDeal.property.salePriceToman)}</p>
                     ) : null}
+                    <MoneyInput
+                      label="دریافتی از قرارداد (تومان)"
+                      value={editReceived}
+                      onChange={onEditReceived}
+                      placeholder="مثلا ۵۰۰۰۰۰۰۰"
+                      hint="مبلغ کل دریافتی از قرارداد را بزنید؛ کمیسیون (۰٫۲۵٪ قیمت فروش)، مالیات (۱۰٪ کمیسیون) و بقیه به‌عنوان شیرینی خودکار پر می‌شود"
+                    />
+                    {editReceivedSplit && editReceivedSplit.commission > 0 && (
+                      <div className="rounded-[12px] border border-[var(--line)] bg-[var(--paper-2)] p-3 text-[13px] space-y-1">
+                        <div>دریافتی: {formatToman(editReceived)}</div>
+                        <div>کمیسیون (۰٫۲۵٪ قیمت فروش): {formatToman(editReceivedSplit.commission)}</div>
+                        <div>مالیات ارزش افزوده (۱۰٪ کمیسیون): {formatToman(editReceivedSplit.vat)}</div>
+                        <div>شیرینی (بقیه دریافتی): {formatToman(editReceivedSplit.shirini)}</div>
+                        <div className="text-[11px] text-[var(--ink-3)]">بقیه دریافتی به‌عنوان شیرینی فروشنده گذاشته می‌شود؛ اگر شیرینی خریدار است، جابه‌جا کنید.</div>
+                      </div>
+                    )}
                   </>
                 ) : (
                   <>
@@ -1351,6 +1427,45 @@ export default function AccountingPage() {
                   </Button>
                 </div>
               </form>
+          </Modal>
+        )}
+
+        {previewDeal && (
+          <Modal onClose={() => setPreviewDeal(null)} ariaLabel="جزئیات کمیسیون">
+            <h3 className="text-[15px] font-extrabold">جزئیات کمیسیون</h3>
+            <p className="mt-1 text-[12px] text-[var(--ink-3)]">
+              {previewDeal.property.title} · {previewDeal.customer.name} · {DEAL_TYPE[previewDeal.property.dealType] ?? previewDeal.property.dealType}
+            </p>
+            {!dealHasIncome(previewDeal) ? (
+              <p className="mt-4 text-[13px] text-[var(--ink-3)]">برای این معامله هنوز کمیسیون تعیین نشده است.</p>
+            ) : (
+              <div className="mt-4 rounded-[12px] border border-[var(--line)] bg-[var(--paper-2)] p-3 text-[13px] space-y-1">
+                <div>
+                  قیمت معامله:{" "}
+                  {previewDeal.property.dealType === "SALE"
+                    ? formatToman(previewDeal.dealSalePriceToman)
+                    : `${formatToman(previewDeal.dealDepositToman)} · اجاره ماهانه ${formatToman(previewDeal.dealMonthlyRentToman)}`}
+                </div>
+                <div>
+                  کمیسیون{previewDeal.commissionPercent != null ? ` (${toFaDigits(String(previewDeal.commissionPercent))}٪)` : ""}:{" "}
+                  {formatToman(previewDeal.commissionToman)}
+                </div>
+                {previewSellerShirini > 0 && <div>شیرینی فروشنده: {formatToman(previewDeal.sellerShiriniToman)}</div>}
+                {previewBuyerShirini > 0 && <div>شیرینی خریدار: {formatToman(previewDeal.buyerShiriniToman)}</div>}
+                {previewDiscount > 0 && <div>تخفیف: {formatToman(previewDeal.discountToman)}</div>}
+                <div>مالیات ارزش افزوده ({toFaDigits(String(taxRate))}٪ روی کمیسیون): {formatToman(previewTax)}</div>
+                <div className="font-bold">جمع دریافتی از مشتری (با مالیات): {formatToman(previewTotal)}</div>
+                <div>
+                  دریافتی: {formatToman(previewReceived)} {previewDeal.commissionPaid ? "· دریافت شد" : "· پرداخت‌نشده"}
+                </div>
+                <div className={previewOutstanding > 0 ? "font-bold text-red-600" : ""}>مانده: {formatToman(previewOutstanding)}</div>
+              </div>
+            )}
+            <div className="flex gap-2 pt-3">
+              <Button type="button" variant="ghost" onClick={() => setPreviewDeal(null)}>
+                بستن
+              </Button>
+            </div>
           </Modal>
         )}
       </div>

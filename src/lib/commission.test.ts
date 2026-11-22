@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { calcRentCommission, calcSaleCommission, calcVat } from "./commission";
+import { calcRentCommission, calcSaleCommission, calcVat, splitReceived } from "./commission";
 
 describe("calcSaleCommission", () => {
   it("computes 0.25% of the sale price (the Sangi villa case)", () => {
@@ -24,6 +24,20 @@ describe("calcRentCommission", () => {
   it("returns 0 for invalid input", () => {
     expect(calcRentCommission(-1, 500_000)).toBe(0);
     expect(calcRentCommission(1_000_000, -1)).toBe(0);
+  });
+});
+
+describe("splitReceived", () => {
+  it("splits the received amount into 0.25% commission, 10% VAT on it, and the rest as shirini", () => {
+    // قیمت ۵ میلیارد، دریافتی ۵۰ میلیون → کمیسیون ۱۲٬۵۰۰٬۰۰۰، مالیات ۱٬۲۵۰٬۰۰۰، شیرینی ۳۶٬۲۵۰٬۰۰۰
+    expect(splitReceived(5_000_000_000, 50_000_000)).toEqual({ commission: 12_500_000, vat: 1_250_000, shirini: 36_250_000 });
+    // قیمت ۱۱٫۵ میلیارد، دریافتی ۱۰۰ میلیون → کمیسیون ۲۸٬۷۵۰٬۰۰۰، مالیات ۲٬۸۷۵٬۰۰۰، شیرینی ۶۸٬۳۷۵٬۰۰۰
+    expect(splitReceived(11_500_000_000, 100_000_000)).toEqual({ commission: 28_750_000, vat: 2_875_000, shirini: 68_375_000 });
+  });
+
+  it("clamps shirini at zero when the received amount is less than commission plus VAT", () => {
+    expect(splitReceived(5_000_000_000, 10_000_000)).toEqual({ commission: 12_500_000, vat: 1_250_000, shirini: 0 });
+    expect(splitReceived(0, 50_000_000)).toEqual({ commission: 0, vat: 0, shirini: 0 });
   });
 });
 
