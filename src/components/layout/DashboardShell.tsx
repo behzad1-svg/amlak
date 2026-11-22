@@ -4,6 +4,7 @@ import { Menu } from "lucide-react";
 import { Sidebar } from "./Sidebar";
 import { SidebarMini } from "./SidebarMini";
 import { ThemeToggle } from "@/components/ThemeToggle";
+import { IdleLogout } from "@/components/IdleLogout";
 
 /** نقش کاربر — layout سرور آن را می‌دهد تا صفحات نیازی به فراخوانی /api/auth/me نداشته باشند (نقد ۸) */
 export const RoleContext = createContext<string | null>(null);
@@ -63,6 +64,7 @@ export function DashboardShell({
 
   return (
     <RoleContext.Provider value={role ?? null}>
+    <IdleLogout />
     <div className="flex min-h-screen bg-[var(--paper)]">
       {/* Desktop: inline sidebar — full or mini. sticky is on the aside itself: an overflow-hidden ancestor would break sticky, so the aside carries sticky + h-screen (its own overflow-hidden does not break it). */}
       <aside className="hidden lg:flex lg:shrink-0 lg:flex-col lg:sticky lg:top-0 lg:h-screen overflow-hidden border-l border-[var(--line)] bg-white transition-all duration-200" style={{ width: isDesktop ? (mode === "mini" ? 64 : mode === "full" ? 272 : 0) : 0 }}>
