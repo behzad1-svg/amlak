@@ -14,12 +14,8 @@ export function formatTomanWithWords(value: string | number | bigint | null | un
   const remainderThousand = (num % BigInt(1_000_000)) / BigInt(1_000);
   if (words && remainderThousand > 0) words += ` و ${toPersianDigits(remainderThousand.toString())} هزار`;
   if (words) words += " تومان";
-  // For small amounts under 1B, still show
-  if (!words) {
-    const million = num / BigInt(1_000_000);
-    if (million > 0) words = `${toPersianDigits(million.toString())} میلیون تومان`;
-    else words = `${toPersianDigits(str.replace(/\B(?=(\d{3})+(?!\d))/g, ","))} تومان`;
-  }
+  // زیر یک میلیون حروفی جدا ندارد — همان عدد رقم‌خورده یک بار نشان داده
+  // می‌شود؛ words خالی می‌ماند تا مبلغ دوبار نوشته نشود.
   return { formatted, words };
 }
 

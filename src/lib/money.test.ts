@@ -42,8 +42,17 @@ describe("formatTomanWithWords", () => {
   it("shows the thousands remainder in words", () => {
     expect(formatTomanWithWords(28_750_000).words).toBe("۲۸ میلیون و ۷۵۰ هزار تومان");
     expect(formatTomanWithWords(1_500_000).words).toBe("۱ میلیون و ۵۰۰ هزار تومان");
-    expect(formatTomanWithWords(500_000).words).toBe("۵۰۰,۰۰۰ تومان");
-    expect(formatTomanWithWords(999_999).words).toBe("۹۹۹,۹۹۹ تومان");
+    expect(formatTomanWithWords(500_000).words).toBe("");
+    expect(formatTomanWithWords(999_999).words).toBe("");
+  });
+
+  it("does not repeat a sub-million amount in words", () => {
+    // زیر یک میلیون حروفیِ جدا همان عدد است؛ words خالی می‌ماند تا
+    // MoneyInput مبلغ را دوبار ننویسد («۵۰۰,۰۰۰ تومان — ۵۰۰,۰۰۰ تومان»).
+    expect(formatTomanWithWords(500_000)).toEqual({
+      formatted: "۵۰۰,۰۰۰ تومان",
+      words: "",
+    });
   });
 
   it("accepts string and bigint input", () => {
