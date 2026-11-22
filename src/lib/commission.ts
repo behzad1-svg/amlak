@@ -1,6 +1,6 @@
 // محاسبه کمیسیون — همان فرمول حسابداری:
 // فروش: درصد کمیسیون (پیش‌فرض ۰٫۲۵٪) × قیمت فروش.
-// رهن و اجاره: ۲۵٪ اجاره ماهانه + ۲۵٪ از یک‌صدم ودیعه.
+// رهن و اجاره: ۲۵٪ اجاره ماهانه + ۲۵٪ از سه‌صدم ودیعه.
 // مالیات ارزش افزوده ۱۰٪ فقط روی کمیسیون حساب می‌شود.
 import { DEFAULT_TAX_RATE_PCT } from "./constants";
 
@@ -14,7 +14,7 @@ export function calcSaleCommission(priceToman: number, percent: number): number 
 
 export function calcRentCommission(depositToman: number, monthlyRentToman: number): number {
   if (!Number.isFinite(depositToman) || !Number.isFinite(monthlyRentToman) || depositToman < 0 || monthlyRentToman < 0) return 0;
-  const base = monthlyRentToman + depositToman / 100;
+  const base = monthlyRentToman + (depositToman * 3) / 100;
   return Math.round((base * RENT_COMMISSION_PCT) / 100);
 }
 

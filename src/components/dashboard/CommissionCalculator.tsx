@@ -113,7 +113,7 @@ export function CommissionCalculator() {
             <div className="text-[11px] text-[var(--ink-3)]">
               {mode === "SALE"
                 ? `کمیسیون = قیمت فروش × ${toFaDigits(percent || "0.25")}٪؛ مالیات فقط روی کمیسیون حساب می‌شود.`
-                : `کمیسیون = ${RENT_COMMISSION_PCT}٪ اجاره ماهانه + ${RENT_COMMISSION_PCT}٪ از یک‌صدم ودیعه؛ مالیات فقط روی کمیسیون حساب می‌شود.`}
+                : `کمیسیون = ${RENT_COMMISSION_PCT}٪ اجاره ماهانه + ${RENT_COMMISSION_PCT}٪ از سه‌صدم ودیعه؛ مالیات فقط روی کمیسیون حساب می‌شود.`}
             </div>
           </div>
         ) : (
