@@ -19,6 +19,15 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
   const wasDone = existing.status === "DONE";
   const newStatus = parsed.data.status ?? existing.status;
   if (parsed.data.rating && newStatus !== "DONE") return NextResponse.json({ error: "گزارش بازدید فقط برای بازدید انجام‌شده ثبت می‌شود" }, { status: 400 });
+  // پایان باید بعد از شروع باشد — مثل POST؛ فقط وقتی زمان‌ها دست می‌خورند چک می‌شود
+  // (مقدار تازه اگر آمده، وگرنه مقدار ذخیره‌شده)
+  if (parsed.data.startAt !== undefined || parsed.data.endAt !== undefined) {
+    const effStart = parsed.data.startAt !== undefined ? new Date(parsed.data.startAt) : existing.startAt;
+    const effEnd = parsed.data.endAt !== undefined ? (parsed.data.endAt ? new Date(parsed.data.endAt) : null) : existing.endAt;
+    if (effStart && effEnd && effEnd <= effStart) {
+      return NextResponse.json({ error: "زمان پایان باید بعد از شروع باشد" }, { status: 400 });
+    }
+  }
   const data: Record<string, unknown> = {};
   if (parsed.data.status !== undefined) data.status = parsed.data.status;
   if (parsed.data.feedback !== undefined) data.feedback = parsed.data.feedback;

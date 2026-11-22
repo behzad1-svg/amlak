@@ -51,3 +51,6 @@ next-env.d.ts
 .next-start.err.log
 lint-out.txt
 scripts/video-frames/
+
+# Local pre-change backups (never pushed)
+.backup-*/

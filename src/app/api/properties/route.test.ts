@@ -31,6 +31,23 @@ const prismaMock = vi.hoisted(() => ({
 }));
 vi.mock("@/lib/prisma", () => ({ prisma: prismaMock }));
 
+// تنظیمات: ۷ نوع پیش‌فرض + یک نوع تازه که مدیر اضافه کرده (ممیزی ۲.۲)
+const settingsMock = vi.hoisted(() => ({
+  types: [
+    { value: "APARTMENT", label: "آپارتمان" },
+    { value: "VILLA", label: "ویلایی" },
+    { value: "KOLANGI", label: "کلنگی" },
+    { value: "LAND", label: "زمین" },
+    { value: "SHOP", label: "مغازه" },
+    { value: "OFFICE", label: "اداری" },
+    { value: "COMMERCIAL", label: "تجاری" },
+    { value: "BAGH", label: "باغ" },
+  ],
+}));
+vi.mock("@/lib/settings", () => ({
+  getPropertyTypes: async () => settingsMock.types,
+}));
+
 const OWNER = { id: "u-owner", name: "مدیر ساج", role: "OWNER" };
 const AGENT_A = { id: "u-a", name: "مدیر ساج", role: "AGENT" }; // lister of the team file
 const AGENT_B = { id: "u-b", name: "فاطمه فخری", role: "AGENT" }; // viewer
@@ -130,5 +147,33 @@ describe("GET /api/properties — ماسک لیست برای مشاور", () => 
     setSession(null);
     const res = await GET(new NextRequest("http://localhost/api/properties"));
     expect(res.status).toBe(401);
+  });
+});
+
+describe("GET /api/properties — فیلتر نوع از تنظیمات می‌آید (ممیزی ۲.۲)", () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    prismaMock.propertyAccess.findMany.mockResolvedValue([]);
+    prismaMock.property.findMany.mockResolvedValue([]);
+    prismaMock.property.count.mockResolvedValue(0);
+  });
+
+  it("نوع تازه‌ای که مدیر در تنظیمات اضافه کرده (باغ) ۴۰۰ نمی‌گیرد", async () => {
+    setSession(OWNER);
+    const res = await GET(new NextRequest("http://localhost/api/properties?type=BAGH"));
+    expect(res.status).toBe(200);
+    expect(prismaMock.property.findMany).toHaveBeenCalled();
+  });
+
+  it("نوع پیش‌فرض هنوز معتبر است", async () => {
+    setSession(OWNER);
+    const res = await GET(new NextRequest("http://localhost/api/properties?type=APARTMENT"));
+    expect(res.status).toBe(200);
+  });
+
+  it("نوع ناشناخته هنوز 400 می‌گیرد", async () => {
+    setSession(OWNER);
+    const res = await GET(new NextRequest("http://localhost/api/properties?type=NOPE"));
+    expect(res.status).toBe(400);
   });
 });

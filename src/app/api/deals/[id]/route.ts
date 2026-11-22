@@ -36,7 +36,16 @@ export async function GET(_req: NextRequest, { params }: { params: Promise<{ id:
   });
   if (!deal) return NextResponse.json({ error: "یافت نشد" }, { status: 404 });
   if (session.user.role !== "OWNER" && deal.agentId !== session.user.id) {
-    return NextResponse.json({ error: "دسترسی ندارید" }, { status: 403 });
+    // لیست معامله‌ها، معامله را به مشاورِ مشتریِ منتقل‌شده و به سهم‌دار هم
+    // نشان می‌دهد (deals/route.ts) — گارد جزئیات باید همان OR را بپذیرد،
+    // وگرنه مشاور معامله را در لیست می‌بیند و با کلیک 403 می‌گیرد.
+    const [assigned, share] = await Promise.all([
+      prisma.customer.findUnique({ where: { id: deal.customerId }, select: { assignedAgentId: true } }),
+      prisma.dealShare.findFirst({ where: { dealId: id, userId: session.user.id }, select: { id: true } }),
+    ]);
+    if (assigned?.assignedAgentId !== session.user.id && !share) {
+      return NextResponse.json({ error: "دسترسی ندارید" }, { status: 403 });
+    }
   }
   return NextResponse.json(serializeBigInt(deal));
 }
@@ -47,7 +56,13 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
   const { id } = await params;
   const existing = await prisma.deal.findUnique({ where: { id }, include: { property: true, customer: true, shares: true } });
   if (!existing) return NextResponse.json({ error: "یافت نشد" }, { status: 404 });
-  if (session.user.role !== "OWNER" && existing.agentId !== session.user.id) {
+  // همان OR لیست معامله‌ها: مشاورِ ثبت‌کننده، مشاورِ مشتریِ منتقل‌شده، یا سهم‌دار
+  const canAccessDeal =
+    session.user.role === "OWNER" ||
+    existing.agentId === session.user.id ||
+    existing.customer.assignedAgentId === session.user.id ||
+    existing.shares.some((s) => s.userId === session.user.id);
+  if (!canAccessDeal) {
     return NextResponse.json({ error: "دسترسی ندارید" }, { status: 403 });
   }
 

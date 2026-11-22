@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import {
+  COOKIE_NAME_EXPORT,
   getSessionFromCookies,
   hashPassword,
   invalidateUserTokens,
@@ -41,8 +42,12 @@ export async function POST(req: NextRequest) {
     entityId: user.id,
   });
 
-  return NextResponse.json({
+  // کوکی قدیمی را هم حذف کن (مثل logout) — گرچه tokenVersion آن را بی‌اعتبار
+  // کرده، کاربر نباید با کوکی مرده بماند تا در درخواست بعدی 401 بگیرد.
+  const res = NextResponse.json({
     ok: true,
     message: "رمز عبور تغییر کرد. لطفا دوباره وارد شوید.",
   });
+  res.cookies.delete(COOKIE_NAME_EXPORT);
+  return res;
 }

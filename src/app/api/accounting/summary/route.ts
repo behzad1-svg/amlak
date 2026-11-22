@@ -89,7 +89,8 @@ export async function GET() {
       }
       if (d.status === "COMPLETED") officeTotal += split.officeAmount ?? BigInt(0);
       for (const s of split.shares) {
-        if (!s.settled) debtToAgents += s.amount;
+        // سهم خارجی (تعاون) بدهی به مشاور نیست — جدا حساب می‌شود
+        if (!s.settled && !s.isExternal) debtToAgents += s.amount;
       }
     } else {
       // مشاور فقط سهم خودش را می‌بیند، نه مبلغ کامل معامله را

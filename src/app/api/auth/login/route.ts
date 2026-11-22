@@ -91,9 +91,11 @@ export async function POST(req: NextRequest) {
 
   const token = await signToken({ userId: user.id, role: user.role, tokenVersion: user.tokenVersion });
 
-  // ورود موفق: شمارندهٔ خطاهای همان پنجره پاک می‌شود تا چند خطای قدیمی باعث 429 نشوند
-  // کلید ساده تلفن هم پاک می شود تا سطل های قدیمی (پیش از ترکیب کلید) باقی نمانند
-  await clearRateLimitDb(phoneKey, `login:phone:${phone}`, ...(ipKey ? [ipKey] : []));
+  // ورود موفق: فقط شمارندهٔ خطاهای همان شماره پاک می‌شود تا چند خطای قدیمی باعث 429 نشوند؛
+  // کلید ساده تلفن هم پاک می شود تا سطل های قدیمی (پیش از ترکیب کلید) باقی نمانند.
+  // سطل IP عمداً پاک نمی‌شود: دفتر یک IP مشترک دارد و پاک‌کردنش با ورود هر همکار،
+  // سهمیهٔ تلاش مهاجمِ در حال حدس رمز را هم صفر می‌کرد.
+  await clearRateLimitDb(phoneKey, `login:phone:${phone}`);
   // پاک‌سازی فرصت‌طلبانهٔ ردیف‌های منقضی — خرابی‌اش ورود را خراب نمی‌کند
   void cleanupExpiredRateLimitDb();
 

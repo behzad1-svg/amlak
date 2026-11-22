@@ -8,6 +8,7 @@ import { runMatchingForProperty } from "@/lib/matching";
 import { createAuditLog } from "@/lib/audit";
 import { hasPermission } from "@/lib/permissions";
 import { nextPropertyCode } from "@/lib/propertyCode";
+import { getPropertyTypes } from "@/lib/settings";
 import { persianSearchOr } from "@/lib/search";
 
 export async function GET(req: NextRequest) {
@@ -68,8 +69,13 @@ export async function GET(req: NextRequest) {
   if (source && !["INSTAGRAM", "DIVAR", "DIRECT_CALL", "REFERRAL", "SIGN_BOARD", "WEBSITE", "IN_PERSON", "ADVERTISEMENT", "OTHER", "FILE_FINDING"].includes(source)) {
     return NextResponse.json({ error: "مقدار «source» معتبر نیست" }, { status: 400 });
   }
-  if (type && !["APARTMENT", "VILLA", "OFFICE", "LAND", "SHOP", "KOLANGI", "COMMERCIAL"].includes(type)) {
-    return NextResponse.json({ error: "مقدار «type» معتبر نیست" }, { status: 400 });
+  if (type) {
+    // نوع‌ها از تنظیمات می‌آیند (مدیر می‌تواند نوع تازه اضافه کند)؛
+    // هاردکد ۷ نوع قدیمی، نوع تازه را با 400 رد می‌کرد و لیست لود نمی‌شد.
+    const allowedTypes = (await getPropertyTypes()).map((t) => t.value);
+    if (!allowedTypes.includes(type)) {
+      return NextResponse.json({ error: "مقدار «type» معتبر نیست" }, { status: 400 });
+    }
   }
   if (dealType && !["SALE", "RENT"].includes(dealType)) {
     return NextResponse.json({ error: "مقدار «dealType» معتبر نیست" }, { status: 400 });

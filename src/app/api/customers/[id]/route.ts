@@ -50,11 +50,16 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
   if (!parsed.success) return NextResponse.json({ error: parsed.error.issues[0].message }, { status: 400 });
   const d = parsed.data;
 
-  if (d.phone !== undefined && d.phone !== existing.phone) {
-    const nextType = (d as { type?: string }).type ?? existing.type;
+  // یکتایی تلفن فقط وقتی تلفن عوض می‌شد چک می‌شد؛ تغییر نوع (مثلاً خریدار به
+  // مالک) بدون عوض‌کردن تلفن از چک در می‌رفت — یا 500 کنترل‌نشده (P2002)
+  // می‌داد یا دو مالک تکراری می‌ساخت. نوع تازه هم باید چک شود.
+  const nextType = (d as { type?: string }).type ?? existing.type;
+  const phoneChanged = d.phone !== undefined && d.phone !== existing.phone;
+  const typeChanged = (d as { type?: string }).type !== undefined && (d as { type?: string }).type !== existing.type;
+  if (phoneChanged || typeChanged) {
     const nextIsOwner = nextType === "OWNER";
     const phoneClash = await prisma.customer.findFirst({
-      where: { phone: d.phone, deletedAt: null, id: { not: id }, ...(nextIsOwner ? { type: "OWNER" } : { type: { not: "OWNER" } }) },
+      where: { phone: d.phone ?? existing.phone, deletedAt: null, id: { not: id }, ...(nextIsOwner ? { type: "OWNER" } : { type: { not: "OWNER" } }) },
     });
     if (phoneClash) {
       return NextResponse.json(
@@ -133,7 +138,16 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
   if (d.lostReasonCategory !== undefined) updateData.lostReasonCategory = d.lostReasonCategory;
   if (d.lostReasonDetail !== undefined) updateData.lostReasonDetail = d.lostReasonDetail;
 
-  const customer = await prisma.customer.update({ where: { id }, data: updateData });
+  let customer;
+  try {
+    customer = await prisma.customer.update({ where: { id }, data: updateData });
+  } catch (e) {
+    // مسابقه هم‌زمانی یا ایندکس جزئی (phone, type): تداخل یعنی 409، نه 500
+    if ((e as { code?: string }).code === "P2002") {
+      return NextResponse.json({ error: "مشتری دیگری با این شماره ثبت شده است" }, { status: 409 });
+    }
+    throw e;
+  }
   if (didSetFollowUp && d.nextFollowUpAt) {
     try {
       const existingFU = await prisma.followUp.findFirst({ where: { customerId: id, done: false }, orderBy: { dueAt: "asc" } });
