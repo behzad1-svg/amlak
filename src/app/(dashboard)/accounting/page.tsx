@@ -1214,9 +1214,10 @@ export default function AccountingPage() {
                 </p>
                 {(editSplitBase > 0 || editTax > 0) && !editDiscountOverGross && (
                   <div className="rounded-[12px] border border-[var(--line)] bg-[var(--paper-2)] p-3 text-[13px] space-y-1">
-                    <div>مالیات ارزش افزوده ({toFaDigits(String(taxRate))}٪): {formatToman(editTax)}</div>
-                    <div className="font-bold">جمع دریافتی از مشتری: {formatToman(editSplitBase + editTax)}</div>
-                    <div className="text-[11px] text-[var(--ink-3)]">مالیات فقط روی کمیسیون حساب می‌شود و جزو تقسیم درآمد نیست.</div>
+                    <div>بدون مالیات (کمیسیون + شیرینی − تخفیف): {formatToman(editSplitBase)}</div>
+                    <div>مالیات ارزش افزوده ({toFaDigits(String(taxRate))}٪ روی کمیسیون): {formatToman(editTax)}</div>
+                    <div className="font-bold">با مالیات — جمع دریافتی از مشتری: {formatToman(editSplitBase + editTax)}</div>
+                    <div className="text-[11px] text-[var(--ink-3)]">مالیات فقط روی کمیسیون حساب می‌شود و جزو تقسیم درآمد نیست؛ از کمیسیون کم نمی‌شود، به مبلغ دریافتی از مشتری اضافه می‌شود.</div>
                   </div>
                 )}
                 {/* سهم‌بندی — فقط وقتی کمیسیون یا شیرینی تعیین شده باشد؛ هر درصد دستی قابل تغییر است */}

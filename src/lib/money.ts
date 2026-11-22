@@ -11,6 +11,8 @@ export function formatTomanWithWords(value: string | number | bigint | null | un
   let words = "";
   if (billion > 0) words += `${toPersianDigits(billion.toString())} میلیارد`;
   if (remainderMillion > 0) words += `${words ? " و " : ""}${toPersianDigits(remainderMillion.toString())} میلیون`;
+  const remainderThousand = (num % BigInt(1_000_000)) / BigInt(1_000);
+  if (words && remainderThousand > 0) words += ` و ${toPersianDigits(remainderThousand.toString())} هزار`;
   if (words) words += " تومان";
   // For small amounts under 1B, still show
   if (!words) {

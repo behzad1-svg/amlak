@@ -39,8 +39,9 @@ describe("formatTomanWithWords", () => {
     });
   });
 
-  it("drops the sub-million remainder in words", () => {
-    expect(formatTomanWithWords(1_500_000).words).toBe("۱ میلیون تومان");
+  it("shows the thousands remainder in words", () => {
+    expect(formatTomanWithWords(28_750_000).words).toBe("۲۸ میلیون و ۷۵۰ هزار تومان");
+    expect(formatTomanWithWords(1_500_000).words).toBe("۱ میلیون و ۵۰۰ هزار تومان");
     expect(formatTomanWithWords(500_000).words).toBe("۵۰۰,۰۰۰ تومان");
     expect(formatTomanWithWords(999_999).words).toBe("۹۹۹,۹۹۹ تومان");
   });
