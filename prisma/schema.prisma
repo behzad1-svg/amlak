@@ -147,6 +147,12 @@ enum ActivityType {
   OTHER
 }
 
+/// شیفت حضور و غیاب: صبح ۰۹:۰۰–۱۳:۰۰، عصر ۱۷:۰۰–۲۱:۰۰
+enum AttendanceSession {
+  MORNING
+  EVENING
+}
+
 model User {
   id           String   @id @default(cuid())
   name         String
@@ -182,6 +188,7 @@ model User {
   sessionCardCoAdvising SessionCardCoAdvisor[] @relation("SessionCardCoAdvisorUser")
   contractManagedSessionCards SessionCard[] @relation("SessionCardContractManager")
   phonebookContacts PhonebookContact[] @relation("PhonebookOwner")
+  attendances    Attendance[]
 }
 
 model Customer {
@@ -293,6 +300,33 @@ model AppSetting {
   key       String   @unique
   value     String
   updatedAt DateTime @updatedAt
+}
+
+/// یک رکورد حضور و غیاب برای یک مشاور، یک روز و یک شیفت — بدون عکس و بدون تشخیص چهره؛
+/// فقط موقعیت GPS هنگام ورود/خروج. date روزِ تهران است (تاریخِ میلادیِ همان روز).
+model Attendance {
+  id                String            @id @default(cuid())
+  userId            String
+  user              User              @relation(fields: [userId], references: [id], onDelete: Cascade)
+  date              DateTime          @db.Date
+  session           AttendanceSession
+  checkInAt         DateTime?
+  checkOutAt        DateTime?
+  checkInLat        Float?
+  checkInLng        Float?
+  checkInDistanceM  Int?
+  checkOutLat       Float?
+  checkOutLng       Float?
+  checkOutDistanceM Int?
+  lateMinutes       Int?
+  /// دلیل تاخیر — متن آزاد که خود مشاور می‌نویسد؛ هیچ گزینهٔ آماده‌ای نیست
+  lateReason        String?
+  createdAt         DateTime          @default(now())
+  updatedAt         DateTime          @updatedAt
+
+  @@unique([userId, date, session])
+  @@index([date])
+  @@index([userId, date])
 }
 
 model Property {

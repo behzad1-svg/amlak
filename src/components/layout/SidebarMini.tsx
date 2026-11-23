@@ -1,7 +1,7 @@
 "use client";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { LayoutDashboard, Users, BookUser, Building2, Bell, GitMerge, CalendarClock, BarChart3, Settings, PanelLeftOpen, UserCog, TrendingUp, Wallet } from "lucide-react";
+import { LayoutDashboard, Users, BookUser, Building2, Bell, GitMerge, CalendarClock, BarChart3, Settings, PanelLeftOpen, UserCog, TrendingUp, Wallet, Clock3 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import Image from "next/image";
 
@@ -41,6 +41,7 @@ export function SidebarMini({ role, userName, unreadCount, unreadMatchCount, pen
             <div className="my-1 h-px w-6 bg-[var(--line)] mx-auto" />
             <Link href="/admin" className={cn("flex h-9 w-9 items-center justify-center rounded-[12px] border", pathname?.startsWith("/admin") ? "bg-[var(--ink)] text-white border-[var(--ink)]" : "bg-white border-[var(--line)] text-[var(--ink-3)] hover:bg-[var(--paper-2)]")}><BarChart3 className="h-[18px] w-[18px]" /></Link>
             <Link href="/users" className={cn("flex h-9 w-9 items-center justify-center rounded-[12px] border", pathname?.startsWith("/users") ? "bg-[var(--ink)] text-white border-[var(--ink)]" : "bg-white border-[var(--line)] text-[var(--ink-3)] hover:bg-[var(--paper-2)]")}><UserCog className="h-[18px] w-[18px]" /></Link>
+            <Link href="/attendance" className={cn("flex h-9 w-9 items-center justify-center rounded-[12px] border", pathname?.startsWith("/attendance") ? "bg-[var(--ink)] text-white border-[var(--ink)]" : "bg-white border-[var(--line)] text-[var(--ink-3)] hover:bg-[var(--paper-2)]")}><Clock3 className="h-[18px] w-[18px]" /></Link>
           </>
         )}
             <Link href="/reports" className={cn("flex h-9 w-9 items-center justify-center rounded-[12px] border", pathname?.startsWith("/reports") ? "bg-[var(--ink)] text-white border-[var(--ink)]" : "bg-white border-[var(--line)] text-[var(--ink-3)] hover:bg-[var(--paper-2)]")}><TrendingUp className="h-[18px] w-[18px]" /></Link>

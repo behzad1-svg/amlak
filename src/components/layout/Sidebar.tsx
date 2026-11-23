@@ -1,7 +1,7 @@
 "use client";
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
-import { LayoutDashboard, Users, BookUser, Building2, Bell, GitMerge, CalendarClock, LogOut, BarChart3, Settings, UserCog, TrendingUp, Wallet } from "lucide-react";
+import { LayoutDashboard, Users, BookUser, Building2, Bell, GitMerge, CalendarClock, LogOut, BarChart3, Settings, UserCog, TrendingUp, Wallet, Clock3 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import Image from "next/image";
 
@@ -96,6 +96,16 @@ export function Sidebar({ role, userName, unreadCount, unreadMatchCount, pending
               )}
             >
               <UserCog className={cn("h-[18px] w-[18px]", pathname?.startsWith("/users") ? "text-white" : "text-[var(--ink-3)]")} /> کاربران
+            </Link>
+            <Link
+              href="/attendance"
+              onClick={onClose}
+              className={cn(
+                "flex items-center gap-3 rounded-[12px] px-3 py-2.5 text-[13.5px] font-medium",
+                pathname?.startsWith("/attendance") ? "bg-[var(--ink)] text-white" : "text-[var(--ink-2)] hover:bg-[var(--paper-2)]"
+              )}
+            >
+              <Clock3 className={cn("h-[18px] w-[18px]", pathname?.startsWith("/attendance") ? "text-white" : "text-[var(--ink-3)]")} /> حضور و غیاب
             </Link>
           </>
         )}

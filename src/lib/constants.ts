@@ -28,6 +28,19 @@ export const BUSHEHR_REGIONS = DEFAULT_BUSHEHR_REGIONS;
 /** نرخ پیش‌فرض مالیات ارزش افزوده (٪) — از تنظیمات قابل تغییر است (DB: AppSetting key=taxRate) */
 export const DEFAULT_TAX_RATE_PCT = 10;
 
+/** تنظیمات پیش‌فرض حضور و غیاب — از صفحهٔ «حضور و غیاب» قابل تغییر است (DB: AppSetting key=attendance).
+ *  مرکز دفتر را بهزاد از روی لینک گوگل‌مپ خودش تایید کرده است: ۲۸٫۹۶۲۴۶۰، ۵۰٫۸۳۸۹۷۱. */
+export const DEFAULT_ATTENDANCE_SETTINGS = {
+  officeLat: 28.96246,
+  officeLng: 50.838971,
+  radiusM: 100,
+  morningStart: "09:00",
+  morningEnd: "13:00",
+  eveningStart: "17:00",
+  eveningEnd: "21:00",
+  fridayOff: true,
+} as const;
+
 // نوع ملک — قابل توسعه از تنظیمات
 export const DEFAULT_PROPERTY_TYPES: { value: string; label: string }[] = [
   { value: "APARTMENT", label: "آپارتمان" },
