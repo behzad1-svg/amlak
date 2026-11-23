@@ -39,6 +39,10 @@ describe("isIdleExpired", () => {
     expect(isIdleExpired(now - 60 * 60 * 1000, now)).toBe(true);
   });
 
+  it("expires just past the timeout (mount check after a restart)", () => {
+    expect(isIdleExpired(now - 21 * 60 * 1000, now)).toBe(true);
+  });
+
   it("does not expire for recent activity", () => {
     expect(isIdleExpired(now - 60 * 1000, now)).toBe(false);
   });

@@ -20,6 +20,10 @@ const ACTIVITY_EVENTS = ["pointerdown", "mousemove", "keydown", "touchstart", "w
  * روی صفحهٔ ورود نیست. چیزی رندر نمی‌کند.
  * آخرین فعالیت در localStorage مشترک بین تب‌هاست، پس فعالیت در یک تب،
  * تب‌های دیگر را هم زنده نگه می‌دارد.
+ * (۱۴۰۵/۰۹/۰۲، بهزاد — برای همه:) هنگام بازشدن صفحه هم اول بررسی می‌شود:
+ * اگر از آخرین فعالیت بیش از ۲۰ دقیقه گذشته باشد (مثلاً بعد از خاموش و
+ * روشن‌کردن سیستم)، نشست بسته می‌شود؛ تایمر فقط وقتی تازه می‌شود که
+ * آخرین فعالیت هنوز تازه باشد.
  */
 export function IdleLogout() {
   const lastRecordedRef = useRef<number>(0);
@@ -28,9 +32,6 @@ export function IdleLogout() {
 
   useEffect(() => {
     const now = Date.now();
-    lastActivityRef.current = now;
-    lastRecordedRef.current = now;
-    recordActivity(now);
 
     const doLogout = async () => {
       if (loggingOutRef.current) return;
@@ -51,6 +52,19 @@ export function IdleLogout() {
         window.location.replace(`/login?next=${encodeURIComponent(next)}`);
       }
     };
+
+    // بررسی هنگام بازشدن صفحه، پیش از تازه‌کردن تایمر: اگر از آخرین فعالیت
+    // بیش از ۲۰ دقیقه گذشته باشد، نشست منقضی شده است — حتی اگر مرورگر یا
+    // سیستم در این میان خاموش و روشن شده باشد. مقدار گم‌شده/نامعتبر یعنی
+    // «منقضی نشده»، تا کاربر تازه‌واردشده بی‌دلیل بیرون انداخته نشود.
+    if (isIdleExpired(readLastActivity(), now, IDLE_TIMEOUT_MS)) {
+      void doLogout();
+      return;
+    }
+
+    lastActivityRef.current = now;
+    lastRecordedRef.current = now;
+    recordActivity(now);
 
     const checkIdle = () => {
       if (loggingOutRef.current) return;
