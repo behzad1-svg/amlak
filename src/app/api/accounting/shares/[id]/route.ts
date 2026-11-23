@@ -36,9 +36,13 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
         select: {
           id: true,
           commissionToman: true,
+          sellerCommissionToman: true,
+          buyerCommissionToman: true,
           sellerShiriniToman: true,
           buyerShiriniToman: true,
           discountToman: true,
+          sellerDiscountToman: true,
+          buyerDiscountToman: true,
           commissionPaid: true,
           property: { select: { code: true, title: true } },
         },

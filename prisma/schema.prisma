@@ -524,6 +524,18 @@ model Deal {
   sellerShiriniToman BigInt?
   buyerShiriniToman  BigInt?
   discountToman      BigInt?
+  /// کمیسیون و مالیات دوطرفه (از ۲ آذر ۱۴۰۵): هر طرف جدا حساب می‌شود —
+  /// فروش: فروشنده/خریدار، اجاره: مالک/مستاجر. commissionToman جمع دو طرف
+  /// است (برای سازگاری با گزارش‌های قدیمی) و discountToman جمع تخفیف دو طرف؛
+  /// معامله‌های قدیمی این فیلدها را ندارند و همان تک‌کمیسیون قبلی را می‌بینند.
+  sellerCommissionToman   BigInt?
+  sellerCommissionPercent Float?
+  buyerCommissionToman    BigInt?
+  buyerCommissionPercent  Float?
+  sellerReceivedToman     BigInt?
+  buyerReceivedToman      BigInt?
+  sellerDiscountToman     BigInt?
+  buyerDiscountToman      BigInt?
   commissionPaid    Boolean  @default(false)
   commissionPaidAt  DateTime?
   officePct         Decimal  @default(50) @db.Decimal(5, 2)

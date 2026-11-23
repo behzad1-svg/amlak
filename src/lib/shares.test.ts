@@ -3,6 +3,9 @@ import {
   commissionAmountFor,
   dealSplittable,
   dealTaxBase,
+  dealTotalCommission,
+  dealTotalDiscount,
+  dealTotalShirini,
   equalSplitPcts,
   resolveSplit,
   shareAmount,
@@ -51,6 +54,49 @@ describe("equalSplitPcts", () => {
   });
 });
 
+describe("dealTotalCommission", () => {
+  it("sums both sides when per-side fields exist", () => {
+    expect(
+      dealTotalCommission({
+        commissionToman: BigInt(57_500_000),
+        sellerCommissionToman: BigInt(28_750_000),
+        buyerCommissionToman: BigInt(28_750_000),
+      }),
+    ).toBe(BigInt(57_500_000));
+  });
+
+  it("falls back to the legacy single commission for old deals", () => {
+    expect(dealTotalCommission({ commissionToman: BigInt(10_000_000) })).toBe(BigInt(10_000_000));
+    expect(dealTotalCommission({ commissionToman: null })).toBe(BigInt(0));
+  });
+});
+
+describe("dealTotalDiscount", () => {
+  it("sums both sides' discounts", () => {
+    expect(
+      dealTotalDiscount({
+        discountToman: null,
+        sellerDiscountToman: BigInt(1_000_000),
+        buyerDiscountToman: BigInt(2_000_000),
+      }),
+    ).toBe(BigInt(3_000_000));
+  });
+
+  it("falls back to the legacy single discount for old deals", () => {
+    expect(dealTotalDiscount({ discountToman: BigInt(5_000_000) })).toBe(BigInt(5_000_000));
+    expect(dealTotalDiscount({})).toBe(BigInt(0));
+  });
+});
+
+describe("dealTotalShirini", () => {
+  it("sums both sides' shirini", () => {
+    expect(
+      dealTotalShirini({ sellerShiriniToman: BigInt(18_375_000), buyerShiriniToman: BigInt(0) }),
+    ).toBe(BigInt(18_375_000));
+    expect(dealTotalShirini({})).toBe(BigInt(0));
+  });
+});
+
 describe("dealSplittable", () => {
   it("is commission + both shirini minus discount", () => {
     expect(
@@ -80,6 +126,36 @@ describe("dealSplittable", () => {
       dealSplittable({ commissionToman: BigInt(10_000_000), sellerShiriniToman: null }),
     ).toBe(BigInt(10_000_000));
   });
+
+  it("uses the two-sided totals: both commissions + both shirinis minus both discounts", () => {
+    // معامله ۱۱٫۵ میلیارد: کمیسیون هر طرف ۲۸٬۷۵۰٬۰۰۰، شیرینی فروشنده ۱۸٬۳۷۵٬۰۰۰
+    expect(
+      dealSplittable({
+        commissionToman: BigInt(57_500_000),
+        sellerCommissionToman: BigInt(28_750_000),
+        buyerCommissionToman: BigInt(28_750_000),
+        sellerShiriniToman: BigInt(18_375_000),
+        buyerShiriniToman: BigInt(0),
+        sellerDiscountToman: null,
+        buyerDiscountToman: null,
+      }),
+    ).toBe(BigInt(75_875_000));
+  });
+
+  it("subtracts the per-side discounts from the split base, never the VAT", () => {
+    // تخفیف فروشنده ۱۱٬۶۲۵٬۰۰۰ (دریافتی ۲۰ میلیون) از مبنا کم می‌شود؛ مالیات جداگانه و کامل می‌ماند
+    expect(
+      dealSplittable({
+        commissionToman: BigInt(57_500_000),
+        sellerCommissionToman: BigInt(28_750_000),
+        buyerCommissionToman: BigInt(28_750_000),
+        sellerShiriniToman: BigInt(0),
+        buyerShiriniToman: BigInt(0),
+        sellerDiscountToman: BigInt(11_625_000),
+        buyerDiscountToman: BigInt(0),
+      }),
+    ).toBe(BigInt(45_875_000));
+  });
 });
 
 describe("dealTaxBase", () => {
@@ -87,6 +163,16 @@ describe("dealTaxBase", () => {
     // 10% VAT on this base is 1,000,000; the 89,000,000 shirini never enters it.
     expect(dealTaxBase({ commissionToman: BigInt(10_000_000) })).toBe(BigInt(10_000_000));
     expect(dealTaxBase({ commissionToman: null })).toBe(BigInt(0));
+  });
+
+  it("is the total commission of both sides for two-sided deals", () => {
+    expect(
+      dealTaxBase({
+        commissionToman: BigInt(57_500_000),
+        sellerCommissionToman: BigInt(28_750_000),
+        buyerCommissionToman: BigInt(28_750_000),
+      }),
+    ).toBe(BigInt(57_500_000));
   });
 });
 
@@ -104,6 +190,16 @@ function dealWithShares() {
       { id: "s1", userId: "u1", name: "علی", pct: 25, settled: false, settledAt: null },
       { id: "s2", userId: null, name: "تعاون", pct: 25, settled: true, settledAt: "2026-11-16" },
     ],
+  };
+}
+
+function dealWithSides() {
+  return {
+    ...dealWithShares(),
+    sellerCommissionToman: BigInt(6_000_000),
+    buyerCommissionToman: BigInt(4_000_000),
+    sellerDiscountToman: null,
+    buyerDiscountToman: null,
   };
 }
 
@@ -169,6 +265,33 @@ describe("resolveSplit", () => {
     expect(split.shares[0]).toMatchObject({ pct: 75, amount: BigInt(75_000_000), virtual: true });
   });
 
+  it("breaks each share into a commission part and a shirini part that sum to the share amount", () => {
+    const split = resolveSplit(dealWithSides());
+    // مبنا ۱۰۰٬۰۰۰٬۰۰۰ = کمیسیون ۱۰٬۰۰۰٬۰۰۰ (۶ + ۴ میلیون دو طرف) + شیرینی ۹۰٬۰۰۰٬۰۰۰
+    expect(split.officeAmount).toBe(BigInt(50_000_000));
+    expect(split.officeCommissionAmount).toBe(BigInt(5_000_000));
+    expect(split.officeShiriniAmount).toBe(BigInt(45_000_000));
+    expect(split.officeCommissionAmount! + split.officeShiriniAmount!).toBe(split.officeAmount);
+    expect(split.shares[0]).toMatchObject({
+      amount: BigInt(25_000_000),
+      commissionAmount: BigInt(2_500_000),
+      shiriniAmount: BigInt(22_500_000),
+    });
+    for (const share of split.shares) {
+      expect(share.commissionAmount + share.shiriniAmount).toBe(share.amount);
+    }
+  });
+
+  it("falls back to the legacy commission for the breakdown of old deals", () => {
+    const split = resolveSplit(dealWithShares());
+    expect(split.officeCommissionAmount).toBe(BigInt(5_000_000));
+    expect(split.officeShiriniAmount).toBe(BigInt(45_000_000));
+    expect(split.shares[0]).toMatchObject({
+      commissionAmount: BigInt(2_500_000),
+      shiriniAmount: BigInt(22_500_000),
+    });
+  });
+
   it("marks the virtual share settled when the deal commission is paid", () => {
     const split = resolveSplit({ ...dealWithShares(), shares: [], commissionPaid: true });
     expect(split.shares[0].settled).toBe(true);
@@ -187,7 +310,13 @@ describe("resolveSplit", () => {
       sellerShiriniToman: null,
       buyerShiriniToman: null,
     });
-    expect(split).toEqual({ officePct: 0, officeAmount: BigInt(0), shares: [] });
+    expect(split).toEqual({
+      officePct: 0,
+      officeAmount: BigInt(0),
+      officeCommissionAmount: BigInt(0),
+      officeShiriniAmount: BigInt(0),
+      shares: [],
+    });
   });
 });
 

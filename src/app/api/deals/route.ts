@@ -70,8 +70,13 @@ export async function POST(req: NextRequest) {
   const d = parsed.data;
 
   // کمیسیون را فقط مدیر تعیین می‌کند — مشاور نمی‌تواند کمیسیون خودش را بنویسد
+  const hasSideCommission =
+    Boolean(d.sellerCommissionToman) ||
+    Boolean(d.buyerCommissionToman) ||
+    (d.sellerCommissionPercent !== undefined && d.sellerCommissionPercent !== null) ||
+    (d.buyerCommissionPercent !== undefined && d.buyerCommissionPercent !== null);
   const wantsCommission =
-    Boolean(d.commissionToman) || (d.commissionPercent !== undefined && d.commissionPercent !== null);
+    Boolean(d.commissionToman) || (d.commissionPercent !== undefined && d.commissionPercent !== null) || hasSideCommission;
   if (session.user.role !== "OWNER" && wantsCommission) {
     return NextResponse.json({ error: "کمیسیون را فقط مدیر تعیین می‌کند" }, { status: 403 });
   }
@@ -117,19 +122,31 @@ export async function POST(req: NextRequest) {
 
   // مبلغ کمیسیون باید با درصد × قیمت معامله بخواند (فقط فروش؛ اجاره دستی است)؛
   // وگرنه معامله‌ای مثل F-0022 با ۱٪ و ۱۲۰م روی قیمت ۱۰ میلیاردی ساخته می‌شود
-  if (
-    session.user.role === "OWNER" &&
-    property.dealType === "SALE" &&
-    d.commissionToman &&
-    d.commissionPercent != null
-  ) {
+  if (session.user.role === "OWNER" && property.dealType === "SALE") {
     const effectivePrice = d.dealSalePriceToman ? BigInt(d.dealSalePriceToman) : property.salePriceToman;
-    const commissionError = validateCommissionAmount(effectivePrice, d.commissionPercent, BigInt(d.commissionToman));
-    if (commissionError) return NextResponse.json({ error: commissionError }, { status: 400 });
+    if (d.commissionToman && d.commissionPercent != null) {
+      const commissionError = validateCommissionAmount(effectivePrice, d.commissionPercent, BigInt(d.commissionToman));
+      if (commissionError) return NextResponse.json({ error: commissionError }, { status: 400 });
+    }
+    // دوطرفه: هر طرف جدا — مبلغ هر طرف با درصد همان طرف می‌خواند
+    for (const [label, amount, percent] of [
+      ["فروشنده", d.sellerCommissionToman, d.sellerCommissionPercent],
+      ["خریدار", d.buyerCommissionToman, d.buyerCommissionPercent],
+    ] as const) {
+      if (amount && percent != null) {
+        const sideError = validateCommissionAmount(effectivePrice, percent, BigInt(amount));
+        if (sideError) return NextResponse.json({ error: `${label}: ${sideError}` }, { status: 400 });
+      }
+    }
   }
 
   // مهر نرخ مالیات در لحظه ثبت کمیسیون — تغییر نرخ جاری بعدا روی این معامله اثر ندارد
-  const hasCommission = session.user.role === "OWNER" && Boolean(d.commissionToman);
+  // جمع قدیمی و مهر نرخ فقط از روی مبلغ‌های طرف‌ها مشتق می‌شوند؛ درصدِ بدون مبلغ کمیسیون نیست
+  const hasSideAmounts = Boolean(d.sellerCommissionToman) || Boolean(d.buyerCommissionToman);
+  const sideCommissionTotal =
+    (d.sellerCommissionToman ? BigInt(d.sellerCommissionToman) : BigInt(0)) +
+    (d.buyerCommissionToman ? BigInt(d.buyerCommissionToman) : BigInt(0));
+  const hasCommission = session.user.role === "OWNER" && (Boolean(d.commissionToman) || hasSideAmounts);
   const taxRateSnapshot = hasCommission ? await getTaxRatePct() : null;
 
   let deal;
@@ -165,8 +182,29 @@ export async function POST(req: NextRequest) {
           status: status as never,
           contractAt: d.contractAt ? new Date(d.contractAt) : status === "COMPLETED" ? new Date() : null,
           notes: d.notes,
-          commissionToman: session.user.role === "OWNER" && d.commissionToman ? BigInt(d.commissionToman) : null,
-          commissionPercent: session.user.role === "OWNER" ? (d.commissionPercent ?? null) : null,
+          // دوطرفه: طرف‌ها مرجع‌اند و جمع قدیمی از روی آن‌ها مشتق می‌شود؛ وگرنه مسیر قدیمی
+          sellerCommissionToman:
+            session.user.role === "OWNER" && d.sellerCommissionToman ? BigInt(d.sellerCommissionToman) : null,
+          sellerCommissionPercent: session.user.role === "OWNER" ? (d.sellerCommissionPercent ?? null) : null,
+          buyerCommissionToman:
+            session.user.role === "OWNER" && d.buyerCommissionToman ? BigInt(d.buyerCommissionToman) : null,
+          buyerCommissionPercent: session.user.role === "OWNER" ? (d.buyerCommissionPercent ?? null) : null,
+          commissionToman:
+            session.user.role === "OWNER"
+              ? hasSideAmounts
+                ? sideCommissionTotal
+                : d.commissionToman
+                  ? BigInt(d.commissionToman)
+                  : null
+              : null,
+          commissionPercent:
+            session.user.role === "OWNER"
+              ? hasSideCommission
+                ? d.sellerCommissionPercent != null && d.sellerCommissionPercent === d.buyerCommissionPercent
+                  ? d.sellerCommissionPercent
+                  : (d.sellerCommissionPercent ?? d.buyerCommissionPercent ?? null)
+                : (d.commissionPercent ?? null)
+              : null,
           taxRatePct: taxRateSnapshot,
           dealSalePriceToman: d.dealSalePriceToman ? BigInt(d.dealSalePriceToman) : (lockedProperty.salePriceToman ?? null),
           dealDepositToman: d.dealDepositToman ? BigInt(d.dealDepositToman) : (lockedProperty.depositToman ?? null),

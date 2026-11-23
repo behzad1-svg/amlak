@@ -4,7 +4,14 @@ import { getSessionFromCookies } from "@/lib/auth";
 import { dealUpdateSchema } from "@/lib/validation";
 import { serializeBigInt } from "@/lib/utils";
 import { createAuditLog } from "@/lib/audit";
-import { validateCommissionAmount, validateSplitInput } from "@/lib/shares";
+import {
+  dealSplittable,
+  dealTotalCommission,
+  dealTotalDiscount,
+  dealTotalShirini,
+  validateCommissionAmount,
+  validateSplitInput,
+} from "@/lib/shares";
 import { getTaxRatePct } from "@/lib/settings";
 
 // ماشین وضعیت معامله — CANCELED ترمینال است و برنمی‌گردد؛
@@ -73,13 +80,68 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
   }
   const d = parsed.data;
 
+  // مقدارهای پولی «موثر» بعد از این ویرایش — فیلد نفرستاده یعنی مقدار فعلی.
+  // دوطرفه: اگر دست‌کم یک فیلدِ طرفی (فروشنده/خریدار) در همین درخواست آمده باشد،
+  // طرف‌ها مرجع‌اند و جمع‌های قدیمی (commissionToman/discountToman) از روی آن‌ها
+  // مشتق می‌شوند؛ معامله‌های قدیمی بدون طرف‌بندی همان تک‌کمیسیون قبلی را می‌بینند.
+  const hasSideFields =
+    d.sellerCommissionToman !== undefined ||
+    d.buyerCommissionToman !== undefined ||
+    d.sellerCommissionPercent !== undefined ||
+    d.buyerCommissionPercent !== undefined ||
+    d.sellerReceivedToman !== undefined ||
+    d.buyerReceivedToman !== undefined ||
+    d.sellerDiscountToman !== undefined ||
+    d.buyerDiscountToman !== undefined;
+  const bstr = (v: string | null | undefined, prev: bigint | null): bigint | null =>
+    v === undefined ? prev : v === null || v === "" ? null : BigInt(v);
+  const merged = {
+    sellerCommissionToman: bstr(d.sellerCommissionToman, existing.sellerCommissionToman),
+    buyerCommissionToman: bstr(d.buyerCommissionToman, existing.buyerCommissionToman),
+    sellerCommissionPercent:
+      d.sellerCommissionPercent !== undefined ? d.sellerCommissionPercent : existing.sellerCommissionPercent,
+    buyerCommissionPercent:
+      d.buyerCommissionPercent !== undefined ? d.buyerCommissionPercent : existing.buyerCommissionPercent,
+    sellerReceivedToman: bstr(d.sellerReceivedToman, existing.sellerReceivedToman),
+    buyerReceivedToman: bstr(d.buyerReceivedToman, existing.buyerReceivedToman),
+    sellerDiscountToman: bstr(d.sellerDiscountToman, existing.sellerDiscountToman),
+    buyerDiscountToman: bstr(d.buyerDiscountToman, existing.buyerDiscountToman),
+    sellerShiriniToman: bstr(d.sellerShiriniToman, existing.sellerShiriniToman),
+    buyerShiriniToman: bstr(d.buyerShiriniToman, existing.buyerShiriniToman),
+  };
+  // شیء سازگار با dealSplittable و دوستان — جمع‌های قدیمی از روی طرف‌ها
+  const mergedForSplit = {
+    commissionToman:
+      merged.sellerCommissionToman != null || merged.buyerCommissionToman != null
+        ? (merged.sellerCommissionToman ?? BigInt(0)) + (merged.buyerCommissionToman ?? BigInt(0))
+        : bstr(d.commissionToman, existing.commissionToman),
+    sellerCommissionToman: merged.sellerCommissionToman,
+    buyerCommissionToman: merged.buyerCommissionToman,
+    sellerShiriniToman: merged.sellerShiriniToman,
+    buyerShiriniToman: merged.buyerShiriniToman,
+    discountToman:
+      merged.sellerDiscountToman != null || merged.buyerDiscountToman != null
+        ? (merged.sellerDiscountToman ?? BigInt(0)) + (merged.buyerDiscountToman ?? BigInt(0))
+        : bstr(d.discountToman, existing.discountToman),
+    sellerDiscountToman: merged.sellerDiscountToman,
+    buyerDiscountToman: merged.buyerDiscountToman,
+  };
+
   // کمیسیون و شیرینی را فقط مدیر تعیین می‌کند
   const wantsCommission =
     Boolean(d.commissionToman) ||
     Boolean(d.sellerShiriniToman) ||
     Boolean(d.buyerShiriniToman) ||
     Boolean(d.discountToman) ||
-    (d.commissionPercent !== undefined && d.commissionPercent !== null);
+    (d.commissionPercent !== undefined && d.commissionPercent !== null) ||
+    Boolean(d.sellerCommissionToman) ||
+    Boolean(d.buyerCommissionToman) ||
+    Boolean(d.sellerReceivedToman) ||
+    Boolean(d.buyerReceivedToman) ||
+    Boolean(d.sellerDiscountToman) ||
+    Boolean(d.buyerDiscountToman) ||
+    (d.sellerCommissionPercent !== undefined && d.sellerCommissionPercent !== null) ||
+    (d.buyerCommissionPercent !== undefined && d.buyerCommissionPercent !== null);
   if (session.user.role !== "OWNER" && wantsCommission) {
     return NextResponse.json({ error: "کمیسیون را فقط مدیر تعیین می‌کند" }, { status: 403 });
   }
@@ -96,15 +158,8 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
     if (d.officePct === undefined || d.shares === undefined) {
       return NextResponse.json({ error: "سهم دفتر و سهم‌ها را با هم بفرستید" }, { status: 400 });
     }
-    // درآمد قابل‌تقسیم (خالص) بعد از این ویرایش: مقدار تازه اگر فرستاده شده، وگرنه مقدار فعلی؛
-    // خالص = کمیسیون + شیرینی‌ها منهای تخفیف
-    const eff = (next: string | null | undefined, prev: bigint | null) =>
-      next === undefined ? prev : next === null || next === "" ? null : BigInt(next);
-    const effectiveIncome =
-      (eff(d.commissionToman, existing.commissionToman) ?? BigInt(0)) +
-      (eff(d.sellerShiriniToman, existing.sellerShiriniToman) ?? BigInt(0)) +
-      (eff(d.buyerShiriniToman, existing.buyerShiriniToman) ?? BigInt(0)) -
-      (eff(d.discountToman, existing.discountToman) ?? BigInt(0));
+    // درآمد قابل‌تقسیم (خالص) بعد از این ویرایش — کمیسیون کل دو طرف + شیرینی‌ها منهای تخفیف کل
+    const effectiveIncome = dealSplittable(mergedForSplit);
     // خالی کردن درآمد یعنی پاک شدن سهم‌بندی (سهم دفتر ۱۰۰٪ و بدون سهم)؛
     // در این حالت چک «درآمد تعیین شده» اعمال نمی‌شود
     if (effectiveIncome <= BigInt(0)) {
@@ -148,24 +203,37 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
   }
 
   // خالی کردن درآمد (کمیسیون + شیرینی‌ها) وقتی سهمی تسویه شده، قفل سهم‌بندی را نامرئی می‌کند — ممنوع
-  const effAfter = (next: string | null | undefined, prev: bigint | null) =>
-    next === undefined ? prev : next === null || next === "" ? null : BigInt(next);
   const incomeTouched =
-    d.commissionToman !== undefined || d.sellerShiriniToman !== undefined || d.buyerShiriniToman !== undefined || d.discountToman !== undefined;
-  const incomeAfter =
-    (effAfter(d.commissionToman, existing.commissionToman) ?? BigInt(0)) +
-    (effAfter(d.sellerShiriniToman, existing.sellerShiriniToman) ?? BigInt(0)) +
-    (effAfter(d.buyerShiriniToman, existing.buyerShiriniToman) ?? BigInt(0)) -
-    (effAfter(d.discountToman, existing.discountToman) ?? BigInt(0));
+    d.commissionToman !== undefined || d.sellerShiriniToman !== undefined || d.buyerShiriniToman !== undefined || d.discountToman !== undefined ||
+    hasSideFields;
+  const incomeAfter = dealSplittable(mergedForSplit);
   // تخفیف نمی‌تواند بیشتر از جمع ناخالص (کمیسیون + شیرینی‌ها) باشد — خالص منفی نشود
-  const grossAfter =
-    (effAfter(d.commissionToman, existing.commissionToman) ?? BigInt(0)) +
-    (effAfter(d.sellerShiriniToman, existing.sellerShiriniToman) ?? BigInt(0)) +
-    (effAfter(d.buyerShiriniToman, existing.buyerShiriniToman) ?? BigInt(0));
-  const discountAfter = effAfter(d.discountToman, existing.discountToman) ?? BigInt(0);
+  const grossAfter = dealTotalCommission(mergedForSplit) + dealTotalShirini(mergedForSplit);
+  const discountAfter = dealTotalDiscount(mergedForSplit);
   if (discountAfter > grossAfter) {
     return NextResponse.json(
       { error: "تخفیف نمی‌تواند بیشتر از جمع کمیسیون و شیرینی باشد" },
+      { status: 400 }
+    );
+  }
+  // تخفیف هر طرف نمی‌تواند بیشتر از کمیسیون همان طرف باشد — مالیات همیشه
+  // روی کمیسیون کامل حساب می‌شود، تخفیف فقط از کمیسیون کم می‌کند
+  const sideCommissionForCap = (side: bigint | null): bigint => {
+    if (side != null) return side;
+    // معامله قدیمی بدون طرف‌بندی: کمیسیون تک‌فیلدی همان طرف فروشنده است
+    return merged.sellerCommissionToman == null && merged.buyerCommissionToman == null
+      ? (mergedForSplit.commissionToman ?? BigInt(0))
+      : BigInt(0);
+  };
+  if ((merged.sellerDiscountToman ?? BigInt(0)) > sideCommissionForCap(merged.sellerCommissionToman)) {
+    return NextResponse.json(
+      { error: "تخفیف فروشنده نمی‌تواند بیشتر از کمیسیون فروشنده باشد" },
+      { status: 400 }
+    );
+  }
+  if ((merged.buyerDiscountToman ?? BigInt(0)) > (merged.buyerCommissionToman ?? BigInt(0))) {
+    return NextResponse.json(
+      { error: "تخفیف خریدار نمی‌تواند بیشتر از کمیسیون خریدار باشد" },
       { status: 400 }
     );
   }
@@ -173,7 +241,7 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
   // فقط وقتی یکی از سه ورودی سه‌تایی (قیمت/درصد/مبلغ) در همین درخواست آمده باشد
   // چک می‌شود تا ویرایش غیرپولی معامله‌های قدیمیِ ناسازگار (مثل F-0022) مسدود نشود.
   const touchesCommissionTriple =
-    d.dealSalePriceToman !== undefined || d.commissionToman !== undefined || d.commissionPercent !== undefined;
+    d.dealSalePriceToman !== undefined || d.commissionToman !== undefined || d.commissionPercent !== undefined || hasSideFields;
   if (touchesCommissionTriple && existing.property.dealType === "SALE") {
     const effectivePrice =
       d.dealSalePriceToman !== undefined
@@ -181,15 +249,23 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
           ? BigInt(d.dealSalePriceToman)
           : null
         : existing.dealSalePriceToman;
-    const effectivePercent = d.commissionPercent !== undefined ? d.commissionPercent : existing.commissionPercent;
-    const effectiveAmount =
-      d.commissionToman !== undefined
-        ? d.commissionToman
-          ? BigInt(d.commissionToman)
-          : null
-        : existing.commissionToman;
-    const commissionError = validateCommissionAmount(effectivePrice, effectivePercent, effectiveAmount);
-    if (commissionError) return NextResponse.json({ error: commissionError }, { status: 400 });
+    if (hasSideFields || merged.sellerCommissionToman != null || merged.buyerCommissionToman != null) {
+      // دوطرفه: هر طرف جدا با درصد همان طرف چک می‌شود
+      const sellerError = validateCommissionAmount(effectivePrice, merged.sellerCommissionPercent, merged.sellerCommissionToman);
+      if (sellerError) return NextResponse.json({ error: `فروشنده: ${sellerError}` }, { status: 400 });
+      const buyerError = validateCommissionAmount(effectivePrice, merged.buyerCommissionPercent, merged.buyerCommissionToman);
+      if (buyerError) return NextResponse.json({ error: `خریدار: ${buyerError}` }, { status: 400 });
+    } else {
+      const effectivePercent = d.commissionPercent !== undefined ? d.commissionPercent : existing.commissionPercent;
+      const effectiveAmount =
+        d.commissionToman !== undefined
+          ? d.commissionToman
+            ? BigInt(d.commissionToman)
+            : null
+          : existing.commissionToman;
+      const commissionError = validateCommissionAmount(effectivePrice, effectivePercent, effectiveAmount);
+      if (commissionError) return NextResponse.json({ error: commissionError }, { status: 400 });
+    }
   }
 
   const clearingIncome = incomeTouched && incomeAfter <= BigInt(0);
@@ -211,6 +287,7 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
     d.sellerShiriniToman !== undefined ||
     d.buyerShiriniToman !== undefined ||
     d.discountToman !== undefined ||
+    hasSideFields ||
     d.officePct !== undefined ||
     d.shares !== undefined;
   // سوراخ قفل تسویه: تسویه یک سهم به‌تنهایی commissionPaid را true نمی‌کند، پس قفل
@@ -240,7 +317,8 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
       d.dealMonthlyRentToman === undefined &&
       d.sellerShiriniToman === undefined &&
       d.buyerShiriniToman === undefined &&
-      d.discountToman === undefined;
+      d.discountToman === undefined &&
+      !hasSideFields;
     if (!onlyCancel) {
       return NextResponse.json(
         { error: "معامله تکمیل‌شده فقط توسط مدیر قابل ویرایش است؛ مشاور فقط می‌تواند آن را لغو کند" },
@@ -297,19 +375,49 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
   if (d.contractAt !== undefined) data.contractAt = d.contractAt ? new Date(d.contractAt) : null;
   if (d.notes !== undefined) data.notes = d.notes;
   if (session.user.role === "OWNER") {
-    if (d.commissionToman !== undefined) {
-      data.commissionToman = d.commissionToman ? BigInt(d.commissionToman) : null;
-      // مهر نرخ مالیات فقط در نخستین ثبت کمیسیون؛ ویرایش بعدی مبلغ روی نرخ مهرشده اثر ندارد
-      // خالی کردن کمیسیون یعنی حذف مهر نرخ
-      data.taxRatePct = d.commissionToman ? (existing.taxRatePct ?? (await getTaxRatePct())) : null;
+    if (hasSideFields) {
+      // دوطرفه: طرف‌ها مرجع‌اند؛ جمع‌های قدیمی از روی طرف‌های موثر مشتق می‌شوند
+      if (d.sellerCommissionToman !== undefined)
+        data.sellerCommissionToman = d.sellerCommissionToman ? BigInt(d.sellerCommissionToman) : null;
+      if (d.buyerCommissionToman !== undefined)
+        data.buyerCommissionToman = d.buyerCommissionToman ? BigInt(d.buyerCommissionToman) : null;
+      if (d.sellerCommissionPercent !== undefined) data.sellerCommissionPercent = d.sellerCommissionPercent;
+      if (d.buyerCommissionPercent !== undefined) data.buyerCommissionPercent = d.buyerCommissionPercent;
+      if (d.sellerReceivedToman !== undefined)
+        data.sellerReceivedToman = d.sellerReceivedToman ? BigInt(d.sellerReceivedToman) : null;
+      if (d.buyerReceivedToman !== undefined)
+        data.buyerReceivedToman = d.buyerReceivedToman ? BigInt(d.buyerReceivedToman) : null;
+      if (d.sellerDiscountToman !== undefined)
+        data.sellerDiscountToman = d.sellerDiscountToman ? BigInt(d.sellerDiscountToman) : null;
+      if (d.buyerDiscountToman !== undefined)
+        data.buyerDiscountToman = d.buyerDiscountToman ? BigInt(d.buyerDiscountToman) : null;
+      const hasAnyCommission = merged.sellerCommissionToman != null || merged.buyerCommissionToman != null;
+      data.commissionToman = hasAnyCommission ? dealTotalCommission(mergedForSplit) : null;
+      const hasAnyDiscount = merged.sellerDiscountToman != null || merged.buyerDiscountToman != null;
+      data.discountToman = hasAnyDiscount ? dealTotalDiscount(mergedForSplit) : null;
+      // درصد قدیمی: اگر هر دو طرف یک درصد دارند همان، وگرنه درصد تنها طرفِ تعیین‌شده
+      data.commissionPercent =
+        merged.sellerCommissionPercent != null && merged.sellerCommissionPercent === merged.buyerCommissionPercent
+          ? merged.sellerCommissionPercent
+          : (merged.sellerCommissionPercent ?? merged.buyerCommissionPercent ?? null);
+      // مهر نرخ مالیات فقط در نخستین ثبت کمیسیون؛ خالی کردن هر دو طرف یعنی حذف مهر نرخ
+      data.taxRatePct = hasAnyCommission ? (existing.taxRatePct ?? (await getTaxRatePct())) : null;
+    } else {
+      // مسیر قدیمی — معامله بدون طرف‌بندی
+      if (d.commissionToman !== undefined) {
+        data.commissionToman = d.commissionToman ? BigInt(d.commissionToman) : null;
+        // مهر نرخ مالیات فقط در نخستین ثبت کمیسیون؛ ویرایش بعدی مبلغ روی نرخ مهرشده اثر ندارد
+        // خالی کردن کمیسیون یعنی حذف مهر نرخ
+        data.taxRatePct = d.commissionToman ? (existing.taxRatePct ?? (await getTaxRatePct())) : null;
+      }
+      if (d.commissionPercent !== undefined) data.commissionPercent = d.commissionPercent;
+      if (d.discountToman !== undefined)
+        data.discountToman = d.discountToman ? BigInt(d.discountToman) : null;
     }
-    if (d.commissionPercent !== undefined) data.commissionPercent = d.commissionPercent;
     if (d.sellerShiriniToman !== undefined)
       data.sellerShiriniToman = d.sellerShiriniToman ? BigInt(d.sellerShiriniToman) : null;
     if (d.buyerShiriniToman !== undefined)
       data.buyerShiriniToman = d.buyerShiriniToman ? BigInt(d.buyerShiriniToman) : null;
-    if (d.discountToman !== undefined)
-      data.discountToman = d.discountToman ? BigInt(d.discountToman) : null;
     if (d.officePct !== undefined) data.officePct = d.officePct;
   }
   if (d.dealSalePriceToman !== undefined)

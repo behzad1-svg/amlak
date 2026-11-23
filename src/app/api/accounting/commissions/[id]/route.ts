@@ -130,6 +130,8 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
     ...updated,
     officePct: split.officePct,
     officeAmount: split.officeAmount,
+    officeCommissionAmount: split.officeCommissionAmount,
+    officeShiriniAmount: split.officeShiriniAmount,
     shares: split.shares,
   };
 

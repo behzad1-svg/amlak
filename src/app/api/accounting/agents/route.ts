@@ -45,9 +45,13 @@ export async function GET() {
         agentId: true,
         status: true,
         commissionToman: true,
+        sellerCommissionToman: true,
+        buyerCommissionToman: true,
         sellerShiriniToman: true,
         buyerShiriniToman: true,
         discountToman: true,
+        sellerDiscountToman: true,
+        buyerDiscountToman: true,
         commissionPaid: true,
         dealSalePriceToman: true,
         officePct: true, // فقط ورودی resolveSplit است؛ هیچ جمعی از آن مستقیم خوانده نمی‌شود

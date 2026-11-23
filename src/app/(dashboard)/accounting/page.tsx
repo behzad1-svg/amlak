@@ -12,7 +12,7 @@ import { apiFetch, apiJson, errorMessage } from "@/lib/api";
 import { formatDate, formatToman, toEnDigits, toFaDigits } from "@/lib/utils";
 import { isValidJalaliDate, jalaliToGregorian } from "@/lib/jalali";
 import { DEFAULT_TAX_RATE_PCT } from "@/lib/constants";
-import { DEFAULT_SALE_COMMISSION_PCT, splitReceived } from "@/lib/commission";
+import { DEFAULT_SALE_COMMISSION_PCT, splitRentSide, splitSaleSide } from "@/lib/commission";
 
 type Summary = {
   isOwner: boolean;
@@ -44,6 +44,9 @@ type ShareView = {
   settledAt: string | null;
   isExternal: boolean;
   amount: string;
+  /** تفکیک مبلغ سهم: چقدرش کمیسیون و چقدرش شیرینی */
+  commissionAmount: string;
+  shiriniAmount: string;
   virtual: boolean;
 };
 
@@ -54,9 +57,17 @@ type CommissionDeal = {
   createdAt: string;
   commissionToman: string | null;
   commissionPercent: number | null;
+  sellerCommissionToman: string | null;
+  sellerCommissionPercent: number | null;
+  buyerCommissionToman: string | null;
+  buyerCommissionPercent: number | null;
+  sellerReceivedToman: string | null;
+  buyerReceivedToman: string | null;
   sellerShiriniToman: string | null;
   buyerShiriniToman: string | null;
   discountToman: string | null;
+  sellerDiscountToman: string | null;
+  buyerDiscountToman: string | null;
   commissionPaid: boolean;
   commissionPaidAt: string | null;
   dealSalePriceToman: string | null;
@@ -64,6 +75,8 @@ type CommissionDeal = {
   dealMonthlyRentToman: string | null;
   officePct: number | null;
   officeAmount: string | null;
+  officeCommissionAmount: string | null;
+  officeShiriniAmount: string | null;
   shares: ShareView[];
   customer: { id: string; name: string; phone: string };
   property: { id: string; title: string; dealType: string; region: string; salePriceToman: string | null; depositToman: string | null; monthlyRentToman: string | null };
@@ -164,15 +177,67 @@ function bigNum(v: string | null): bigint {
 }
 
 /** معامله درآمد قابل‌تقسیم دارد؟ کمیسیون یا هر شیرینی بیشتر از صفر باشد. */
-function dealHasIncome(d: Pick<CommissionDeal, "commissionToman" | "sellerShiriniToman" | "buyerShiriniToman">): boolean {
-  return bigNum(d.commissionToman) > BigInt(0) || bigNum(d.sellerShiriniToman) > BigInt(0) || bigNum(d.buyerShiriniToman) > BigInt(0);
+function dealHasIncome(
+  d: Pick<CommissionDeal, "commissionToman" | "sellerCommissionToman" | "buyerCommissionToman" | "sellerShiriniToman" | "buyerShiriniToman">,
+): boolean {
+  return dealTotalCommission(d) > BigInt(0) || bigNum(d.sellerShiriniToman) > BigInt(0) || bigNum(d.buyerShiriniToman) > BigInt(0);
+}
+
+/** برچسب طرف‌های معامله بر اساس نوع آن: فروش → فروشنده/خریدار؛ اجاره → مالک/مستاجر. */
+function sideLabels(dealType: string): { seller: string; buyer: string } {
+  return dealType === "RENT" ? { seller: "مالک", buyer: "مستاجر" } : { seller: "فروشنده", buyer: "خریدار" };
+}
+
+/** کمیسیون کل معامله: جمع دو طرف وقتی دست‌کم یک طرف ثبت شده، وگرنه تک‌کمیسیون قدیمی. */
+function dealTotalCommission(
+  d: Pick<CommissionDeal, "commissionToman" | "sellerCommissionToman" | "buyerCommissionToman">,
+): bigint {
+  if (d.sellerCommissionToman != null || d.buyerCommissionToman != null) {
+    return bigNum(d.sellerCommissionToman) + bigNum(d.buyerCommissionToman);
+  }
+  return bigNum(d.commissionToman);
+}
+
+/** تخفیف کل معامله: جمع تخفیف دو طرف، وگرنه تخفیف تک‌فیلدی قدیمی. */
+function dealTotalDiscount(
+  d: Pick<CommissionDeal, "discountToman" | "sellerDiscountToman" | "buyerDiscountToman">,
+): bigint {
+  if (d.sellerDiscountToman != null || d.buyerDiscountToman != null) {
+    return bigNum(d.sellerDiscountToman) + bigNum(d.buyerDiscountToman);
+  }
+  return bigNum(d.discountToman);
+}
+
+/** شیرینی کل معامله: شیرینی فروشنده + شیرینی خریدار. */
+function dealTotalShirini(d: Pick<CommissionDeal, "sellerShiriniToman" | "buyerShiriniToman">): bigint {
+  return bigNum(d.sellerShiriniToman) + bigNum(d.buyerShiriniToman);
+}
+
+/** دریافتی کل معامله: دریافتی از فروشنده + دریافتی از خریدار (هر کدام خالی یعنی صفر). */
+function dealTotalReceived(d: Pick<CommissionDeal, "sellerReceivedToman" | "buyerReceivedToman">): bigint {
+  return bigNum(d.sellerReceivedToman) + bigNum(d.buyerReceivedToman);
+}
+
+/** آیا معامله دوطرفه ثبت شده است (دست‌کم یک فیلد طرفی دارد)؟ */
+function dealHasSides(
+  d: Pick<CommissionDeal, "sellerCommissionToman" | "buyerCommissionToman" | "sellerReceivedToman" | "buyerReceivedToman" | "sellerDiscountToman" | "buyerDiscountToman">,
+): boolean {
+  return (
+    d.sellerCommissionToman != null ||
+    d.buyerCommissionToman != null ||
+    d.sellerReceivedToman != null ||
+    d.buyerReceivedToman != null ||
+    d.sellerDiscountToman != null ||
+    d.buyerDiscountToman != null
+  );
 }
 
 /** برچسب شیرینی‌های بیشتر از صفر برای ردیف معامله، مثل «شیرینی فروشنده ۵٬۰۰۰٬۰۰۰ تومان». */
-function shiriniParts(d: Pick<CommissionDeal, "sellerShiriniToman" | "buyerShiriniToman">): string[] {
+function shiriniParts(d: Pick<CommissionDeal, "sellerShiriniToman" | "buyerShiriniToman">, dealType: string): string[] {
+  const labels = sideLabels(dealType);
   const parts: string[] = [];
-  if (bigNum(d.sellerShiriniToman) > BigInt(0)) parts.push(`شیرینی فروشنده ${formatToman(d.sellerShiriniToman)}`);
-  if (bigNum(d.buyerShiriniToman) > BigInt(0)) parts.push(`شیرینی خریدار ${formatToman(d.buyerShiriniToman)}`);
+  if (bigNum(d.sellerShiriniToman) > BigInt(0)) parts.push(`شیرینی ${labels.seller} ${formatToman(d.sellerShiriniToman)}`);
+  if (bigNum(d.buyerShiriniToman) > BigInt(0)) parts.push(`شیرینی ${labels.buyer} ${formatToman(d.buyerShiriniToman)}`);
   return parts;
 }
 
@@ -199,13 +264,18 @@ export default function AccountingPage() {
   const [editPrice, setEditPrice] = useState("");
   const [editDeposit, setEditDeposit] = useState("");
   const [editRent, setEditRent] = useState("");
-  const [editPercent, setEditPercent] = useState("");
-  const [editAmount, setEditAmount] = useState("");
+  // کمیسیون و دریافتی دوطرفه — هر طرف جدا: فروشنده/خریدار (اجاره: مالک/مستاجر).
+  // دریافتی هر طرف کمکی برای تقسیم خودکار همان طرف است و ذخیره هم می‌شود.
+  const [editSellerPercent, setEditSellerPercent] = useState("");
+  const [editSellerAmount, setEditSellerAmount] = useState("");
+  const [editSellerReceived, setEditSellerReceived] = useState("");
   const [editSellerShirini, setEditSellerShirini] = useState("");
+  const [editSellerDiscount, setEditSellerDiscount] = useState("");
+  const [editBuyerPercent, setEditBuyerPercent] = useState("");
+  const [editBuyerAmount, setEditBuyerAmount] = useState("");
+  const [editBuyerReceived, setEditBuyerReceived] = useState("");
   const [editBuyerShirini, setEditBuyerShirini] = useState("");
-  const [editDiscount, setEditDiscount] = useState("");
-  // مبلغ کل دریافتی از قرارداد — فقط کمکی برای تقسیم خودکار (فقط فروش)؛ ذخیره نمی‌شود
-  const [editReceived, setEditReceived] = useState("");
+  const [editBuyerDiscount, setEditBuyerDiscount] = useState("");
   const [editSaving, setEditSaving] = useState(false);
   const [editError, setEditError] = useState("");
 
@@ -325,24 +395,35 @@ export default function AccountingPage() {
     setEditRent(deal.dealMonthlyRentToman ?? "");
     // پیش‌فرض فروش ۰٫۲۵٪ فقط برای معامله‌ای است که هنوز هیچ درآمدی (کمیسیون یا شیرینی) ندارد؛
     // وگرنه باز کردن فرم برای ویرایش شیرینی، کمیسیونِ ازپیش‌پرشده را ناخواسته ذخیره می‌کرد.
-    const hasIncome =
-      (deal.commissionToman != null && deal.commissionToman !== "") ||
-      (deal.sellerShiriniToman != null && deal.sellerShiriniToman !== "") ||
-      (deal.buyerShiriniToman != null && deal.buyerShiriniToman !== "");
-    const defaultPercent =
-      deal.commissionPercent != null ? String(deal.commissionPercent) : !hasIncome && deal.property.dealType === "SALE" ? "0.25" : "";
-    setEditPercent(defaultPercent);
-    const amountSeed =
-      deal.commissionToman != null && deal.commissionToman !== ""
-        ? deal.commissionToman
-        : !hasIncome && deal.property.dealType === "SALE" && deal.commissionPercent == null && deal.dealSalePriceToman
-          ? (calcCommissionAmount(deal.dealSalePriceToman, "0.25") ?? "")
-          : "";
-    setEditAmount(amountSeed);
+    const hasIncome = dealHasIncome(deal);
+    const isSale = deal.property.dealType === "SALE";
+    // طرف فروشنده: فیلد طرفی اگر هست، وگرنه تک‌کمیسیون قدیمی همان طرف فروشنده است
+    // (جمع کل عوض نمی‌شود)؛ معامله تازه در فروش هر دو طرف ۰٫۲۵٪ پیش‌فرض می‌گیرد.
+    setEditSellerPercent(
+      deal.sellerCommissionPercent != null
+        ? String(deal.sellerCommissionPercent)
+        : deal.commissionPercent != null
+          ? String(deal.commissionPercent)
+          : !hasIncome && isSale
+            ? "0.25"
+            : "",
+    );
+    setEditBuyerPercent(deal.buyerCommissionPercent != null ? String(deal.buyerCommissionPercent) : !hasIncome && isSale ? "0.25" : "");
+    setEditSellerAmount(
+      deal.sellerCommissionToman ??
+        deal.commissionToman ??
+        (!hasIncome && isSale && deal.dealSalePriceToman ? (calcCommissionAmount(deal.dealSalePriceToman, "0.25") ?? "") : ""),
+    );
+    setEditBuyerAmount(
+      deal.buyerCommissionToman ??
+        (!hasIncome && isSale && deal.dealSalePriceToman ? (calcCommissionAmount(deal.dealSalePriceToman, "0.25") ?? "") : ""),
+    );
+    setEditSellerReceived(deal.sellerReceivedToman ?? "");
+    setEditBuyerReceived(deal.buyerReceivedToman ?? "");
     setEditSellerShirini(deal.sellerShiriniToman ?? "");
     setEditBuyerShirini(deal.buyerShiriniToman ?? "");
-    setEditDiscount(deal.discountToman ?? "");
-    setEditReceived("");
+    setEditSellerDiscount(deal.sellerDiscountToman ?? deal.discountToman ?? "");
+    setEditBuyerDiscount(deal.buyerDiscountToman ?? "");
     setEditError("");
     // سهم‌بندی: اگر سهم واقعی دارد همان را بیاور؛ وگرنه پیش‌فرض دفتر ۵۰٪ + مشاور معامله ۵۰٪ —
     // چه کمیسیون داشته باشد چه هنوز «تعیین نشده» باشد؛ وگرنه با محاسبه خودکار مبلغ از روی
@@ -442,13 +523,18 @@ export default function AccountingPage() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [editOfficePct, editShares]);
 
-  function onEditAmount(v: string) {
-    const clean = toEnDigits(v).replace(/[^0-9]/g, "");
-    setEditAmount(clean);
-    // وقتی برای اولین بار مبلغ کمیسیون وارد می‌شود، سهم‌بندی با پیش‌فرض دفتر ۵۰٪ + مشاور معامله ۵۰٪ پر می‌شود
-    if (clean !== "" && editShares.length === 0 && editingDeal && !editingDeal.shares.some((s) => !s.virtual)) {
+  // وقتی برای اولین بار مبلغ یا شیرینی یک طرف وارد می‌شود، سهم‌بندی با پیش‌فرض دفتر ۵۰٪ + مشاور معامله ۵۰٪ پر می‌شود
+  function ensureSharesDefault() {
+    if (editShares.length === 0 && editingDeal && !editingDeal.shares.some((s) => !s.virtual)) {
       setEditShares([{ key: "s-new-0", userId: editingDeal.agent.id, name: editingDeal.agent.name, pct: "50", isExternal: false }]);
     }
+  }
+
+  function onEditSideAmount(side: "seller" | "buyer", v: string) {
+    const clean = toEnDigits(v).replace(/[^0-9]/g, "");
+    if (side === "seller") setEditSellerAmount(clean);
+    else setEditBuyerAmount(clean);
+    if (clean !== "") ensureSharesDefault();
   }
 
   // شیرینی‌ها مثل مبلغ کمیسیون‌اند: عدد فارسی تمیز می‌شود؛ با اولین ورود، سهم‌بندی پیش‌فرض پر می‌شود
@@ -468,36 +554,60 @@ export default function AccountingPage() {
     }
   }
 
-  // تخفیف مثل شیرینی عدد تمیز می‌شود؛ از مبنای تقسیم کم می‌شود ولی از مالیات کم نمی‌شود
-  function onEditDiscount(v: string) {
+  // تخفیف هر طرف مثل شیرینی عدد تمیز می‌شود؛ از مبنای تقسیم کم می‌شود ولی از مالیات همان طرف کم نمی‌شود
+  function onEditSideDiscount(side: "seller" | "buyer", v: string) {
     const clean = toEnDigits(v).replace(/[^0-9]/g, "");
-    setEditDiscount(clean);
+    if (side === "seller") setEditSellerDiscount(clean);
+    else setEditBuyerDiscount(clean);
   }
 
-  // تقسیم خودکار دریافتی (فقط فروش): کمیسیون همیشه ۰٫۲۵٪ قیمت فروش است و
-  // مالیات ۱۰٪ فقط روی همان کمیسیون — درصدِ ذخیره‌شدهٔ معامله (مثلاً ۱٪)
-  // وارد این محاسبه نمی‌شود. بقیهٔ دریافتی به‌عنوان شیرینی فروشنده گذاشته
-  // می‌شود؛ اگر شیرینی خریدار است، مدیر جابه‌جا می‌کند.
-  function applyReceivedSplit(priceStr: string, receivedStr: string) {
-    if (editingDeal?.property.dealType !== "SALE") return;
-    const price = Number(priceStr);
+  // تقسیم خودکار دریافتی یک طرف: کمیسیون همان طرف (فروش: همیشه ۰٫۲۵٪ قیمت فروش —
+  // درصدِ ذخیره‌شدهٔ معامله وارد این محاسبه نمی‌شود؛ اجاره: فرمول رهن و اجاره) و
+  // مالیات ۱۰٪ فقط روی همان کمیسیون؛ بقیهٔ دریافتی شیرینی همان طرف است و اگر
+  // دریافتی کمتر از کمیسیون + مالیات باشد، کمبودش تخفیف همان طرف می‌شود
+  // (مالیات همیشه روی کمیسیون کامل حساب می‌شود، تخفیف از مالیات کم نمی‌کند).
+  // price/deposit/rent تازه‌تایپ‌شده را می‌توان به‌عنوان override داد چون state هنوز به‌روز نشده است
+  function applySideReceived(
+    side: "seller" | "buyer",
+    receivedStr: string,
+    override?: { price?: string; deposit?: string; rent?: string },
+  ) {
+    if (!editingDeal) return;
     const received = Number(receivedStr);
-    if (!Number.isFinite(price) || !Number.isFinite(received) || price <= 0 || received <= 0) return;
-    const split = splitReceived(price, received, DEFAULT_SALE_COMMISSION_PCT);
-    if (split.commission <= 0) return;
-    setEditPercent("0.25");
-    setEditAmount(String(split.commission));
-    setEditSellerShirini(String(split.shirini));
-    setEditBuyerShirini("");
-    if (editShares.length === 0 && editingDeal && !editingDeal.shares.some((s) => !s.virtual)) {
-      setEditShares([{ key: "s-new-0", userId: editingDeal.agent.id, name: editingDeal.agent.name, pct: "50", isExternal: false }]);
+    if (!Number.isFinite(received) || received <= 0) return;
+    const isSale = editingDeal.property.dealType === "SALE";
+    let split: { commission: number; vat: number; shirini: number; discount: number } | null = null;
+    if (isSale) {
+      const price = Number(override?.price ?? editPrice);
+      if (!Number.isFinite(price) || price <= 0) return;
+      split = splitSaleSide(price, received, DEFAULT_SALE_COMMISSION_PCT);
+      if (split.commission <= 0) return;
+      if (side === "seller") setEditSellerPercent("0.25");
+      else setEditBuyerPercent("0.25");
+    } else {
+      const dep = Number(override?.deposit ?? editDeposit);
+      const rent = Number(override?.rent ?? editRent);
+      if (!Number.isFinite(dep) || !Number.isFinite(rent)) return;
+      split = splitRentSide(dep, rent, received);
+      if (split.commission <= 0) return;
     }
+    if (side === "seller") {
+      setEditSellerAmount(String(split.commission));
+      setEditSellerShirini(String(split.shirini));
+      setEditSellerDiscount(String(split.discount));
+    } else {
+      setEditBuyerAmount(String(split.commission));
+      setEditBuyerShirini(String(split.shirini));
+      setEditBuyerDiscount(String(split.discount));
+    }
+    ensureSharesDefault();
   }
 
-  function onEditReceived(v: string) {
+  function onEditSideReceived(side: "seller" | "buyer", v: string) {
     const clean = toEnDigits(v).replace(/[^0-9]/g, "");
-    setEditReceived(clean);
-    if (clean !== "") applyReceivedSplit(editPrice, clean);
+    if (side === "seller") setEditSellerReceived(clean);
+    else setEditBuyerReceived(clean);
+    if (clean !== "") applySideReceived(side, clean);
   }
 
   // محاسبه خودکار مبلغ کمیسیون از درصد × قیمت فروش (فقط فروش؛ اجاره دستی است).
@@ -514,25 +624,50 @@ export default function AccountingPage() {
     const clean = toEnDigits(v).replace(/[^0-9]/g, "");
     setEditPrice(clean);
     if (editingDeal?.property.dealType === "SALE") {
-      // اگر دریافتی وارد شده، تقسیم ۰٫۲۵٪ دوباره حساب می‌شود؛ وگرنه مثل قبل درصد × قیمت
-      if (editReceived !== "") {
-        applyReceivedSplit(clean, editReceived);
-      } else {
-        const next = calcCommissionAmount(clean, editPercent);
-        if (next !== null) setEditAmount(next);
+      // اگر دریافتی یک طرف وارد شده، تقسیم ۰٫۲۵٪ همان طرف دوباره حساب می‌شود؛
+      // وگرنه مثل قبل درصد × قیمت برای هر طرف
+      for (const side of ["seller", "buyer"] as const) {
+        const received = side === "seller" ? editSellerReceived : editBuyerReceived;
+        if (received !== "") {
+          applySideReceived(side, received, { price: clean });
+        } else {
+          const pct = side === "seller" ? editSellerPercent : editBuyerPercent;
+          const next = calcCommissionAmount(clean, pct);
+          if (next !== null) {
+            if (side === "seller") setEditSellerAmount(next);
+            else setEditBuyerAmount(next);
+          }
+        }
       }
     }
   }
 
-  function onEditPercent(v: string) {
+  // ودیعه/اجاره عوض شود، تقسیم دریافتی طرف‌هایی که دریافتی دارند دوباره حساب می‌شود
+  function onEditDepositRent(v: string, which: "deposit" | "rent") {
+    const clean = toEnDigits(v).replace(/[^0-9]/g, "");
+    if (which === "deposit") setEditDeposit(clean);
+    else setEditRent(clean);
+    if (editingDeal?.property.dealType === "RENT") {
+      for (const side of ["seller", "buyer"] as const) {
+        const received = side === "seller" ? editSellerReceived : editBuyerReceived;
+        if (received !== "") applySideReceived(side, received, which === "deposit" ? { deposit: clean } : { rent: clean });
+      }
+    }
+  }
+
+  function onEditSidePercent(side: "seller" | "buyer", v: string) {
     // اعشار قبول می‌کند (۰٫۲۵)؛ ممیز فارسی ٫ هم به نقطه تبدیل می‌شود؛ حداکثر ۲ رقم اعشار
     let clean = toEnDigits(v).replace(/٫/g, ".").replace(/[^0-9.]/g, "");
     const dot = clean.indexOf(".");
     if (dot !== -1) clean = clean.slice(0, dot + 1) + clean.slice(dot + 1).replace(/\./g, "").slice(0, 2);
-    setEditPercent(clean);
+    if (side === "seller") setEditSellerPercent(clean);
+    else setEditBuyerPercent(clean);
     if (editingDeal?.property.dealType === "SALE") {
       const next = calcCommissionAmount(editPrice, clean);
-      if (next !== null) setEditAmount(next);
+      if (next !== null) {
+        if (side === "seller") setEditSellerAmount(next);
+        else setEditBuyerAmount(next);
+      }
     }
   }
 
@@ -540,20 +675,43 @@ export default function AccountingPage() {
     e.preventDefault();
     if (!editingDeal) return;
     setEditError("");
-    if (editPercent !== "") {
-      const pct = Number(editPercent);
-      if (!Number.isFinite(pct) || pct < 0 || pct > 100) {
-        setEditError("درصد کمیسیون باید بین ۰ تا ۱۰۰ باشد");
-        return;
+    const isSaleForEdit = editingDeal.property.dealType === "SALE";
+    if (isSaleForEdit) {
+      for (const [label, v] of [
+        [sideLabels("SALE").seller, editSellerPercent],
+        [sideLabels("SALE").buyer, editBuyerPercent],
+      ] as const) {
+        if (v !== "") {
+          const pct = Number(v);
+          if (!Number.isFinite(pct) || pct < 0 || pct > 100) {
+            setEditError(`درصد کمیسیون ${label} باید بین ۰ تا ۱۰۰ باشد`);
+            return;
+          }
+        }
       }
     }
     // سهم‌بندی: هر درصد دستی قابل تغییر است؛ فقط مجموع باید دقیقاً ۱۰۰٪ شود
     const hasRealShares = editingDeal.shares.some((s) => !s.virtual);
     const sharesLocked = editingDeal.shares.some((s) => !s.virtual && s.settled);
-    // درآمد قابل‌تقسیم (خالص) = کمیسیون + هر دو شیرینی منهای تخفیف؛ خالی یعنی صفر
-    const editHasIncome = editAmount !== "" || editSellerShirini !== "" || editBuyerShirini !== "";
-    const editTotal = (Number(editAmount) || 0) + (Number(editSellerShirini) || 0) + (Number(editBuyerShirini) || 0);
-    const editDiscountNum = Number(editDiscount) || 0;
+    // درآمد قابل‌تقسیم (خالص) = کمیسیون دو طرف + هر دو شیرینی منهای تخفیف دو طرف؛ خالی یعنی صفر
+    const editSellerAmountNum = Number(editSellerAmount) || 0;
+    const editBuyerAmountNum = Number(editBuyerAmount) || 0;
+    const editSellerDiscountNum = Number(editSellerDiscount) || 0;
+    const editBuyerDiscountNum = Number(editBuyerDiscount) || 0;
+    const editHasIncome =
+      editSellerAmount !== "" || editBuyerAmount !== "" || editSellerShirini !== "" || editBuyerShirini !== "";
+    const editTotal =
+      editSellerAmountNum + editBuyerAmountNum + (Number(editSellerShirini) || 0) + (Number(editBuyerShirini) || 0);
+    const editDiscountNum = editSellerDiscountNum + editBuyerDiscountNum;
+    // تخفیف هر طرف نمی‌تواند بیشتر از کمیسیون همان طرف باشد (مالیات همیشه روی کمیسیون کامل است)
+    if (editSellerDiscountNum > editSellerAmountNum) {
+      setEditError("تخفیف فروشنده نمی‌تواند بیشتر از کمیسیون فروشنده باشد");
+      return;
+    }
+    if (editBuyerDiscountNum > editBuyerAmountNum) {
+      setEditError("تخفیف خریدار نمی‌تواند بیشتر از کمیسیون خریدار باشد");
+      return;
+    }
     // تخفیف نمی‌تواند بیشتر از جمع ناخالص (کمیسیون + شیرینی‌ها) باشد — خالص منفی نشود
     if (editDiscountNum > editTotal) {
       setEditError("تخفیف نمی‌تواند بیشتر از جمع کمیسیون و شیرینی باشد");
@@ -623,13 +781,19 @@ export default function AccountingPage() {
     setEditSaving(true);
     try {
       const isSale = editingDeal.property.dealType === "SALE";
+      const money = (v: string): string | null => (v === "" ? null : toEnDigits(v).replace(/[^0-9]/g, ""));
       const body: Record<string, unknown> = {
-        commissionPercent: editPercent === "" ? null : Number(editPercent),
-        commissionToman: editAmount === "" ? null : toEnDigits(editAmount).replace(/[^0-9]/g, ""),
-        sellerShiriniToman: editSellerShirini === "" ? null : toEnDigits(editSellerShirini).replace(/[^0-9]/g, ""),
-        buyerShiriniToman: editBuyerShirini === "" ? null : toEnDigits(editBuyerShirini).replace(/[^0-9]/g, ""),
+        sellerCommissionToman: money(editSellerAmount),
+        sellerCommissionPercent: !isSale || editSellerPercent === "" ? null : Number(editSellerPercent),
+        buyerCommissionToman: money(editBuyerAmount),
+        buyerCommissionPercent: !isSale || editBuyerPercent === "" ? null : Number(editBuyerPercent),
+        sellerReceivedToman: money(editSellerReceived),
+        buyerReceivedToman: money(editBuyerReceived),
+        sellerShiriniToman: money(editSellerShirini),
+        buyerShiriniToman: money(editBuyerShirini),
         // بدون درآمد، تخفیف هم معنا ندارد و پاک می‌شود (مثل سهم‌بندی)
-        discountToman: !editHasIncome ? null : editDiscount === "" ? null : toEnDigits(editDiscount).replace(/[^0-9]/g, ""),
+        sellerDiscountToman: !editHasIncome ? null : money(editSellerDiscount),
+        buyerDiscountToman: !editHasIncome ? null : money(editBuyerDiscount),
         ...shareBody,
       };
       if (isSale) body.dealSalePriceToman = editPrice === "" ? null : toEnDigits(editPrice).replace(/[^0-9]/g, "");
@@ -693,40 +857,163 @@ export default function AccountingPage() {
     }
   }
 
-  // مبنای پیش‌نمایش سهم‌بندی در فرم ویرایش: کمیسیون + هر دو شیرینی منهای تخفیف (خالی یعنی صفر)
-  const editSplitBase = (Number(editAmount) || 0) + (Number(editSellerShirini) || 0) + (Number(editBuyerShirini) || 0) - (Number(editDiscount) || 0);
-
-  // جمع ناخالص (کمیسیون + هر دو شیرینی) و خطای زنده تخفیف: تخفیف بیشتر از جمع ناخالص
-  // همان خطای سرور است، ولی همان‌جا در فرم نشان داده می‌شود و ذخیره قفل می‌شود؛
-  // چون از state مشتق شده، با برگشتن تخفیف به حد مجاز خودش پاک می‌شود.
-  const editGross = (Number(editAmount) || 0) + (Number(editSellerShirini) || 0) + (Number(editBuyerShirini) || 0);
-  const editDiscountOverGross = (Number(editDiscount) || 0) > editGross;
-
   // نرخ مالیات ارزش افزوده از خلاصه می‌آید؛ تا پیش از بارگذاری، پیش‌فرض
   const taxRate = summary?.taxRatePct ?? DEFAULT_TAX_RATE_PCT;
 
-  /** مالیات ارزش افزوده یک معامله = نرخ × کمیسیون (ناخالص) — شیرینی و تخفیف در آن نیستند. */
-  const taxOf = (d: Pick<CommissionDeal, "commissionToman">): number => {
-    return Math.round((Number(bigNum(d.commissionToman)) * taxRate) / 100);
+  // مبلغ‌های فرم ویرایش — هر طرف جدا (خالی یعنی صفر)
+  const editSellerAmountNum = Number(editSellerAmount) || 0;
+  const editBuyerAmountNum = Number(editBuyerAmount) || 0;
+  const editCommissionTotal = editSellerAmountNum + editBuyerAmountNum;
+  const editShiriniTotal = (Number(editSellerShirini) || 0) + (Number(editBuyerShirini) || 0);
+  const editDiscountTotal = (Number(editSellerDiscount) || 0) + (Number(editBuyerDiscount) || 0);
+  const editSellerVat = Math.round((editSellerAmountNum * taxRate) / 100);
+  const editBuyerVat = Math.round((editBuyerAmountNum * taxRate) / 100);
+
+  // مبنای پیش‌نمایش سهم‌بندی در فرم ویرایش: کمیسیون دو طرف + هر دو شیرینی منهای تخفیف دو طرف
+  const editSplitBase = editCommissionTotal + editShiriniTotal - editDiscountTotal;
+
+  // جمع ناخالص (کمیسیون + هر دو شیرینی) و خطاهای زنده تخفیف: تخفیف بیشتر از جمع ناخالص
+  // همان خطای سرور است، ولی همان‌جا در فرم نشان داده می‌شود و ذخیره قفل می‌شود؛
+  // چون از state مشتق شده، با برگشتن تخفیف به حد مجاز خودش پاک می‌شود.
+  const editGross = editCommissionTotal + editShiriniTotal;
+  const editDiscountOverGross = editDiscountTotal > editGross;
+  const editSellerDiscountOver = (Number(editSellerDiscount) || 0) > editSellerAmountNum;
+  const editBuyerDiscountOver = (Number(editBuyerDiscount) || 0) > editBuyerAmountNum;
+
+  /** مالیات ارزش افزوده یک معامله = نرخ × کمیسیون کل (ناخالص) — شیرینی و تخفیف در آن نیستند. */
+  const taxOf = (d: Pick<CommissionDeal, "commissionToman" | "sellerCommissionToman" | "buyerCommissionToman">): number => {
+    return Math.round((Number(dealTotalCommission(d)) * taxRate) / 100);
   };
 
-  /** مالیات فرم ویرایش روی مبلغ کمیسیون فعلی حساب می‌شود (نه روی مبنای خالص). */
-  const editTax = Math.round(((Number(editAmount) || 0) * taxRate) / 100);
+  /** مالیات فرم ویرایش روی کمیسیون کل فعلی حساب می‌شود (نه روی مبنای خالص). */
+  const editTax = editSellerVat + editBuyerVat;
 
-  /** تقسیم زندهٔ دریافتی در فرم ویرایش — فقط فروش و وقتی قیمت و دریافتی هر دو وارد شده‌اند. */
-  const editReceivedSplit =
-    editingDeal?.property.dealType === "SALE" && editReceived !== "" && editPrice !== ""
-      ? splitReceived(Number(editPrice), Number(editReceived), DEFAULT_SALE_COMMISSION_PCT)
-      : null;
+  /** تفکیک سهم به کمیسیون و شیرینی در پیش‌نمایش فرم ویرایش — مثل سرور: بخش کمیسیون
+   *  از کمیسیون خالص، بخش شیرینی = مبلغ سهم منهای بخش کمیسیون تا جمع دقیق شود. */
+  function editShareParts(pct: number): { amount: number; commission: number; shirini: number } {
+    const amount = editSplitBase <= 0 ? 0 : Math.round((editSplitBase * pct) / 100);
+    const commission = Math.round((Math.max(0, editCommissionTotal - editDiscountTotal) * pct) / 100);
+    return { amount, commission, shirini: amount - commission };
+  }
+
+  const editOfficePctNum = Number(toEnDigits(editOfficePct).replace(/[^0-9.]/g, "")) || 0;
+  const editOfficeParts = editShareParts(editOfficePctNum);
+
+  /** فرم یک طرف معامله در مودال ویرایش: دریافتی، درصد و مبلغ کمیسیون، شیرینی و تخفیف همان طرف. */
+  function renderSideForm(side: "seller" | "buyer") {
+    const labels = editingDeal ? sideLabels(editingDeal.property.dealType) : { seller: "فروشنده", buyer: "خریدار" };
+    const label = side === "seller" ? labels.seller : labels.buyer;
+    const isSale = editingDeal?.property.dealType === "SALE";
+    const received = side === "seller" ? editSellerReceived : editBuyerReceived;
+    const percent = side === "seller" ? editSellerPercent : editBuyerPercent;
+    const amount = side === "seller" ? editSellerAmount : editBuyerAmount;
+    const shirini = side === "seller" ? editSellerShirini : editBuyerShirini;
+    const discount = side === "seller" ? editSellerDiscount : editBuyerDiscount;
+    const split = sideReceivedSplit(side);
+    const discountOver = side === "seller" ? editSellerDiscountOver : editBuyerDiscountOver;
+    const amountNum = side === "seller" ? editSellerAmountNum : editBuyerAmountNum;
+    const vat = side === "seller" ? editSellerVat : editBuyerVat;
+    return (
+      <div className="rounded-[12px] border border-[var(--line)] bg-[#fafcfe] p-3 space-y-3">
+        <b className="text-[13px]">طرف {label}</b>
+        <MoneyInput
+          label={`دریافتی از ${label} (تومان)`}
+          value={received}
+          onChange={(v) => onEditSideReceived(side, v)}
+          placeholder="مثلا ۵۰۰۰۰۰۰۰"
+          hint={`مبلغ دریافتی از ${label} را بزنید؛ کمیسیون، مالیات و شیرینی ${label} خودکار پر می‌شود`}
+        />
+        {split && split.commission > 0 && (
+          <div className="rounded-[12px] border border-[var(--line)] bg-[var(--paper-2)] p-3 text-[13px] space-y-1">
+            <div>دریافتی: {formatToman(received)}</div>
+            <div>
+              کمیسیون{isSale ? " (۰٫۲۵٪ قیمت فروش)" : ""}: {formatToman(split.commission)}
+            </div>
+            <div>مالیات ارزش افزوده (۱۰٪ کمیسیون): {formatToman(split.vat)}</div>
+            <div>شیرینی (بقیه دریافتی): {formatToman(split.shirini)}</div>
+            {split.discount > 0 && <div>تخفیف (کمبود دریافتی نسبت به کمیسیون + مالیات): {formatToman(split.discount)}</div>}
+          </div>
+        )}
+        {isSale && (
+          <div>
+            <Label htmlFor={`f-editPercent-${side}`}>درصد کمیسیون {label} (۰ تا ۱۰۰)</Label>
+            <NumberInput
+              id={`f-editPercent-${side}`}
+              className="mt-1"
+              value={percent}
+              onChange={(e) => onEditSidePercent(side, e.target.value)}
+              placeholder="مثلا ۰٫۲۵"
+              allowDecimal
+            />
+          </div>
+        )}
+        <MoneyInput
+          label={`مبلغ کمیسیون ${label} (تومان)`}
+          value={amount}
+          onChange={(v) => onEditSideAmount(side, v)}
+          placeholder="مثلا ۲۸۷۵۰۰۰۰"
+          hint="خالی بماند یعنی بدون کمیسیون"
+        />
+        <MoneyInput
+          label={`شیرینی ${label} (تومان)`}
+          value={shirini}
+          onChange={(v) => (side === "seller" ? onEditSellerShirini(v) : onEditBuyerShirini(v))}
+          placeholder="مثلا ۱۰۰۰۰۰۰۰"
+          hint="اختیاری — خالی یعنی صفر"
+        />
+        <MoneyInput
+          label={`تخفیف ${label} (تومان)`}
+          value={discount}
+          onChange={(v) => onEditSideDiscount(side, v)}
+          placeholder="مثلا ۲۰۰۰۰۰۰"
+          hint="اختیاری — خالی یعنی صفر؛ از کمیسیون همان طرف کم می‌شود ولی از مالیات آن کم نمی‌شود"
+        />
+        {discountOver && <p className="text-[12px] text-red-700">تخفیف {label} نمی‌تواند بیشتر از کمیسیون {label} باشد</p>}
+        {amountNum > 0 && (
+          <p className="text-[11px] text-[var(--ink-3)]">
+            مالیات {label} ({toFaDigits(String(taxRate))}٪ روی کمیسیون): {formatToman(vat)}
+          </p>
+        )}
+      </div>
+    );
+  }
+
+  /** تقسیم زندهٔ دریافتی یک طرف در فرم ویرایش — وقتی قیمت/ودیعه و دریافتی همان طرف وارد شده‌اند. */
+  function sideReceivedSplit(side: "seller" | "buyer"): { commission: number; vat: number; shirini: number; discount: number } | null {
+    if (!editingDeal) return null;
+    const received = Number(side === "seller" ? editSellerReceived : editBuyerReceived);
+    if (!Number.isFinite(received) || received <= 0) return null;
+    if (editingDeal.property.dealType === "SALE") {
+      const price = Number(editPrice);
+      if (!Number.isFinite(price) || price <= 0) return null;
+      return splitSaleSide(price, received, DEFAULT_SALE_COMMISSION_PCT);
+    }
+    const dep = Number(editDeposit);
+    const rent = Number(editRent);
+    if (!Number.isFinite(dep) || !Number.isFinite(rent)) return null;
+    return splitRentSide(dep, rent, received);
+  }
 
   /** جزئیات پیش‌نمایش کمیسیون — فقط از مقادیر ذخیره‌شده خوانده می‌شود؛ چیزی ذخیره نمی‌کند. */
-  const previewCommission = previewDeal ? Number(previewDeal.commissionToman) || 0 : 0;
+  const previewTotalCommission = previewDeal ? Number(dealTotalCommission(previewDeal)) : 0;
+  const previewSellerCommission = previewDeal ? Number(bigNum(previewDeal.sellerCommissionToman)) : 0;
+  const previewBuyerCommission = previewDeal ? Number(bigNum(previewDeal.buyerCommissionToman)) : 0;
+  const previewHasSides = previewDeal ? dealHasSides(previewDeal) : false;
   const previewSellerShirini = previewDeal ? Number(previewDeal.sellerShiriniToman) || 0 : 0;
   const previewBuyerShirini = previewDeal ? Number(previewDeal.buyerShiriniToman) || 0 : 0;
-  const previewDiscount = previewDeal ? Number(previewDeal.discountToman) || 0 : 0;
-  const previewTax = Math.round((previewCommission * taxRate) / 100);
-  const previewTotal = previewCommission + previewSellerShirini + previewBuyerShirini - previewDiscount + previewTax;
-  const previewReceived = previewDeal?.commissionPaid ? previewTotal : 0;
+  const previewDiscountTotal = previewDeal ? Number(dealTotalDiscount(previewDeal)) : 0;
+  const previewSellerDiscount = previewDeal ? Number(previewDeal.sellerDiscountToman) || 0 : 0;
+  const previewBuyerDiscount = previewDeal ? Number(previewDeal.buyerDiscountToman) || 0 : 0;
+  const previewSellerVat = Math.round((previewSellerCommission * taxRate) / 100);
+  const previewBuyerVat = Math.round((previewBuyerCommission * taxRate) / 100);
+  const previewTax = Math.round((previewTotalCommission * taxRate) / 100);
+  const previewTotal = previewTotalCommission + previewSellerShirini + previewBuyerShirini - previewDiscountTotal + previewTax;
+  const previewSellerTotal = previewSellerCommission + previewSellerShirini - previewSellerDiscount + previewSellerVat;
+  const previewBuyerTotal = previewBuyerCommission + previewBuyerShirini - previewBuyerDiscount + previewBuyerVat;
+  const previewSellerReceived = previewDeal ? Number(bigNum(previewDeal.sellerReceivedToman)) : 0;
+  const previewBuyerReceived = previewDeal ? Number(bigNum(previewDeal.buyerReceivedToman)) : 0;
+  const previewReceivedTotal = previewSellerReceived + previewBuyerReceived;
+  const previewReceived = previewReceivedTotal > 0 ? previewReceivedTotal : previewDeal?.commissionPaid ? previewTotal : 0;
   const previewOutstanding = previewTotal - previewReceived;
 
   if (roleLoading) return <PageSkeleton rows={4} />;
@@ -889,15 +1176,23 @@ export default function AccountingPage() {
                             <span className="font-normal text-[var(--ink-3)]">تعیین نشده</span>
                           ) : (
                             <>
-                              {formatToman(d.commissionToman)}
-                              {d.commissionPercent != null && (
-                                <span className="block text-[12px] font-normal text-[var(--ink-3)]">{toFaDigits(String(d.commissionPercent))}٪</span>
+                              {formatToman(dealTotalCommission(d))}
+                              {dealHasSides(d) ? (
+                                <span className="block text-[12px] font-normal text-[var(--ink-3)]">
+                                  {sideLabels(d.property.dealType).seller} {formatToman(d.sellerCommissionToman)}
+                                  {" · "}
+                                  {sideLabels(d.property.dealType).buyer} {formatToman(d.buyerCommissionToman)}
+                                </span>
+                              ) : (
+                                d.commissionPercent != null && (
+                                  <span className="block text-[12px] font-normal text-[var(--ink-3)]">{toFaDigits(String(d.commissionPercent))}٪</span>
+                                )
                               )}
-                              {shiriniParts(d).length > 0 && (
-                                <span className="block text-[12px] font-normal text-[var(--ink-3)]">{shiriniParts(d).join(" · ")}</span>
+                              {shiriniParts(d, d.property.dealType).length > 0 && (
+                                <span className="block text-[12px] font-normal text-[var(--ink-3)]">{shiriniParts(d, d.property.dealType).join(" · ")}</span>
                               )}
-                              {bigNum(d.discountToman) > BigInt(0) && (
-                                <span className="block text-[12px] font-normal text-[var(--ink-3)]">تخفیف {formatToman(d.discountToman)}</span>
+                              {dealTotalDiscount(d) > BigInt(0) && (
+                                <span className="block text-[12px] font-normal text-[var(--ink-3)]">تخفیف {formatToman(dealTotalDiscount(d))}</span>
                               )}
                               {taxOf(d) > 0 && (
                                 <span className="block text-[12px] font-normal text-[var(--ink-3)]">مالیات ({toFaDigits(String(taxRate))}٪) {formatToman(taxOf(d))}</span>
@@ -906,6 +1201,9 @@ export default function AccountingPage() {
                                 d.shares.map((s) => (
                                   <span key={s.id ?? s.name} className="block text-[12px] font-normal text-[var(--ink-3)]">
                                     سهم من: {toFaDigits(String(s.pct))}٪ · {formatToman(s.amount)}
+                                    <span className="block text-[11px]">
+                                      کمیسیون {formatToman(s.commissionAmount)} · شیرینی {formatToman(s.shiriniAmount)}
+                                    </span>
                                   </span>
                                 ))}
                             </>
@@ -921,11 +1219,17 @@ export default function AccountingPage() {
                               <div className="space-y-1">
                                 <div>
                                   دفتر {toFaDigits(String(d.officePct ?? 0))}٪ · {formatToman(d.officeAmount)}
+                                  <span className="block text-[11px] text-[var(--ink-3)]">
+                                    کمیسیون {formatToman(d.officeCommissionAmount)} · شیرینی {formatToman(d.officeShiriniAmount)}
+                                  </span>
                                 </div>
                                 {d.shares.map((s) => (
                                   <div key={s.id ?? s.name} className="flex items-center justify-between gap-1.5">
                                     <span>
                                       {s.isExternal ? `تعاون: ${s.name}` : s.name} {toFaDigits(String(s.pct))}٪ · {formatToman(s.amount)}
+                                      <span className="block text-[11px] text-[var(--ink-3)]">
+                                        کمیسیون {formatToman(s.commissionAmount)} · شیرینی {formatToman(s.shiriniAmount)}
+                                      </span>
                                     </span>
                                     <span className="flex shrink-0 items-center gap-1">
                                       <span className={s.settled ? "text-emerald-600 font-bold" : "text-red-600"}>
@@ -997,8 +1301,10 @@ export default function AccountingPage() {
               <p className="text-sm text-[var(--ink-3)]">هنوز معامله‌ای ثبت نشده است.</p>
             )}
             <p className="mt-3 text-[12px] text-[var(--ink-3)]">
+              کمیسیون و مالیات هر معامله از هر دو طرف گرفته می‌شود (فروش: فروشنده و خریدار؛ اجاره: مالک و مستاجر) و هر طرف جدا ثبت می‌شود؛
               قیمت، کمیسیون و شیرینی هر معامله را مدیر در همین‌جا نهایی می‌کند؛ تا پیش از تسویه قابل ویرایش است و پس از تسویه قفل می‌شود. سهم‌بندی
-              (دفتر، مشاوران و تعاون) روی جمع خالص (کمیسیون و شیرینی منهای تخفیف) انجام می‌شود و هر سهم جداگانه تسویه می‌شود.
+              (دفتر، مشاوران و تعاون) روی جمع خالص (کمیسیون دو طرف و شیرینی منهای تخفیف) انجام می‌شود و هر سهم جداگانه تسویه می‌شود؛
+              مبلغ هر سهم به کمیسیون و شیرینی تفکیک می‌شود.
             </p>
           </Card>
         )}
@@ -1199,29 +1505,13 @@ export default function AccountingPage() {
                     {editingDeal.property.salePriceToman ? (
                       <p className="mt-1 text-[11px] text-[var(--ink-3)]">قیمت فایل: {formatToman(editingDeal.property.salePriceToman)}</p>
                     ) : null}
-                    <MoneyInput
-                      label="دریافتی از قرارداد (تومان)"
-                      value={editReceived}
-                      onChange={onEditReceived}
-                      placeholder="مثلا ۵۰۰۰۰۰۰۰"
-                      hint="مبلغ کل دریافتی از قرارداد را بزنید؛ کمیسیون (۰٫۲۵٪ قیمت فروش)، مالیات (۱۰٪ کمیسیون) و بقیه به‌عنوان شیرینی خودکار پر می‌شود"
-                    />
-                    {editReceivedSplit && editReceivedSplit.commission > 0 && (
-                      <div className="rounded-[12px] border border-[var(--line)] bg-[var(--paper-2)] p-3 text-[13px] space-y-1">
-                        <div>دریافتی: {formatToman(editReceived)}</div>
-                        <div>کمیسیون (۰٫۲۵٪ قیمت فروش): {formatToman(editReceivedSplit.commission)}</div>
-                        <div>مالیات ارزش افزوده (۱۰٪ کمیسیون): {formatToman(editReceivedSplit.vat)}</div>
-                        <div>شیرینی (بقیه دریافتی): {formatToman(editReceivedSplit.shirini)}</div>
-                        <div className="text-[11px] text-[var(--ink-3)]">بقیه دریافتی به‌عنوان شیرینی فروشنده گذاشته می‌شود؛ اگر شیرینی خریدار است، جابه‌جا کنید.</div>
-                      </div>
-                    )}
                   </>
                 ) : (
                   <>
                     <MoneyInput
                       label="ودیعه معامله (تومان)"
                       value={editDeposit}
-                      onChange={(v) => setEditDeposit(toEnDigits(v).replace(/[^0-9]/g, ""))}
+                      onChange={(v) => onEditDepositRent(v, "deposit")}
                       placeholder="مثلا ۵۰۰۰۰۰۰۰۰"
                     />
                     {editingDeal.property.depositToman ? (
@@ -1230,7 +1520,7 @@ export default function AccountingPage() {
                     <MoneyInput
                       label="اجاره ماهانه (تومان)"
                       value={editRent}
-                      onChange={(v) => setEditRent(toEnDigits(v).replace(/[^0-9]/g, ""))}
+                      onChange={(v) => onEditDepositRent(v, "rent")}
                       placeholder="مثلا ۲۰۰۰۰۰۰۰"
                     />
                     {editingDeal.property.monthlyRentToman ? (
@@ -1238,58 +1528,33 @@ export default function AccountingPage() {
                     ) : null}
                   </>
                 )}
-                <div>
-                  <Label htmlFor="f-editPercent">درصد کمیسیون (۰ تا ۱۰۰)</Label>
-                  <NumberInput
-                    id="f-editPercent"
-                    className="mt-1"
-                    value={editPercent}
-                    onChange={(e) => onEditPercent(e.target.value)}
-                    placeholder="مثلا ۰٫۲۵"
-                    allowDecimal
-                  />
-                </div>
-                <MoneyInput
-                  label="مبلغ کمیسیون (تومان)"
-                  value={editAmount}
-                  onChange={onEditAmount}
-                  placeholder="مثلا ۵۰۰۰۰۰۰۰"
-                  hint="خالی بماند یعنی بدون کمیسیون"
-                />
-                <MoneyInput
-                  label="شیرینی فروشنده (تومان)"
-                  value={editSellerShirini}
-                  onChange={onEditSellerShirini}
-                  placeholder="مثلا ۱۰۰۰۰۰۰۰"
-                  hint="اختیاری — خالی یعنی صفر"
-                />
-                <MoneyInput
-                  label="شیرینی خریدار (تومان)"
-                  value={editBuyerShirini}
-                  onChange={onEditBuyerShirini}
-                  placeholder="مثلا ۱۰۰۰۰۰۰۰"
-                  hint="اختیاری — خالی یعنی صفر"
-                />
-                <MoneyInput
-                  label="تخفیف (تومان)"
-                  value={editDiscount}
-                  onChange={onEditDiscount}
-                  placeholder="مثلا ۲۰۰۰۰۰۰"
-                  hint="اختیاری — خالی یعنی صفر؛ از مبنای تقسیم کم می‌شود ولی از مالیات کم نمی‌شود"
-                />
+                {renderSideForm("seller")}
+                {renderSideForm("buyer")}
                 {editDiscountOverGross && (
                   <p className="text-[12px] text-red-700">تخفیف نمی‌تواند بیشتر از جمع کمیسیون و شیرینی باشد</p>
                 )}
                 <p className="text-[11px] text-[var(--ink-3)]">
                   {editingDeal.property.dealType === "SALE"
-                    ? "مبلغ از روی درصد × قیمت فروش حساب می‌شود؛ می‌توانید دستی هم عوضش کنید."
-                    : "برای اجاره مبلغ کمیسیون دستی وارد می‌شود."}
+                    ? "مبلغ هر طرف از روی درصد همان طرف × قیمت فروش حساب می‌شود؛ می‌توانید دستی هم عوضش کنید."
+                    : "برای اجاره مبلغ کمیسیون هر طرف از فرمول (ودیعه × ۳٪ + اجاره) ÷ ۴ حساب می‌شود؛ می‌توانید دستی هم عوضش کنید."}
                 </p>
                 <p className="text-[11px] text-[var(--ink-3)]">
-                  شیرینی با کمیسیون جمع می‌شود و با همان سهم‌بندی تقسیم می‌شود؛ درصد کمیسیون فقط مبلغ کمیسیون را از روی قیمت حساب می‌کند.
+                  کمیسیون و مالیات از هر دو طرف گرفته می‌شود و هر طرف جدا ثبت می‌شود؛ شیرینی با کمیسیون جمع می‌شود و با همان سهم‌بندی تقسیم می‌شود.
                 </p>
-                {(editSplitBase > 0 || editTax > 0) && !editDiscountOverGross && (
+                {(editSplitBase > 0 || editTax > 0) && !editDiscountOverGross && !editSellerDiscountOver && !editBuyerDiscountOver && (
                   <div className="rounded-[12px] border border-[var(--line)] bg-[var(--paper-2)] p-3 text-[13px] space-y-1">
+                    <div>
+                      کمیسیون {sideLabels(editingDeal.property.dealType).seller}: {formatToman(editSellerAmountNum)}
+                      {editSellerVat > 0 && ` · مالیات: ${formatToman(editSellerVat)}`}
+                      {(Number(editSellerShirini) || 0) > 0 && ` · شیرینی: ${formatToman(editSellerShirini)}`}
+                      {(Number(editSellerDiscount) || 0) > 0 && ` · تخفیف: ${formatToman(editSellerDiscount)}`}
+                    </div>
+                    <div>
+                      کمیسیون {sideLabels(editingDeal.property.dealType).buyer}: {formatToman(editBuyerAmountNum)}
+                      {editBuyerVat > 0 && ` · مالیات: ${formatToman(editBuyerVat)}`}
+                      {(Number(editBuyerShirini) || 0) > 0 && ` · شیرینی: ${formatToman(editBuyerShirini)}`}
+                      {(Number(editBuyerDiscount) || 0) > 0 && ` · تخفیف: ${formatToman(editBuyerDiscount)}`}
+                    </div>
                     <div>بدون مالیات (کمیسیون + شیرینی − تخفیف): {formatToman(editSplitBase)}</div>
                     <div>مالیات ارزش افزوده ({toFaDigits(String(taxRate))}٪ روی کمیسیون): {formatToman(editTax)}</div>
                     <div className="font-bold">با مالیات — جمع دریافتی از مشتری: {formatToman(editSplitBase + editTax)}</div>
@@ -1341,16 +1606,19 @@ export default function AccountingPage() {
                       <div className="text-[13px]">
                         مبلغ سهم دفتر
                         <div className="mt-1 rounded-[10px] border border-[var(--line)] bg-white px-3 py-2 text-[14px]">
-                          {formatToman(
-                            editSplitBase <= 0
-                              ? null
-                              : String(Math.round((editSplitBase * (Number(toEnDigits(editOfficePct).replace(/[^0-9.]/g, "")) || 0)) / 100))
-                          )}
+                          {formatToman(editSplitBase <= 0 ? null : String(editOfficeParts.amount))}
                         </div>
+                        {editSplitBase > 0 && (
+                          <div className="mt-1 text-[11px] text-[var(--ink-3)]">
+                            کمیسیون {formatToman(editOfficeParts.commission)} · شیرینی {formatToman(editOfficeParts.shirini)}
+                          </div>
+                        )}
                       </div>
                     </div>
                     <div className="space-y-2">
-                      {editShares.map((s) => (
+                      {editShares.map((s) => {
+                        const parts = editShareParts(Number(toEnDigits(s.pct).replace(/[^0-9.]/g, "")) || 0);
+                        return (
                         <div key={s.key} className="flex flex-wrap items-end gap-2">
                           {s.isExternal ? (
                             <label className="block flex-1 min-w-[140px] text-[13px]">
@@ -1391,17 +1659,17 @@ export default function AccountingPage() {
                             />
                           </label>
                           <span className="pb-2 text-[12px] text-[var(--ink-3)]">
-                            {formatToman(
-                              editSplitBase <= 0
-                                ? null
-                                : String(Math.round((editSplitBase * (Number(toEnDigits(s.pct).replace(/[^0-9.]/g, "")) || 0)) / 100))
-                            )}
+                            {formatToman(editSplitBase <= 0 ? null : String(parts.amount))}
+                            <span className="block text-[11px]">
+                              کمیسیون {formatToman(parts.commission)} · شیرینی {formatToman(parts.shirini)}
+                            </span>
                           </span>
                           <Button type="button" size="sm" variant="ghost" onClick={() => removeShareRow(s.key)} aria-label="حذف سهم">
                             ✕
                           </Button>
                         </div>
-                      ))}
+                        );
+                      })}
                     </div>
                     <div className="flex flex-wrap gap-2">
                       <Button type="button" size="sm" variant="outline" onClick={() => addShareRow(false)}>
@@ -1419,7 +1687,7 @@ export default function AccountingPage() {
                 )}
                 {editError && <div className="rounded-lg bg-red-50 px-3 py-2 text-sm text-red-700">{editError}</div>}
                 <div className="flex gap-2 pt-1">
-                  <Button type="submit" disabled={editSaving || editDiscountOverGross}>
+                  <Button type="submit" disabled={editSaving || editDiscountOverGross || editSellerDiscountOver || editBuyerDiscountOver}>
                     {editSaving ? "در حال ذخیره..." : "ذخیره"}
                   </Button>
                   <Button type="button" variant="ghost" onClick={() => setEditingDeal(null)} disabled={editSaving}>
@@ -1446,15 +1714,54 @@ export default function AccountingPage() {
                     ? formatToman(previewDeal.dealSalePriceToman)
                     : `${formatToman(previewDeal.dealDepositToman)} · اجاره ماهانه ${formatToman(previewDeal.dealMonthlyRentToman)}`}
                 </div>
-                <div>
-                  کمیسیون{previewDeal.commissionPercent != null ? ` (${toFaDigits(String(previewDeal.commissionPercent))}٪)` : ""}:{" "}
-                  {formatToman(previewDeal.commissionToman)}
-                </div>
-                {previewSellerShirini > 0 && <div>شیرینی فروشنده: {formatToman(previewDeal.sellerShiriniToman)}</div>}
-                {previewBuyerShirini > 0 && <div>شیرینی خریدار: {formatToman(previewDeal.buyerShiriniToman)}</div>}
-                {previewDiscount > 0 && <div>تخفیف: {formatToman(previewDeal.discountToman)}</div>}
+                {previewHasSides ? (
+                  <>
+                    <div>
+                      کمیسیون {sideLabels(previewDeal.property.dealType).seller}
+                      {previewDeal.sellerCommissionPercent != null ? ` (${toFaDigits(String(previewDeal.sellerCommissionPercent))}٪)` : ""}:{" "}
+                      {formatToman(previewSellerCommission)} · مالیات: {formatToman(previewSellerVat)}
+                    </div>
+                    <div>
+                      کمیسیون {sideLabels(previewDeal.property.dealType).buyer}
+                      {previewDeal.buyerCommissionPercent != null ? ` (${toFaDigits(String(previewDeal.buyerCommissionPercent))}٪)` : ""}:{" "}
+                      {formatToman(previewBuyerCommission)} · مالیات: {formatToman(previewBuyerVat)}
+                    </div>
+                    {previewSellerShirini > 0 && (
+                      <div>شیرینی {sideLabels(previewDeal.property.dealType).seller}: {formatToman(previewDeal.sellerShiriniToman)}</div>
+                    )}
+                    {previewBuyerShirini > 0 && (
+                      <div>شیرینی {sideLabels(previewDeal.property.dealType).buyer}: {formatToman(previewDeal.buyerShiriniToman)}</div>
+                    )}
+                    {previewSellerDiscount > 0 && (
+                      <div>تخفیف {sideLabels(previewDeal.property.dealType).seller}: {formatToman(previewDeal.sellerDiscountToman)}</div>
+                    )}
+                    {previewBuyerDiscount > 0 && (
+                      <div>تخفیف {sideLabels(previewDeal.property.dealType).buyer}: {formatToman(previewDeal.buyerDiscountToman)}</div>
+                    )}
+                  </>
+                ) : (
+                  <>
+                    <div>
+                      کمیسیون{previewDeal.commissionPercent != null ? ` (${toFaDigits(String(previewDeal.commissionPercent))}٪)` : ""}:{" "}
+                      {formatToman(previewDeal.commissionToman)}
+                    </div>
+                    {previewSellerShirini > 0 && (
+                      <div>شیرینی {sideLabels(previewDeal.property.dealType).seller}: {formatToman(previewDeal.sellerShiriniToman)}</div>
+                    )}
+                    {previewBuyerShirini > 0 && (
+                      <div>شیرینی {sideLabels(previewDeal.property.dealType).buyer}: {formatToman(previewDeal.buyerShiriniToman)}</div>
+                    )}
+                    {previewDiscountTotal > 0 && <div>تخفیف: {formatToman(previewDiscountTotal)}</div>}
+                  </>
+                )}
                 <div>مالیات ارزش افزوده ({toFaDigits(String(taxRate))}٪ روی کمیسیون): {formatToman(previewTax)}</div>
                 <div className="font-bold">جمع دریافتی از مشتری (با مالیات): {formatToman(previewTotal)}</div>
+                {previewHasSides && (
+                  <>
+                    <div>دریافتی از {sideLabels(previewDeal.property.dealType).seller}: {formatToman(previewSellerReceived)}</div>
+                    <div>دریافتی از {sideLabels(previewDeal.property.dealType).buyer}: {formatToman(previewBuyerReceived)}</div>
+                  </>
+                )}
                 <div>
                   دریافتی: {formatToman(previewReceived)} {previewDeal.commissionPaid ? "· دریافت شد" : "· پرداخت‌نشده"}
                 </div>

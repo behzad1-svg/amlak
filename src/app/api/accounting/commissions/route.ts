@@ -57,6 +57,8 @@ export async function GET(req: NextRequest) {
       ...d,
       officePct: split.officePct,
       officeAmount: split.officeAmount,
+      officeCommissionAmount: split.officeCommissionAmount,
+      officeShiriniAmount: split.officeShiriniAmount,
       shares: split.shares,
     };
   });

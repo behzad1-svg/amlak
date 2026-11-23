@@ -15,7 +15,9 @@ import {
 } from "@/lib/commission";
 
 // ماشین‌حساب زندهٔ کمیسیون، پایین داشبورد — مشاور مبلغ را می‌زند و
-// همان‌جا کمیسیون بدون مالیات و با مالیات را می‌بیند؛ بدون ماشین‌حساب.
+// همان‌جا کمیسیون بدون مالیات و با مالیات را برای هر دو طرف می‌بیند؛ بدون ماشین‌حساب.
+// کمیسیون و مالیات از هر دو طرف گرفته می‌شود (فروش: فروشنده و خریدار؛ اجاره: مالک و مستاجر)
+// و فرمول هر طرف یکی است؛ جمع نهایی، جمع هر دو طرف است.
 export function CommissionCalculator() {
   const [mode, setMode] = useState<"SALE" | "RENT">("SALE");
   const [price, setPrice] = useState("");
@@ -105,19 +107,23 @@ export function CommissionCalculator() {
 
         {commission > 0 ? (
           <div className="rounded-[12px] border border-[var(--line)] bg-[var(--paper-2)] p-3 text-[13px] space-y-1">
-            <div>کمیسیون (بدون مالیات): {formatToman(commission)}</div>
             <div>
-              مالیات ارزش افزوده ({toFaDigits(String(DEFAULT_TAX_RATE_PCT))}٪): {formatToman(vat)}
+              {mode === "SALE" ? "فروشنده" : "مالک"} — کمیسیون: {formatToman(commission)} · مالیات: {formatToman(vat)} · جمع:{" "}
+              {formatToman(total)}
             </div>
-            <div className="font-bold">با مالیات — جمع دریافتی از مشتری: {formatToman(total)}</div>
+            <div>
+              {mode === "SALE" ? "خریدار" : "مستاجر"} — کمیسیون: {formatToman(commission)} · مالیات: {formatToman(vat)} · جمع:{" "}
+              {formatToman(total)}
+            </div>
+            <div className="font-bold">جمع هر دو طرف (با مالیات): {formatToman(total * 2)}</div>
             <div className="text-[11px] text-[var(--ink-3)]">
               {mode === "SALE"
-                ? `کمیسیون = قیمت فروش × ${toFaDigits(percent || "0.25")}٪؛ مالیات فقط روی کمیسیون حساب می‌شود.`
-                : `کمیسیون = ${RENT_COMMISSION_PCT}٪ اجاره ماهانه + ${RENT_COMMISSION_PCT}٪ از سه‌صدم ودیعه؛ مالیات فقط روی کمیسیون حساب می‌شود.`}
+                ? `کمیسیون هر طرف = قیمت فروش × ${toFaDigits(percent || "0.25")}٪؛ مالیات فقط روی کمیسیون حساب می‌شود و از هر طرف جدا گرفته می‌شود.`
+                : `کمیسیون هر طرف = ${RENT_COMMISSION_PCT}٪ اجاره ماهانه + ${RENT_COMMISSION_PCT}٪ از سه‌صدم ودیعه؛ مالیات فقط روی کمیسیون حساب می‌شود و از هر طرف جدا گرفته می‌شود.`}
             </div>
           </div>
         ) : (
-          <p className="text-[12px] text-[var(--ink-3)]">مبلغ را وارد کنید تا کمیسیون با مالیات و بدون مالیات را ببینید.</p>
+          <p className="text-[12px] text-[var(--ink-3)]">مبلغ را وارد کنید تا کمیسیون هر دو طرف را با مالیات و بدون مالیات ببینید.</p>
         )}
       </div>
     </Card>
