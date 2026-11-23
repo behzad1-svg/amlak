@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
+import { isValidCronSecret } from "@/lib/cronAuth";
 
 export const dynamic = "force-dynamic";
 
@@ -31,7 +32,7 @@ function faTime(d: Date | string): string {
 export async function GET(req: NextRequest) {
   const secret = process.env.CRON_SECRET;
   if (!secret) return NextResponse.json({ error: "یادآوری زمان‌بندی‌شده پیکربندی نشده است" }, { status: 503 });
-  if (req.headers.get("x-cron-secret") !== secret) {
+  if (!isValidCronSecret(req.headers.get("x-cron-secret"), secret)) {
     return NextResponse.json({ error: "دسترسی غیرمجاز" }, { status: 401 });
   }
 

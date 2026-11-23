@@ -3,7 +3,7 @@ import { prisma } from "@/lib/prisma";
 import { verifyPassword, signToken } from "@/lib/auth";
 import { COOKIE_NAME, authCookieOptions } from "@/lib/jwt";
 import { loginSchema } from "@/lib/validation";
-import { checkRateLimitDb, cleanupExpiredRateLimitDb, clearRateLimitDb, ipRateLimitKey, phoneRateLimitKey, recordRateLimitDb, rateLimitForKey } from "@/lib/rateLimitDb";
+import { checkRateLimitDb, cleanupExpiredRateLimitDb, clearRateLimitDb, ipRateLimitKey, phoneOnlyRateLimitKey, phoneRateLimitKey, recordRateLimitDb, rateLimitForKey } from "@/lib/rateLimitDb";
 import { clientIpFromHeaders } from "@/lib/clientIp";
 import { serializeBigInt, toEnDigits } from "@/lib/utils";
 
@@ -48,11 +48,14 @@ export async function POST(req: NextRequest) {
   const ip = clientIp(req);
   const ipKey = ip ? ipRateLimitKey(ip) : null;
   const phoneKey = phoneRateLimitKey(phone, ip);
-  const [ipAllowed, phoneAllowed] = await Promise.all([
+  // سطل صرف تلفن — مستقل از IP، تا چرخش IP سقف ۵ تایی شماره را دور نزند.
+  const phoneOnlyKey = phoneOnlyRateLimitKey(phone);
+  const [ipAllowed, phoneAllowed, phoneOnlyAllowed] = await Promise.all([
     ipKey ? checkRateLimitDb(ipKey) : Promise.resolve(true),
     checkRateLimitDb(phoneKey),
+    checkRateLimitDb(phoneOnlyKey),
   ]);
-  if (!ipAllowed || !phoneAllowed) {
+  if (!ipAllowed || !phoneAllowed || !phoneOnlyAllowed) {
     return NextResponse.json({ error: "تعداد تلاش بیش از حد مجاز است، لطفاً ۱۵ دقیقهٔ دیگر تلاش کنید" }, { status: 429 });
   }
 
@@ -61,13 +64,15 @@ export async function POST(req: NextRequest) {
   // از دست رفتن شمارش را می‌گیرد و هر درخواستی که شمارنده را از سقف
   // رد کند، 429 می‌گیرد.
   const recordFailure = async (): Promise<boolean> => {
-    const [ipCount, phoneCount] = await Promise.all([
+    const [ipCount, phoneCount, phoneOnlyCount] = await Promise.all([
       ipKey ? recordRateLimitDb(ipKey) : Promise.resolve(0),
       recordRateLimitDb(phoneKey),
+      recordRateLimitDb(phoneOnlyKey),
     ]);
     return (
       (ipKey ? ipCount > rateLimitForKey(ipKey) : false) ||
-      phoneCount > rateLimitForKey(phoneKey)
+      phoneCount > rateLimitForKey(phoneKey) ||
+      phoneOnlyCount > rateLimitForKey(phoneOnlyKey)
     );
   };
 
@@ -92,10 +97,11 @@ export async function POST(req: NextRequest) {
   const token = await signToken({ userId: user.id, role: user.role, tokenVersion: user.tokenVersion });
 
   // ورود موفق: فقط شمارندهٔ خطاهای همان شماره پاک می‌شود تا چند خطای قدیمی باعث 429 نشوند؛
-  // کلید ساده تلفن هم پاک می شود تا سطل های قدیمی (پیش از ترکیب کلید) باقی نمانند.
+  // کلید ساده تلفن هم پاک می شود تا سطل های قدیمی (پیش از ترکیب کلید) باقی نمانند،
+  // و سطل صرف تلفن هم تا حدس‌های ناموفقِ پیشین شماره را قفل نکند.
   // سطل IP عمداً پاک نمی‌شود: دفتر یک IP مشترک دارد و پاک‌کردنش با ورود هر همکار،
   // سهمیهٔ تلاش مهاجمِ در حال حدس رمز را هم صفر می‌کرد.
-  await clearRateLimitDb(phoneKey, `login:phone:${phone}`);
+  await clearRateLimitDb(phoneKey, `login:phone:${phone}`, phoneOnlyKey);
   // پاک‌سازی فرصت‌طلبانهٔ ردیف‌های منقضی — خرابی‌اش ورود را خراب نمی‌کند
   void cleanupExpiredRateLimitDb();
 

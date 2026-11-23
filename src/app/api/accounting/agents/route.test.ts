@@ -5,11 +5,12 @@
 // The office row is computed with the same resolveSplit as every other
 // report path; its "paid" part is the office share of deals marked
 // commissionPaid (received), the rest is unpaid.
-import { describe, it, expect, vi, beforeEach } from "vitest";
+import { describe, it, expect, vi, beforeEach, assert } from "vitest";
 import { GET } from "./route";
+import type { MockSession } from "@/lib/test-session";
 
 const authSession = vi.hoisted(() => ({
-  current: null as { user: any; payload: any } | null,
+  current: null as MockSession | null,
 }));
 vi.mock("@/lib/auth", () => ({
   getSessionFromCookies: async () => authSession.current,
@@ -137,14 +138,32 @@ beforeEach(() => {
   prismaMock.deal.findMany.mockResolvedValue(fixtureDeals());
 });
 
+// شکل پاسخ GET /api/accounting/agents — مبالغ BigInt به‌صورت رشته سریالایز می‌شوند.
+type AgentsRow = {
+  id: string;
+  name: string;
+  role: string;
+  dealsCompleted: number;
+  dealsWithCommission: number;
+  saleVolume: string | number;
+  commissionTotal: string | number;
+  commissionPaid: string | number;
+  commissionUnpaid: string | number;
+};
+type AgentsResponse = {
+  users: AgentsRow[];
+  totals: Record<string, string | number>;
+};
+
 describe("GET /api/accounting/agents — office row", () => {
   it("OWNER sees the office row with resolveSplit amounts", async () => {
     setSession(OWNER);
     const res = await GET();
     expect(res.status).toBe(200);
-    const json = await res.json();
-    const office = json.users.find((r: any) => r.id === "office");
+    const json = (await res.json()) as AgentsResponse;
+    const office = json.users.find((r) => r.id === "office");
     expect(office).toBeDefined();
+    assert(office);
     expect(office.name).toBe("دفتر");
     expect(office.role).toBe("OFFICE");
     expect(office.dealsCompleted).toBe(3);
@@ -162,13 +181,15 @@ describe("GET /api/accounting/agents — office row", () => {
 
   it("OWNER still sees correct advisor rows (incl. virtual share, office 100)", async () => {
     setSession(OWNER);
-    const json = await (await GET()).json();
-    const byId = new Map<string, any>(json.users.map((r: any) => [r.id, r]));
+    const json = (await (await GET()).json()) as AgentsResponse;
+    const byId = new Map<string, AgentsRow>(json.users.map((r) => [r.id, r]));
     const owner = byId.get(OWNER.id);
+    assert(owner);
     expect(owner.dealsCompleted).toBe(1);
     expect(BigInt(owner.commissionTotal)).toBe(BigInt(50_000_000));
     expect(BigInt(owner.commissionUnpaid)).toBe(BigInt(50_000_000));
     const a = byId.get(AGENT_A.id);
+    assert(a);
     // D3 has a zero base (no money) but is still a completed deal he owns:
     // it counts in dealsCompleted / saleVolume / dealsWithCommission.
     expect(a.dealsCompleted).toBe(2);
@@ -176,6 +197,7 @@ describe("GET /api/accounting/agents — office row", () => {
     expect(BigInt(a.saleVolume)).toBe(BigInt(7_000_000_000));
     expect(BigInt(a.commissionTotal)).toBe(BigInt(0));
     const b = byId.get(AGENT_B.id);
+    assert(b);
     expect(b.dealsCompleted).toBe(2);
     expect(BigInt(b.commissionTotal)).toBe(BigInt(24_000_000));
     expect(BigInt(b.commissionPaid)).toBe(BigInt(24_000_000));
@@ -194,9 +216,10 @@ describe("GET /api/accounting/agents — office row", () => {
   it("office row is present (all zeros) when there are no completed deals", async () => {
     setSession(OWNER);
     prismaMock.deal.findMany.mockResolvedValue([]);
-    const json = await (await GET()).json();
-    const office = json.users.find((r: any) => r.id === "office");
+    const json = (await (await GET()).json()) as AgentsResponse;
+    const office = json.users.find((r) => r.id === "office");
     expect(office).toBeDefined();
+    assert(office);
     expect(BigInt(office.commissionTotal)).toBe(BigInt(0));
     expect(office.dealsCompleted).toBe(0);
     expect(BigInt(json.totals.officeTotal)).toBe(BigInt(0));
@@ -218,7 +241,7 @@ describe("GET /api/accounting/agents — office row", () => {
       { id: "s2", userId: null, name: "املاک بیرونی", pct: 10, settled: false, settledAt: null },
     ];
     prismaMock.deal.findMany.mockResolvedValue(deals);
-    const json = await (await GET()).json();
+    const json = (await (await GET()).json()) as AgentsResponse;
     expect(BigInt(json.totals.externalTotal)).toBe(BigInt(6_000_000));
     expect(BigInt(json.totals.commissionTotal)).toBe(BigInt(184_000_000));
     expect(BigInt(json.totals.commissionPaid)).toBe(BigInt(84_000_000));

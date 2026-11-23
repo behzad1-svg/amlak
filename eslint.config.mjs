@@ -13,6 +13,9 @@ const eslintConfig = defineConfig([
     "out/**",
     "build/**",
     "next-env.d.ts",
+    // Server-only backups of route files (e.g. .backup-2026-11-21-advertise-grant)
+    // that live next to the checkout on the VPS - never linted, never deployed.
+    ".backup-*/**",
   ]),
 ]);
 

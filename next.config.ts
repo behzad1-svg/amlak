@@ -10,20 +10,8 @@ const securityHeaders = [
     key: "Strict-Transport-Security",
     value: "max-age=31536000; includeSubDomains",
   },
-  {
-    key: "Content-Security-Policy",
-    value: [
-      "default-src 'self'",
-      "script-src 'self' 'unsafe-inline'",
-      "style-src 'self' 'unsafe-inline'",
-      "img-src 'self' data: blob:",
-      "font-src 'self' data:",
-      "connect-src 'self' https://*.ingest.sentry.io https://*.ingest.de.sentry.io",
-      "frame-ancestors 'none'",
-      "base-uri 'self'",
-      "form-action 'self'",
-    ].join("; "),
-  },
+  // CSP اینجا نیست — nonce-based و برای هر درخواست در src/proxy.ts ساخته می‌شود
+  // (هدر استاتیک نمی‌تواند nonce تازه داشته باشد).
 ];
 
 const nextConfig: NextConfig = {

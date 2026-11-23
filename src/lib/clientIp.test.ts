@@ -47,4 +47,16 @@ describe("clientIpFromHeaders", () => {
     vi.stubEnv("TRUSTED_PROXY", "true");
     expect(clientIpFromHeaders(headers({}))).toBe(null);
   });
+
+  it("rejects a non-IP x-real-ip value", () => {
+    vi.stubEnv("TRUSTED_PROXY", "true");
+    expect(clientIpFromHeaders(headers({ "x-real-ip": "not-an-ip" }))).toBe(null);
+    expect(clientIpFromHeaders(headers({ "x-real-ip": "1.2.3.4:5678" }))).toBe(null);
+    expect(clientIpFromHeaders(headers({ "x-real-ip": "1.2.3" }))).toBe(null);
+  });
+
+  it("accepts a valid IPv6 x-real-ip", () => {
+    vi.stubEnv("TRUSTED_PROXY", "true");
+    expect(clientIpFromHeaders(headers({ "x-real-ip": "2001:db8::1" }))).toBe("2001:db8::1");
+  });
 });

@@ -11,6 +11,7 @@
 import { describe, it, expect, vi, beforeAll, afterAll } from "vitest";
 import { NextRequest } from "next/server";
 import { prisma } from "@/lib/prisma";
+import type { Prisma } from "@prisma/client";
 import { GET as summaryGET } from "@/app/api/accounting/summary/route";
 import { GET as agentsGET } from "@/app/api/accounting/agents/route";
 import { GET as commissionsGET } from "@/app/api/accounting/commissions/route";
@@ -19,6 +20,7 @@ import { PATCH as shareSettlePATCH } from "@/app/api/accounting/shares/[id]/rout
 import { GET as cashboxGET, POST as cashboxPOST } from "@/app/api/accounting/cashbox/route";
 import { POST as dealCreatePOST } from "@/app/api/deals/route";
 import { PATCH as dealUpdatePATCH } from "@/app/api/deals/[id]/route";
+import type { MockSession } from "@/lib/test-session";
 
 const MARK = "تست استرس 500";
 const ENABLED =
@@ -47,7 +49,7 @@ const describeOrSkip = ENABLED ? describe : describe.skip;
 // mocked session; no password, token or User row is ever touched.
 // ---------------------------------------------------------------------------
 const authSession = vi.hoisted(() => ({
-  current: null as { user: any; payload: any } | null,
+  current: null as MockSession | null,
 }));
 vi.mock("@/lib/auth", () => ({
   getSessionFromCookies: async () => authSession.current,
@@ -77,7 +79,6 @@ function setSession(user: { id: string; name: string; role: string }) {
 // Independent money math (written from the documented rules, NOT by calling
 // the lib under test — the point is to catch the lib disagreeing with them).
 // ---------------------------------------------------------------------------
-const B = (n: number | bigint) => BigInt(n);
 function bpsOf(pct: number): bigint {
   return BigInt(Math.round(pct * 100));
 }
@@ -113,35 +114,73 @@ function randBig(min: number, max: number): bigint {
 // ---------------------------------------------------------------------------
 // Route-call helpers. Responses serialize BigInt as strings.
 // ---------------------------------------------------------------------------
-type CallResult = { status: number; json: any };
-async function callGET(handler: (req: NextRequest) => Promise<any>, url: string): Promise<CallResult> {
+// شکل‌های پاسخ API که هارنس می‌خواند — مبالغ BigInt به‌صورت رشته سریالایز می‌شوند.
+type Money = string | number;
+type SummaryJson = { [K in keyof SummaryMirror]: Money };
+type AgentSummaryJson = {
+  commissionTotal: Money;
+  commissionPaid: Money;
+  commissionUnpaid: Money;
+  unpaidCount: number;
+  dealsCompleted: number;
+  dealsWithCommission: number;
+  officeTotal: null;
+  taxTotal: null;
+  shiriniTotal: null;
+  cashboxBalance: null;
+};
+type AgentsRow = {
+  id: string;
+  name: string;
+  dealsCompleted: number;
+  dealsWithCommission: number;
+  saleVolume: Money;
+  commissionTotal: Money;
+  commissionPaid: Money;
+  commissionUnpaid: Money;
+};
+type AgentsTotals = {
+  dealsCompleted: number;
+  officeTotal: Money;
+  externalTotal: Money;
+  commissionGrandTotal: Money;
+  commissionTotal: Money;
+  commissionPaid: Money;
+  commissionUnpaid: Money;
+};
+type AgentsJson = { users: AgentsRow[]; totals: AgentsTotals };
+type CashboxJson = { balance: Money; entries: unknown[] };
+type DealJson = { id: string };
+type CommissionListItem = { id: string; officeAmount?: Money; shares: unknown[] };
+
+type CallResult<T = unknown> = { status: number; json: T };
+async function callGET<T = unknown>(handler: (req: NextRequest) => Promise<Response>, url: string): Promise<CallResult<T>> {
   const res = await handler(new NextRequest(url));
-  return { status: res.status, json: await res.json() };
+  return { status: res.status, json: (await res.json()) as T };
 }
-async function callPATCH(
-  handler: (req: NextRequest, ctx: any) => Promise<any>,
+async function callPATCH<T = unknown>(
+  handler: (req: NextRequest, ctx: { params: Promise<{ id: string }> }) => Promise<Response>,
   url: string,
   id: string,
-  body: any,
-): Promise<CallResult> {
+  body: Record<string, unknown>,
+): Promise<CallResult<T>> {
   const res = await handler(
     new NextRequest(url, { method: "PATCH", body: JSON.stringify(body), headers: { "content-type": "application/json" } }),
     { params: Promise.resolve({ id }) },
   );
-  return { status: res.status, json: await res.json() };
+  return { status: res.status, json: (await res.json()) as T };
 }
-async function callPOST(
-  handler: (req: NextRequest) => Promise<any>,
+async function callPOST<T = unknown>(
+  handler: (req: NextRequest) => Promise<Response>,
   url: string,
-  body: any,
-): Promise<CallResult> {
+  body: Record<string, unknown>,
+): Promise<CallResult<T>> {
   const res = await handler(
     new NextRequest(url, { method: "POST", body: JSON.stringify(body), headers: { "content-type": "application/json" } }),
   );
-  return { status: res.status, json: await res.json() };
+  return { status: res.status, json: (await res.json()) as T };
 }
 const BASE_URL = "http://localhost";
-const bi = (v: any): bigint => (v == null ? BigInt(0) : BigInt(v));
 
 // Failures are collected with full context instead of aborting the run.
 type Failure = { scenario: string; step: string; detail: string };
@@ -163,7 +202,7 @@ type TestUser = { id: string; name: string; role: string; active: boolean };
 let ownerUser: TestUser;
 let agentUsers: TestUser[] = [];
 let inactiveUsers: TestUser[] = [];
-let poolCustomers: { id: string; assignedAgentId: string }[] = [];
+const poolCustomers: { id: string; assignedAgentId: string }[] = [];
 let currentRate = 10;
 
 const testCustomerIds = new Set<string>();
@@ -185,9 +224,9 @@ type DbDeal = {
   buyerShiriniToman: bigint | null;
   discountToman: bigint | null;
   commissionPaid: boolean;
-  officePct: any;
+  officePct: Prisma.Decimal | null;
   dealSalePriceToman: bigint | null;
-  shares: { id: string; userId: string | null; name: string; pct: any; settled: boolean }[];
+  shares: { id: string; userId: string | null; name: string; pct: Prisma.Decimal; settled: boolean }[];
 };
 const n0 = (v: bigint | null | undefined) => v ?? BigInt(0);
 function dealBase(d: DbDeal): bigint {
@@ -248,7 +287,7 @@ type SummaryMirror = {
   cashboxBalance: bigint; cashboxIn: bigint; cashboxOut: bigint;
 };
 function mirrorSummaryOwner(deals: DbDeal[], entries: { type: string; amount: bigint }[]): SummaryMirror {
-  let m: SummaryMirror = {
+  const m: SummaryMirror = {
     commissionTotal: BigInt(0), commissionPaid: BigInt(0), commissionUnpaid: BigInt(0),
     shiriniTotal: BigInt(0), taxTotal: BigInt(0), unpaidCount: 0,
     dealsCompleted: 0, dealsWithCommission: 0,
@@ -297,7 +336,7 @@ async function verifyGlobal(tag: string) {
     check(tag, "pct-sums-to-100", Math.abs(pctSum - 100) < 0.011, `deal ${d.id}: pct sum=${pctSum}`);
   }
   // (d) cashbox uniqueness + canceled deals net zero.
-  const pairCount = (keyFn: (e: any) => string | null) => {
+  const pairCount = (keyFn: (e: (typeof entries)[number]) => string | null) => {
     const map = new Map<string, number>();
     for (const e of entries) {
       const k = keyFn(e);
@@ -328,12 +367,12 @@ async function verifyGlobal(tag: string) {
 
   // Owner summary vs mirror.
   setSession(ownerUser);
-  const s = await callGET(summaryGET, `${BASE_URL}/api/accounting/summary`);
+  const s = await callGET<SummaryJson>(summaryGET, `${BASE_URL}/api/accounting/summary`);
   if (s.status === 200) {
-    const m = mirrorSummaryOwner(deals, entries as any);
+    const m = mirrorSummaryOwner(deals, entries);
     const j = s.json;
-    const eq = (name: string, got: any, want: bigint | number) =>
-      check(tag, `summary-${name}`, BigInt(got) === BigInt(want as any), `summary.${name}: API=${got} mirror=${String(want)}`);
+    const eq = (name: string, got: unknown, want: bigint | number) =>
+      check(tag, `summary-${name}`, BigInt(got as string | number | bigint) === BigInt(want), `summary.${name}: API=${got} mirror=${String(want)}`);
     eq("commissionTotal", j.commissionTotal, m.commissionTotal);
     eq("commissionPaid", j.commissionPaid, m.commissionPaid);
     eq("commissionUnpaid", j.commissionUnpaid, m.commissionUnpaid);
@@ -352,7 +391,7 @@ async function verifyGlobal(tag: string) {
   }
 
   // Agents report vs mirror.
-  const a = await callGET(agentsGET, `${BASE_URL}/api/accounting/agents`);
+  const a = await callGET<AgentsJson>(agentsGET, `${BASE_URL}/api/accounting/agents`);
   if (a.status === 200) {
     const knownIds = new Set(users.filter((u) => u.active).map((u) => u.id));
     const extraIds = new Set<string>();
@@ -361,7 +400,7 @@ async function verifyGlobal(tag: string) {
       for (const sh of mirrorSplit(d).shares) if (sh.userId && !knownIds.has(sh.userId)) extraIds.add(sh.userId);
     }
     const allUsers = [...users.filter((u) => u.active), ...users.filter((u) => extraIds.has(u.id))];
-    const rowsById = new Map<string, any>(a.json.users.map((r: any) => [r.id, r]));
+    const rowsById = new Map<string, AgentsRow>(a.json.users.map((r) => [r.id, r]));
     let officeTotal = BigInt(0);
     let externalTotal = BigInt(0);
     let grandTotal = BigInt(0);
@@ -396,8 +435,8 @@ async function verifyGlobal(tag: string) {
           }
         }
       }
-      const eqB = (name: string, got: any, want: bigint | number) =>
-        check(tag, `agents-${name}`, BigInt(got) === BigInt(want as any), `agents[${u.name}].${name}: API=${got} mirror=${String(want)}`);
+      const eqB = (name: string, got: unknown, want: bigint | number) =>
+        check(tag, `agents-${name}`, BigInt(got as string | number | bigint) === BigInt(want), `agents[${u.name}].${name}: API=${got} mirror=${String(want)}`);
       eqB("dealsCompleted", row.dealsCompleted, dc);
       eqB("dealsWithCommission", row.dealsWithCommission, dwc);
       eqB("saleVolume", row.saleVolume, vol);
@@ -406,8 +445,8 @@ async function verifyGlobal(tag: string) {
       eqB("commissionUnpaid", row.commissionUnpaid, cu);
     }
     const t = a.json.totals;
-    const eqT = (name: string, got: any, want: bigint | number) =>
-      check(tag, `agents-totals-${name}`, BigInt(got) === BigInt(want as any), `agents.totals.${name}: API=${got} mirror=${String(want)}`);
+    const eqT = (name: string, got: unknown, want: bigint | number) =>
+      check(tag, `agents-totals-${name}`, BigInt(got as string | number | bigint) === BigInt(want), `agents.totals.${name}: API=${got} mirror=${String(want)}`);
     eqT("dealsCompleted", t.dealsCompleted, deals.length);
     eqT("officeTotal", t.officeTotal, officeTotal);
     eqT("externalTotal", t.externalTotal, externalTotal);
@@ -438,7 +477,7 @@ async function verifyGlobal(tag: string) {
   }
 
   // Cashbox GET balance + receivables list.
-  const c = await callGET(cashboxGET, `${BASE_URL}/api/accounting/cashbox`);
+  const c = await callGET<CashboxJson>(cashboxGET, `${BASE_URL}/api/accounting/cashbox`);
   if (c.status === 200) {
     const bal = entries.reduce((acc, e) => acc + (e.type === "IN" ? e.amount : -e.amount), BigInt(0));
     check(tag, "cashbox-balance", BigInt(c.json.balance) === bal, `cashbox balance API=${c.json.balance} mirror=${bal}`);
@@ -446,7 +485,7 @@ async function verifyGlobal(tag: string) {
   } else {
     check(tag, "cashbox-200", false, `cashbox GET returned ${c.status}`);
   }
-  const unpaid = await callGET(commissionsGET, `${BASE_URL}/api/accounting/commissions?paid=unpaid`);
+  const unpaid = await callGET<CommissionListItem[]>(commissionsGET, `${BASE_URL}/api/accounting/commissions?paid=unpaid`);
   if (unpaid.status === 200) {
     const want = await prisma.deal.findMany({
       where: { status: { not: "CANCELED" }, commissionPaid: false, OR: [
@@ -456,7 +495,7 @@ async function verifyGlobal(tag: string) {
       ] },
       select: { id: true },
     });
-    const gotIds: Set<string> = new Set((unpaid.json as any[]).map((d) => String(d.id)));
+    const gotIds: Set<string> = new Set((unpaid.json as { id: string }[]).map((d) => String(d.id)));
     const wantIds: Set<string> = new Set(want.map((d) => d.id));
     const missing: string[] = [...wantIds].filter((id) => !gotIds.has(id));
     const extra: string[] = [...gotIds].filter((id) => !wantIds.has(id));
@@ -468,7 +507,7 @@ async function verifyGlobal(tag: string) {
 
 async function verifyAgentSummary(tag: string, agent: TestUser) {
   setSession(agent);
-  const s = await callGET(summaryGET, `${BASE_URL}/api/accounting/summary`);
+  const s = await callGET<AgentSummaryJson>(summaryGET, `${BASE_URL}/api/accounting/summary`);
   if (s.status !== 200) {
     check(tag, "agent-summary-200", false, `agent summary GET returned ${s.status}`);
     return;
@@ -495,8 +534,8 @@ async function verifyAgentSummary(tag: string, agent: TestUser) {
     if (ownUnpaid) unpaid += 1;
   }
   const j = s.json;
-  const eq = (name: string, got: any, want: bigint | number) =>
-    check(tag, `agent-summary-${name}`, BigInt(got) === BigInt(want as any), `agent summary.${name}: API=${got} mirror=${String(want)}`);
+  const eq = (name: string, got: unknown, want: bigint | number) =>
+    check(tag, `agent-summary-${name}`, BigInt(got as string | number | bigint) === BigInt(want), `agent summary.${name}: API=${got} mirror=${String(want)}`);
   eq("commissionTotal", j.commissionTotal, ct);
   eq("commissionPaid", j.commissionPaid, cp);
   eq("commissionUnpaid", j.commissionUnpaid, cu);
@@ -584,7 +623,7 @@ function splitPcts(remainder: number, count: number): number[] {
   return out;
 }
 
-function genInput(i: number): GenInput {
+function genInput(): GenInput {
   const undetermined = rnd() < 0.05;
   const dealType: "SALE" | "RENT" = rnd() < 0.7 ? "SALE" : "RENT";
   const band =
@@ -657,7 +696,7 @@ function genInput(i: number): GenInput {
 
 async function postDeal(tag: string, input: GenInput, customerId: string, propertyId: string) {
   setSession(ownerUser);
-  const body: any = {
+  const body: Record<string, unknown> = {
     customerId,
     propertyId,
     status: input.status,
@@ -670,12 +709,12 @@ async function postDeal(tag: string, input: GenInput, customerId: string, proper
     body.dealDepositToman = String(input.price);
     body.dealMonthlyRentToman = String(input.monthlyRent);
   }
-  const r = await callPOST(dealCreatePOST, `${BASE_URL}/api/deals`, body);
+  const r = await callPOST<DealJson>(dealCreatePOST, `${BASE_URL}/api/deals`, body);
   if (r.status === 201) testDealIds.add(r.json.id);
   return r;
 }
 
-async function patchDeal(tag: string, step: string, dealId: string, body: any, want = 200) {
+async function patchDeal(tag: string, step: string, dealId: string, body: Record<string, unknown>, want = 200) {
   setSession(ownerUser);
   const r = await callPATCH(dealUpdatePATCH, `${BASE_URL}/api/deals/${dealId}`, dealId, body);
   expectStatus(tag, step, r, want);
@@ -687,12 +726,12 @@ async function loadDealFull(dealId: string) {
     where: { id: dealId },
     include: { shares: { orderBy: { createdAt: "asc" } } },
   });
-  return d as unknown as (DbDeal & { shares: { id: string; userId: string | null; name: string; pct: any; settled: boolean }[] }) | null;
+  return d as unknown as DbDeal | null;
 }
 
 async function runScenario(i: number) {
   const tag = `scenario-${i}`;
-  const input = genInput(i);
+  const input = genInput();
   const customer = poolCustomers[i % poolCustomers.length];
   const property = await makeProperty(input.dealType, input.price, input.monthlyRent);
   const created = await postDeal(tag, input, customer.id, property.id);
@@ -899,12 +938,12 @@ describeOrSkip("accounting stress — 500 scenarios on the live database", () =>
     }
     startNonTestCompleted = await prisma.deal.count({ where: { status: "COMPLETED" } });
     setSession(ownerUser);
-    const s = await callGET(summaryGET, `${BASE_URL}/api/accounting/summary`);
+    const s = await callGET<SummaryJson>(summaryGET, `${BASE_URL}/api/accounting/summary`);
     if (s.status !== 200) throw new Error(`baseline summary GET failed: ${s.status}`);
     const j = s.json;
     const mismatch: string[] = [];
-    const cmp = (name: string, got: any, want: bigint | number) => {
-      if (BigInt(got) !== BigInt(want as any)) mismatch.push(`${name}: got ${got}, want ${String(want)}`);
+    const cmp = (name: string, got: unknown, want: bigint | number) => {
+      if (BigInt(got as string | number | bigint) !== BigInt(want)) mismatch.push(`${name}: got ${got}, want ${String(want)}`);
     };
     cmp("dealsCompleted", j.dealsCompleted, BASELINE.dealsCompleted);
     cmp("commissionTotal", j.commissionTotal, BASELINE.commissionTotal);
@@ -935,11 +974,11 @@ describeOrSkip("accounting stress — 500 scenarios on the live database", () =>
       });
     }
     setSession(ownerUser);
-    const s = await callGET(summaryGET, `${BASE_URL}/api/accounting/summary`);
+    const s = await callGET<SummaryJson>(summaryGET, `${BASE_URL}/api/accounting/summary`);
     if (s.status === 200) {
       const j = s.json;
-      const cmp = (name: string, got: any, want: bigint | number) => {
-        if (BigInt(got) !== BigInt(want as any))
+      const cmp = (name: string, got: unknown, want: bigint | number) => {
+        if (BigInt(got as string | number | bigint) !== BigInt(want))
           failures.push({ scenario: "cleanup", step: `baseline-${name}`, detail: `got ${got}, want ${String(want)}` });
       };
       cmp("dealsCompleted", j.dealsCompleted, BASELINE.dealsCompleted);
@@ -1043,7 +1082,7 @@ describeOrSkip("accounting stress — 500 scenarios on the live database", () =>
       ],
     });
     const d = await loadDealFull(dealId);
-    const amounts = (d!.shares as any[]).map((s) => roundShare(BigInt(100_000_001), Number(s.pct)));
+    const amounts = d!.shares.map((s) => roundShare(BigInt(100_000_001), Number(s.pct)));
     const sum = amounts.reduce((a, b) => a + b, BigInt(0));
     check(tag, "residue-lte-2", sum >= BigInt(100_000_001) - BigInt(2) && sum <= BigInt(100_000_001) + BigInt(2), `shares sum=${sum} base=100000001`);
     scenariosRun += 1;
@@ -1079,8 +1118,8 @@ describeOrSkip("accounting stress — 500 scenarios on the live database", () =>
       shares: [{ userId: agentUsers[0].id, pct: 50 }],
     });
     setSession(ownerUser);
-    const a = await callGET(agentsGET, `${BASE_URL}/api/accounting/agents`);
-    const row = a.json.users.find((r: any) => r.id === inactive.id);
+    const a = await callGET<AgentsJson>(agentsGET, `${BASE_URL}/api/accounting/agents`);
+    const row = a.json.users.find((r) => r.id === inactive.id);
     check(tag, "agents-report-includes-inactive-owner", !!row, "inactive deal owner missing from agents report");
     if (row) check(tag, "inactive-row-deals", BigInt(row.dealsCompleted) === BigInt(1), `dealsCompleted=${row.dealsCompleted}`);
     scenariosRun += 1;
@@ -1233,15 +1272,15 @@ describeOrSkip("accounting stress — 500 scenarios on the live database", () =>
   it("edge: manual cashbox entries", async () => {
     const tag = "edge-manual-cashbox";
     setSession(ownerUser);
-    const before = await callGET(cashboxGET, `${BASE_URL}/api/accounting/cashbox`);
+    const before = await callGET<CashboxJson>(cashboxGET, `${BASE_URL}/api/accounting/cashbox`);
     const balBefore = BigInt(before.json.balance);
-    const r1 = await callPOST(cashboxPOST, `${BASE_URL}/api/accounting/cashbox`, { type: "IN", amount: "10000000", title: `${MARK} - دستی ورودی` });
+    const r1 = await callPOST<DealJson>(cashboxPOST, `${BASE_URL}/api/accounting/cashbox`, { type: "IN", amount: "10000000", title: `${MARK} - دستی ورودی` });
     expectStatus(tag, "manual-in", r1, 201);
     if (r1.status === 201) testCashboxIds.add(r1.json.id);
-    const r2 = await callPOST(cashboxPOST, `${BASE_URL}/api/accounting/cashbox`, { type: "OUT", amount: "4000000", title: `${MARK} - دستی خروجی` });
+    const r2 = await callPOST<DealJson>(cashboxPOST, `${BASE_URL}/api/accounting/cashbox`, { type: "OUT", amount: "4000000", title: `${MARK} - دستی خروجی` });
     expectStatus(tag, "manual-out", r2, 201);
     if (r2.status === 201) testCashboxIds.add(r2.json.id);
-    const after = await callGET(cashboxGET, `${BASE_URL}/api/accounting/cashbox`);
+    const after = await callGET<CashboxJson>(cashboxGET, `${BASE_URL}/api/accounting/cashbox`);
     check(tag, "manual-balance", BigInt(after.json.balance) === balBefore + BigInt(6_000_000), `before=${balBefore} after=${after.json.balance}`);
     scenariosRun += 1;
     await verifyGlobal(tag);
@@ -1261,10 +1300,10 @@ describeOrSkip("accounting stress — 500 scenarios on the live database", () =>
     setSession(ownerUser);
     const recv = await callPATCH(commissionSettlePATCH, `${BASE_URL}/api/accounting/commissions/${dealId}`, dealId, { commissionPaid: true });
     expectStatus(tag, "receive-undetermined-blocked", recv, 400);
-    const list = await callGET(commissionsGET, `${BASE_URL}/api/accounting/commissions?paid=all`);
-    const found = (list.json as any[]).find((d) => d.id === dealId);
+    const list = await callGET<CommissionListItem[]>(commissionsGET, `${BASE_URL}/api/accounting/commissions?paid=all`);
+    const found = list.json.find((d) => d.id === dealId);
     check(tag, "undetermined-in-list", !!found, "undetermined deal missing from commissions list");
-    const s = await callGET(summaryGET, `${BASE_URL}/api/accounting/summary`);
+    const s = await callGET<SummaryJson>(summaryGET, `${BASE_URL}/api/accounting/summary`);
     check(tag, "undetermined-counted-in-deals", BigInt(s.json.dealsCompleted) >= BigInt(BASELINE.dealsCompleted + 1), `dealsCompleted=${s.json.dealsCompleted}`);
     scenariosRun += 1;
     await verifyGlobal(tag);
@@ -1284,13 +1323,13 @@ describeOrSkip("accounting stress — 500 scenarios on the live database", () =>
     if (!expectStatus(tag, "create-pending", created, 201)) return;
     const dealId = created.json.id as string;
     setSession(ownerUser);
-    const s1 = await callGET(summaryGET, `${BASE_URL}/api/accounting/summary`);
+    const s1 = await callGET<SummaryJson>(summaryGET, `${BASE_URL}/api/accounting/summary`);
     const before = BigInt(s1.json.commissionTotal);
     await patchDeal(tag, "complete", dealId, { status: "COMPLETED" });
-    const s2 = await callGET(summaryGET, `${BASE_URL}/api/accounting/summary`);
+    const s2 = await callGET<SummaryJson>(summaryGET, `${BASE_URL}/api/accounting/summary`);
     check(tag, "completed-adds-commission", BigInt(s2.json.commissionTotal) === before + BigInt(70_000_000), `before=${before} after=${s2.json.commissionTotal}`);
     await patchDeal(tag, "cancel", dealId, { status: "CANCELED" });
-    const s3 = await callGET(summaryGET, `${BASE_URL}/api/accounting/summary`);
+    const s3 = await callGET<SummaryJson>(summaryGET, `${BASE_URL}/api/accounting/summary`);
     check(tag, "canceled-removes-commission", BigInt(s3.json.commissionTotal) === before, `after-cancel=${s3.json.commissionTotal} before=${before}`);
     scenariosRun += 1;
     await verifyGlobal(tag);
@@ -1338,11 +1377,11 @@ describeOrSkip("accounting stress — 500 scenarios on the live database", () =>
     const tag = "edge-agent-scoping";
     const agent = agentUsers[0];
     setSession(agent);
-    const a = await callGET(agentsGET, `${BASE_URL}/api/accounting/agents`);
+    const a = await callGET<AgentsJson>(agentsGET, `${BASE_URL}/api/accounting/agents`);
     expectStatus(tag, "agents-403-for-agent", a, 403);
-    const c = await callGET(cashboxGET, `${BASE_URL}/api/accounting/cashbox`);
+    const c = await callGET<CashboxJson>(cashboxGET, `${BASE_URL}/api/accounting/cashbox`);
     expectStatus(tag, "cashbox-403-for-agent", c, 403);
-    const s = await callGET(summaryGET, `${BASE_URL}/api/accounting/summary`);
+    const s = await callGET<SummaryJson>(summaryGET, `${BASE_URL}/api/accounting/summary`);
     expectStatus(tag, "summary-200-for-agent", s, 200);
     await verifyAgentSummary(tag, agent);
     await verifyAgentSummary(tag, agentUsers[1]);
@@ -1363,12 +1402,12 @@ describeOrSkip("accounting stress — 500 scenarios on the live database", () =>
     const split = await patchDeal(tag, "split-office-100", dealId, { officePct: 100, shares: [] });
     if (split.status !== 200) return;
     setSession(ownerUser);
-    const list = await callGET(commissionsGET, `${BASE_URL}/api/accounting/commissions?paid=all`);
-    const row = (list.json as any[]).find((d) => d.id === dealId);
+    const list = await callGET<CommissionListItem[]>(commissionsGET, `${BASE_URL}/api/accounting/commissions?paid=all`);
+    const row = list.json.find((d) => d.id === dealId);
     // Stored officePct is 100, so the office receives the whole base and the
     // deal agent gets no (virtual) share — new rule, Behzad 2026-11-20.
     check(tag, "office-100-means-office-gets-all", !!row && BigInt(row.officeAmount ?? 0) === BigInt(30_000_000), `officeAmount=${row?.officeAmount} shares=${JSON.stringify(row?.shares)}`);
-    check(tag, "office-100-means-no-agent-share", !!row && (row.shares as any[]).length === 0, `shares=${JSON.stringify(row?.shares)}`);
+    check(tag, "office-100-means-no-agent-share", !!row && row.shares.length === 0, `shares=${JSON.stringify(row?.shares)}`);
     scenariosRun += 1;
     await verifyGlobal(tag);
   });

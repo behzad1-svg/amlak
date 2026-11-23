@@ -8,6 +8,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { getSessionFromCookies } from "@/lib/auth";
 import { serializeBigInt } from "@/lib/utils";
+import { isValidCronSecret } from "@/lib/cronAuth";
 
 export const dynamic = "force-dynamic";
 
@@ -29,7 +30,7 @@ export async function GET(req: NextRequest) {
 export async function POST(req: NextRequest) {
   const secret = process.env.CRON_SECRET;
   if (!secret) return NextResponse.json({ error: "پشتیبان شبانه پیکربندی نشده است" }, { status: 503 });
-  if (req.headers.get("x-cron-secret") !== secret) {
+  if (!isValidCronSecret(req.headers.get("x-cron-secret"), secret)) {
     return NextResponse.json({ error: "دسترسی غیرمجاز" }, { status: 401 });
   }
   const body: unknown = await req.json().catch(() => null);

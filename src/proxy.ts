@@ -23,10 +23,44 @@ function isPublic(pathname: string): boolean {
   return false;
 }
 
+// CSP با nonce به‌جای 'unsafe-inline' در script-src — الگوی رسمی Next.js:
+// پروکسی برای هر درخواست یک nonce تازه می‌سازد و آن را در هدر CSPِ درخواست
+// می‌گذارد تا Next.js هنگام SSR خودش nonce را به اسکریپت‌های فریم‌ورک بزند،
+// در هدر x-nonce می‌گذارد تا layout آن را به اسکریپت تم بدهد، و همان CSP را
+// در هدر پاسخ می‌گذارد تا مرورگر اجرا کند. 'strict-dynamic' جای 'unsafe-inline'
+// را می‌گیرد: اسکریپت‌های دارای nonce می‌توانند اسکریپت‌های دیگر را بار کنند.
+// style-src 'unsafe-inline' می‌ماند چون experimental.inlineCss استایل را داخل
+// تگ <style> می‌گذارد و nonce به آن نمی‌خورد.
+function buildCsp(nonce: string): string {
+  const isDev = process.env.NODE_ENV === "development";
+  return [
+    "default-src 'self'",
+    `script-src 'self' 'nonce-${nonce}' 'strict-dynamic'${isDev ? " 'unsafe-eval'" : ""}`,
+    "style-src 'self' 'unsafe-inline'",
+    "img-src 'self' data: blob:",
+    "font-src 'self' data:",
+    "connect-src 'self' https://*.ingest.sentry.io https://*.ingest.de.sentry.io",
+    "worker-src 'self'",
+    "object-src 'none'",
+    "frame-ancestors 'none'",
+    "base-uri 'self'",
+    "form-action 'self'",
+  ].join("; ");
+}
+
 export async function proxy(req: NextRequest) {
   const pathname = req.nextUrl.pathname;
+  const nonce = Buffer.from(crypto.randomUUID()).toString("base64");
+  const csp = buildCsp(nonce);
+  const requestHeaders = new Headers(req.headers);
+  requestHeaders.set("x-nonce", nonce);
+  requestHeaders.set("Content-Security-Policy", csp);
+  const withCsp = (res: NextResponse) => {
+    res.headers.set("Content-Security-Policy", csp);
+    return res;
+  };
   if (isPublic(pathname)) {
-    return NextResponse.next();
+    return withCsp(NextResponse.next({ request: { headers: requestHeaders } }));
   }
   const token = req.cookies.get(COOKIE_NAME)?.value;
   const payload = await verifyToken(token ?? "");
@@ -36,13 +70,12 @@ export async function proxy(req: NextRequest) {
       : NextResponse.redirect(new URL(`/login?next=${encodeURIComponent(pathname + req.nextUrl.search)}`, req.url));
     // کوکی خراب را پاک کن تا حلقهٔ هدایت نسازد
     res.cookies.delete(COOKIE_NAME);
-    return res;
+    return withCsp(res);
   }
   // مسیر فعلی را در هدر درخواست بگذار تا layout و صفحات سرور
   // هنگام نبود نشست، به /login?next=<همین مسیر> برگردند.
-  const requestHeaders = new Headers(req.headers);
   requestHeaders.set("x-pathname", pathname + req.nextUrl.search);
-  return NextResponse.next({ request: { headers: requestHeaders } });
+  return withCsp(NextResponse.next({ request: { headers: requestHeaders } }));
 }
 
 export const config = {

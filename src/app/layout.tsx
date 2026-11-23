@@ -1,4 +1,5 @@
 import type { Metadata, Viewport } from "next";
+import { headers } from "next/headers";
 import { Vazirmatn } from "next/font/google";
 import "./globals.css";
 import { SwRegister } from "@/components/SwRegister";
@@ -30,7 +31,11 @@ export const viewport: Viewport = {
   themeColor: "#145E5E",
 };
 
-export default function RootLayout({ children }: { children: React.ReactNode }) {
+// async + headers() یعنی رندر داینامیک برای همهٔ صفحات — برای nonce لازم است:
+// پروکسی برای هر درخواست nonce تازه می‌سازد و Next.js آن را به اسکریپت‌های
+// خودش می‌زند؛ اسکریپت تم (تنها اسکریپت اینلاین پروژه) nonce را از x-nonce می‌گیرد.
+export default async function RootLayout({ children }: { children: React.ReactNode }) {
+  const nonce = (await headers()).get("x-nonce");
   return (
     <html lang="fa" dir="rtl" className={`h-full ${vazir.variable}`} suppressHydrationWarning>
       <head>
@@ -38,6 +43,7 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
         <meta name="apple-mobile-web-app-capable" content="yes" />
         {/* تم ذخیره شده را پیش از اولین رندر اعمال می کند تا چشمک تم رخ ندهد (کلید: saj-theme — src/lib/theme.ts) */}
         <script
+          nonce={nonce ?? undefined}
           dangerouslySetInnerHTML={{
             __html: `(function(){try{var t=localStorage.getItem("saj-theme");if(t==="dark"){document.documentElement.setAttribute("data-theme","dark");}}catch(e){}})();`,
           }}

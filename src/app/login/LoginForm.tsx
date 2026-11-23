@@ -11,7 +11,7 @@ export function LoginForm() {
   const searchParams = useSearchParams();
   // بازگشت به صفحه درخواستی پس از ورود — فقط مسیر داخلی معتبر پذیرفته می شود
   const nextParam = searchParams.get("next");
-  const next = nextParam && nextParam.startsWith("/") && !nextParam.startsWith("//") ? nextParam : "/dashboard";
+  const next = nextParam && nextParam.startsWith("/") && !nextParam.startsWith("//") && !nextParam.includes("\\") ? nextParam : "/dashboard";
   const [phone, setPhone] = useState("");
   const [password, setPassword] = useState("");
   const [error, setError] = useState("");

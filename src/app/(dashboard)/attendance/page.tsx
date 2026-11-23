@@ -95,7 +95,6 @@ export default function AttendancePage() {
     const t = getTodayJalali();
     return `${t.jy}-${String(t.jm).padStart(2, "0")}`;
   });
-  const [loading, setLoading] = useState(true);
   const [loadError, setLoadError] = useState<string | null>(null);
   const [msg, setMsg] = useState("");
   const [err, setErr] = useState("");
@@ -120,20 +119,30 @@ export default function AttendancePage() {
     await Promise.all([loadToday(), loadReport(month), loadSettings()]);
   }, [loadToday, loadReport, loadSettings, month]);
 
+  // در حال بارگذاری = نقش هنوز معلوم نیست، یا داده‌های امروز/تنظیمات هنوز
+  // نرسیده‌اند (بدون setState در افکت — مقدار در رندر محاسبه می‌شود).
+  const loading = roleLoading || (role === "OWNER" && (today === null || settings === null) && loadError === null);
+
   useEffect(() => {
-    if (roleLoading) return;
-    if (role !== "OWNER") {
-      setLoading(false);
-      return;
-    }
-    void loadAll()
-      .catch((e) => setLoadError(errorMessage(e)))
-      .finally(() => setLoading(false));
+    if (roleLoading || role !== "OWNER") return;
+    void (async () => {
+      try {
+        await loadAll();
+      } catch (e) {
+        setLoadError(errorMessage(e));
+      }
+    })();
   }, [role, roleLoading, loadAll]);
 
   useEffect(() => {
     if (role !== "OWNER" || !today) return;
-    void loadReport(month).catch((e) => setErr(errorMessage(e)));
+    void (async () => {
+      try {
+        await loadReport(month);
+      } catch (e) {
+        setErr(errorMessage(e));
+      }
+    })();
   }, [month, role, today, loadReport]);
 
   function flash(ok: string, bad?: string) {
@@ -185,7 +194,7 @@ export default function AttendancePage() {
   }
 
   if (loading || roleLoading) return <PageSkeleton rows={3} />;
-  if (loadError) return <PageError message={loadError} onRetry={() => { setLoadError(null); setLoading(true); void loadAll().catch((e) => setLoadError(errorMessage(e))).finally(() => setLoading(false)); }} />;
+  if (loadError) return <PageError message={loadError} onRetry={() => { setLoadError(null); void loadAll().catch((e) => setLoadError(errorMessage(e))); }} />;
   if (role !== "OWNER") {
     return (
       <div>

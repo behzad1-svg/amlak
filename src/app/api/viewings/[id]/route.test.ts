@@ -2,9 +2,10 @@
 import { describe, it, expect, vi, beforeEach } from "vitest";
 import { NextRequest } from "next/server";
 import { PATCH } from "./route";
+import type { MockSession } from "@/lib/test-session";
 
 const authSession = vi.hoisted(() => ({
-  current: null as { user: any; payload: any } | null,
+  current: null as MockSession | null,
 }));
 vi.mock("@/lib/auth", () => ({
   getSessionFromCookies: async () => authSession.current,

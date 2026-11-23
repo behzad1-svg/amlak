@@ -28,6 +28,12 @@ describe("csvCell", () => {
   it("neutralizes after leading whitespace too (Excel trims it)", () => {
     expect(csvCell("  =2+5")).toBe("\"'  =2+5\"");
   });
+
+  it("neutralizes after leading CR/LF too (OWASP: \\r/\\n are trimmed as well)", () => {
+    expect(csvCell("\n=2+5")).toBe("\"'\n=2+5\"");
+    expect(csvCell("\r=2+5")).toBe("\"'\r=2+5\"");
+    expect(csvCell("\r\n+123")).toBe("\"'\r\n+123\"");
+  });
 });
 
 describe("toCsv", () => {

@@ -27,7 +27,7 @@ const ACTIVITY_EVENTS = ["pointerdown", "mousemove", "keydown", "touchstart", "w
  */
 export function IdleLogout() {
   const lastRecordedRef = useRef<number>(0);
-  const lastActivityRef = useRef<number>(Date.now());
+  const lastActivityRef = useRef<number>(0);
   const loggingOutRef = useRef(false);
 
   useEffect(() => {
@@ -110,7 +110,6 @@ export function IdleLogout() {
       window.clearInterval(timer);
     };
     // فقط یک بار هنگام mount — توابع داخلی عمداً در deps نیستند
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   return null;

@@ -120,7 +120,7 @@ export function AttendanceTodayCard() {
   }, []);
 
   useEffect(() => {
-    void load();
+    void (async () => { await load(); })();
   }, [load]);
 
   function flash(ok: string, bad?: string) {

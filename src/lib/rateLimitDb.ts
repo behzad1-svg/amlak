@@ -5,14 +5,19 @@
 // و فقط در صورت شکست احراز هویت یک ضربه ثبت می شود.
 // سطل تلفن ترکیبی است (شماره + IP) تا تلاش ناموفق از یک IP، شماره یک مشاور
 // را برای بقیه قفل نکند؛ سطل صرف IP تنگ نمی شود (دفتر یک IP مشترک دارد).
+// جدا از آن، یک سطل صرف تلفن (login:phone-only:<phone>، سقف ۵۰) هم چک می‌شود
+// تا چرخش IP نتواند با ۵ تلاش تازه برای هر IP یک شماره را بی‌نهایت حدس بزند؛
+// سقفش عمداً بالاست تا استفادهٔ عادی دفتر مشترک هرگز قفل نشود.
 import { prisma } from "@/lib/prisma";
 
 const WINDOW_MS = 15 * 60 * 1000;
 const MAX_ATTEMPTS_IP = 20;
 const MAX_ATTEMPTS_PHONE = 5;
+const MAX_ATTEMPTS_PHONE_ONLY = 50;
 
-/** سقف هر کلید: کلیدهای IP (login:ip:...) بیست تلاش، بقیه (شماره تماس، ساده یا ترکیبی با IP) پنج تلاش. */
+/** سقف هر کلید: IP بیست تلاش، سطل صرف تلفن پنجاه تلاش، بقیه (شماره تماس، ساده یا ترکیبی با IP) پنج تلاش. */
 export function rateLimitForKey(key: string): number {
+  if (key.startsWith("login:phone-only:")) return MAX_ATTEMPTS_PHONE_ONLY;
   return key.startsWith("login:ip:") ? MAX_ATTEMPTS_IP : MAX_ATTEMPTS_PHONE;
 }
 
@@ -28,6 +33,16 @@ export function ipRateLimitKey(ip: string): string {
  */
 export function phoneRateLimitKey(phone: string, ip: string | null): string {
   return ip ? `login:phone:${phone}:${ip}` : `login:phone:${phone}`;
+}
+
+/**
+ * کلید سطل صرف تلفن: login:phone-only:<phone> — مستقل از IP، سقف ۵۰.
+ * جدا از سطل ترکیبی چک و ثبت می‌شود تا چرخش IP نتواند سقف ۵ تایی
+ * هر شماره را دور بزند؛ سقف ۵۰ آن‌قدر بالاست که استفادهٔ عادی
+ * (چند مشاور پشت یک IP مشترک، چند خطای تایپی) هرگز قفل نشود.
+ */
+export function phoneOnlyRateLimitKey(phone: string): string {
+  return `login:phone-only:${phone}`;
 }
 
 // Fallback درون‌حافظه‌ای — فقط وقتی جدول در دسترس نیست

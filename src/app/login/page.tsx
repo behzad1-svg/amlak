@@ -12,7 +12,13 @@ import { LoginForm } from "./LoginForm";
  */
 export default function LoginPage() {
   return (
-    <Suspense>
+    <Suspense
+      fallback={
+        <main className="relative min-h-screen bg-[var(--paper)] flex items-center justify-center">
+          <p className="text-[14px] text-[var(--ink-3)]">در حال بارگذاری…</p>
+        </main>
+      }
+    >
       <main className="relative min-h-screen bg-[var(--paper)] flex">
         <div className="absolute left-4 top-4 z-10">
           <ThemeToggle />

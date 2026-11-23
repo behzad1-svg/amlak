@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { ipRateLimitKey, phoneRateLimitKey, rateLimitForKey } from "./rateLimitDb";
+import { ipRateLimitKey, phoneOnlyRateLimitKey, phoneRateLimitKey, rateLimitForKey } from "./rateLimitDb";
 
 describe("rate limit keys (round 10: composite phone key)", () => {
   it("builds a composite phone key with IP", () => {
@@ -18,5 +18,12 @@ describe("rate limit keys (round 10: composite phone key)", () => {
     expect(rateLimitForKey("login:ip:1.2.3.4")).toBe(20);
     expect(rateLimitForKey("login:phone:09170000001:1.2.3.4")).toBe(5);
     expect(rateLimitForKey("login:phone:09170000001")).toBe(5);
+  });
+
+  it("builds an IP-independent phone-only key capped at 50", () => {
+    expect(phoneOnlyRateLimitKey("09170000001")).toBe("login:phone-only:09170000001");
+    // مستقل از IP: همان کلید برای هر IP — چرخش IP سطل تازه نمی‌سازد.
+    expect(phoneOnlyRateLimitKey("09170000001")).not.toBe(phoneRateLimitKey("09170000001", "1.2.3.4"));
+    expect(rateLimitForKey("login:phone-only:09170000001")).toBe(50);
   });
 });

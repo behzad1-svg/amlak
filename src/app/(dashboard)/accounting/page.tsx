@@ -231,16 +231,6 @@ function dealTotalDiscount(
   return bigNum(d.discountToman);
 }
 
-/** شیرینی کل معامله: شیرینی فروشنده + شیرینی خریدار. */
-function dealTotalShirini(d: Pick<CommissionDeal, "sellerShiriniToman" | "buyerShiriniToman">): bigint {
-  return bigNum(d.sellerShiriniToman) + bigNum(d.buyerShiriniToman);
-}
-
-/** دریافتی کل معامله: دریافتی از فروشنده + دریافتی از خریدار (هر کدام خالی یعنی صفر). */
-function dealTotalReceived(d: Pick<CommissionDeal, "sellerReceivedToman" | "buyerReceivedToman">): bigint {
-  return bigNum(d.sellerReceivedToman) + bigNum(d.buyerReceivedToman);
-}
-
 /** آیا معامله دوطرفه ثبت شده است (دست‌کم یک فیلد طرفی دارد)؟ */
 function dealHasSides(
   d: Pick<CommissionDeal, "sellerCommissionToman" | "buyerCommissionToman" | "sellerReceivedToman" | "buyerReceivedToman" | "sellerDiscountToman" | "buyerDiscountToman">,
@@ -386,7 +376,7 @@ export default function AccountingPage() {
 
   // لیست مشاورها برای کشوی سهم‌ها، موقع باز شدن صفحه (فقط مدیر — کشو فقط در مودال مدیر است)
   useEffect(() => {
-    if (isOwner) void loadUsers();
+    if (isOwner) void (async () => { await loadUsers(); })();
   }, [isOwner, loadUsers]);
 
   useEffect(() => {
@@ -1127,8 +1117,6 @@ export default function AccountingPage() {
   const previewBuyerVat = Math.round((previewBuyerCommission * taxRate) / 100);
   const previewTax = Math.round((previewTotalCommission * taxRate) / 100);
   const previewTotal = previewTotalCommission + previewSellerShirini + previewBuyerShirini - previewDiscountTotal + previewTax;
-  const previewSellerTotal = previewSellerCommission + previewSellerShirini - previewSellerDiscount + previewSellerVat;
-  const previewBuyerTotal = previewBuyerCommission + previewBuyerShirini - previewBuyerDiscount + previewBuyerVat;
   const previewSellerReceived = previewDeal ? Number(bigNum(previewDeal.sellerReceivedToman)) : 0;
   const previewBuyerReceived = previewDeal ? Number(bigNum(previewDeal.buyerReceivedToman)) : 0;
   // دریافتی نقدی فقط وقتی «دریافت شد» زده شده است؛ مبلغ‌های توافقی هر طرف

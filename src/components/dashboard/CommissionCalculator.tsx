@@ -5,7 +5,6 @@ import { Card, CardHeader, CardTitle } from "@/components/ui/Card";
 import { Label, NumberInput } from "@/components/ui/Input";
 import { MoneyInput } from "@/components/ui/MoneyInput";
 import { formatToman, toEnDigits, toFaDigits } from "@/lib/utils";
-import { DEFAULT_TAX_RATE_PCT } from "@/lib/constants";
 import {
   DEFAULT_SALE_COMMISSION_PCT,
   RENT_COMMISSION_PCT,

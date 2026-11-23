@@ -5,7 +5,7 @@
 /** یک سلول CSV با خنثی‌سازی فرمول */
 export function csvCell(v: unknown): string {
   let s = v == null ? "" : String(v);
-  if (/^[ \t]*[=+\-@|%]/.test(s)) s = "'" + s;
+  if (/^[ \t\r\n]*[=+\-@|%]/.test(s)) s = "'" + s;
   return `"${s.replace(/"/g, '""')}"`;
 }
 
