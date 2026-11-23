@@ -561,16 +561,17 @@ export default function AccountingPage() {
     else setEditBuyerDiscount(clean);
   }
 
-  // تقسیم خودکار دریافتی یک طرف: کمیسیون همان طرف (فروش: همیشه ۰٫۲۵٪ قیمت فروش —
-  // درصدِ ذخیره‌شدهٔ معامله وارد این محاسبه نمی‌شود؛ اجاره: فرمول رهن و اجاره) و
+  // تقسیم خودکار دریافتی یک طرف: کمیسیون همان طرف (فروش: درصد همان طرف × قیمت
+  // فروش — درصدِ تایپ‌شدهٔ همان طرف، نه پیش‌فرض؛ اجاره: فرمول رهن و اجاره) و
   // مالیات ۱۰٪ فقط روی همان کمیسیون؛ بقیهٔ دریافتی شیرینی همان طرف است و اگر
   // دریافتی کمتر از کمیسیون + مالیات باشد، کمبودش تخفیف همان طرف می‌شود
   // (مالیات همیشه روی کمیسیون کامل حساب می‌شود، تخفیف از مالیات کم نمی‌کند).
-  // price/deposit/rent تازه‌تایپ‌شده را می‌توان به‌عنوان override داد چون state هنوز به‌روز نشده است
+  // وارد کردن دریافتی هرگز درصد همان طرف را عوض نمی‌کند.
+  // price/deposit/rent/percent تازه‌تایپ‌شده را می‌توان به‌عنوان override داد چون state هنوز به‌روز نشده است
   function applySideReceived(
     side: "seller" | "buyer",
     receivedStr: string,
-    override?: { price?: string; deposit?: string; rent?: string },
+    override?: { price?: string; deposit?: string; rent?: string; percent?: string },
   ) {
     if (!editingDeal) return;
     const received = Number(receivedStr);
@@ -580,10 +581,12 @@ export default function AccountingPage() {
     if (isSale) {
       const price = Number(override?.price ?? editPrice);
       if (!Number.isFinite(price) || price <= 0) return;
-      split = splitSaleSide(price, received, DEFAULT_SALE_COMMISSION_PCT);
+      const pctRaw = override?.percent ?? (side === "seller" ? editSellerPercent : editBuyerPercent);
+      const pctNum = Number(pctRaw);
+      const usePct =
+        pctRaw !== "" && Number.isFinite(pctNum) && pctNum >= 0 && pctNum <= 100 ? pctNum : DEFAULT_SALE_COMMISSION_PCT;
+      split = splitSaleSide(price, received, usePct);
       if (split.commission <= 0) return;
-      if (side === "seller") setEditSellerPercent("0.25");
-      else setEditBuyerPercent("0.25");
     } else {
       const dep = Number(override?.deposit ?? editDeposit);
       const rent = Number(override?.rent ?? editRent);
@@ -624,7 +627,7 @@ export default function AccountingPage() {
     const clean = toEnDigits(v).replace(/[^0-9]/g, "");
     setEditPrice(clean);
     if (editingDeal?.property.dealType === "SALE") {
-      // اگر دریافتی یک طرف وارد شده، تقسیم ۰٫۲۵٪ همان طرف دوباره حساب می‌شود؛
+      // اگر دریافتی یک طرف وارد شده، تقسیم همان طرف با درصد خودش دوباره حساب می‌شود؛
       // وگرنه مثل قبل درصد × قیمت برای هر طرف
       for (const side of ["seller", "buyer"] as const) {
         const received = side === "seller" ? editSellerReceived : editBuyerReceived;
@@ -668,6 +671,9 @@ export default function AccountingPage() {
         if (side === "seller") setEditSellerAmount(next);
         else setEditBuyerAmount(next);
       }
+      // اگر دریافتی همان طرف وارد شده، با درصد تازه شیرینی/تخفیف هم دوباره حساب می‌شود
+      const received = side === "seller" ? editSellerReceived : editBuyerReceived;
+      if (received !== "") applySideReceived(side, received, { percent: clean });
     }
   }
 
@@ -927,7 +933,9 @@ export default function AccountingPage() {
           <div className="rounded-[12px] border border-[var(--line)] bg-[var(--paper-2)] p-3 text-[13px] space-y-1">
             <div>دریافتی: {formatToman(received)}</div>
             <div>
-              کمیسیون{isSale ? " (۰٫۲۵٪ قیمت فروش)" : ""}: {formatToman(split.commission)}
+              کمیسیون
+              {isSale ? ` (${toFaDigits(percent !== "" ? percent : String(DEFAULT_SALE_COMMISSION_PCT))}٪ قیمت فروش)` : ""}:{" "}
+              {formatToman(split.commission)}
             </div>
             <div>مالیات ارزش افزوده (۱۰٪ کمیسیون): {formatToman(split.vat)}</div>
             <div>شیرینی (بقیه دریافتی): {formatToman(split.shirini)}</div>
@@ -986,7 +994,11 @@ export default function AccountingPage() {
     if (editingDeal.property.dealType === "SALE") {
       const price = Number(editPrice);
       if (!Number.isFinite(price) || price <= 0) return null;
-      return splitSaleSide(price, received, DEFAULT_SALE_COMMISSION_PCT);
+      const pctRaw = side === "seller" ? editSellerPercent : editBuyerPercent;
+      const pctNum = Number(pctRaw);
+      const usePct =
+        pctRaw !== "" && Number.isFinite(pctNum) && pctNum >= 0 && pctNum <= 100 ? pctNum : DEFAULT_SALE_COMMISSION_PCT;
+      return splitSaleSide(price, received, usePct);
     }
     const dep = Number(editDeposit);
     const rent = Number(editRent);
@@ -1012,8 +1024,10 @@ export default function AccountingPage() {
   const previewBuyerTotal = previewBuyerCommission + previewBuyerShirini - previewBuyerDiscount + previewBuyerVat;
   const previewSellerReceived = previewDeal ? Number(bigNum(previewDeal.sellerReceivedToman)) : 0;
   const previewBuyerReceived = previewDeal ? Number(bigNum(previewDeal.buyerReceivedToman)) : 0;
-  const previewReceivedTotal = previewSellerReceived + previewBuyerReceived;
-  const previewReceived = previewReceivedTotal > 0 ? previewReceivedTotal : previewDeal?.commissionPaid ? previewTotal : 0;
+  // دریافتی نقدی فقط وقتی «دریافت شد» زده شده است؛ مبلغ‌های توافقی هر طرف
+  // (دریافتی از فروشنده/خریدار) پولِ گرفته‌شده نیستند — فقط در خط‌های جداگانه
+  // نشان داده می‌شوند و روی دریافتی کل یا مانده اثر نمی‌گذارند.
+  const previewReceived = previewDeal?.commissionPaid ? previewTotal : 0;
   const previewOutstanding = previewTotal - previewReceived;
 
   if (roleLoading) return <PageSkeleton rows={4} />;

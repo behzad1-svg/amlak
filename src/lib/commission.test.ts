@@ -101,6 +101,24 @@ describe("splitSaleSide", () => {
       discount: 11_625_000,
     });
   });
+
+  it("respects a non-default side percent instead of forcing 0.25% (F-0024 regression)", () => {
+    // قیمت ۵ میلیارد، درصد ۰٫۵٪ → کمیسیون ۲۵٬۰۰۰٬۰۰۰، مالیات ۲٬۵۰۰٬۰۰۰
+    // فروشنده: دریافتی ۵۰ میلیون → شیرینی ۲۲٬۵۰۰٬۰۰۰
+    expect(splitSaleSide(5_000_000_000, 50_000_000, 0.5)).toEqual({
+      commission: 25_000_000,
+      vat: 2_500_000,
+      shirini: 22_500_000,
+      discount: 0,
+    });
+    // خریدار: دریافتی ۵ میلیون → تخفیف ۲۲٬۵۰۰٬۰۰۰، شیرینی ۰، مالیات همچنان کامل
+    expect(splitSaleSide(5_000_000_000, 5_000_000, 0.5)).toEqual({
+      commission: 25_000_000,
+      vat: 2_500_000,
+      shirini: 0,
+      discount: 22_500_000,
+    });
+  });
 });
 
 describe("splitRentSide", () => {
