@@ -259,7 +259,7 @@ export function AttendanceTodayCard() {
                   </div>
                 </div>
                 <div className="flex shrink-0 gap-2">
-                  {!s.checkInAt && (s.status === "open" || s.status === "upcoming" || s.status === "absent") && (
+                  {!s.checkInAt && s.status === "open" && (
                     <Button size="sm" disabled={busy !== null} onClick={() => void onCheckIn(s.session, s.start)}>
                       {busy === s.session ? "در حال ثبت…" : "ثبت ورود"}
                     </Button>
