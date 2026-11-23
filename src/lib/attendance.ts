@@ -26,6 +26,9 @@ export const CHECKOUT_REASON_MAX = LATE_REASON_MAX;
 /** ورود زودتر از شروع شیفت تا این‌قدر دقیقه مجاز است (تاخیر صفر). */
 export const EARLY_CHECKIN_MINUTES = 60;
 
+/** ۲۰ دقیقهٔ اول پس از شروع شیفت دیرکرد حساب نمی‌شود. */
+export const LATE_GRACE_MINUTES = 20;
+
 const EARTH_RADIUS_M = 6_371_000;
 
 /** فاصلهٔ دو نقطهٔ جغرافیایی به متر (هاورسین). */
@@ -104,7 +107,7 @@ export type SessionResolution =
 
 /**
  * شیفت جاری برای ورود، بر مبنای ساعت تهران:
- * - از یک ساعت پیش از شروع تا پایان شیفت → همان شیفت (تاخیر = دقیقه از شروع، حداقل صفر)
+ * - از یک ساعت پیش از شروع تا پایان شیفت → همان شیفت (تاخیر = دقیقه از شروع منهای ۲۰ دقیقهٔ مهلت، حداقل صفر)
  * - پیش از آن / بین دو شیفت / پس از پایان شیفت عصر → null با پیام فارسی
  * اضافه‌کاری مشکلی ندارد: خروج پس از پایان شیفت جداگانه انجام می‌شود و اینجا ربطی ندارد.
  */
@@ -119,10 +122,10 @@ export function resolveSession(now: Date, settings: AttendanceSettings): Session
     return { session: null, message: "ساعت‌های کاری تنظیم نشده‌اند." };
   }
   if (t >= mStart - EARLY_CHECKIN_MINUTES && t <= mEnd) {
-    return { session: "MORNING", lateMinutes: Math.max(0, t - mStart) };
+    return { session: "MORNING", lateMinutes: Math.max(0, t - mStart - LATE_GRACE_MINUTES) };
   }
   if (t >= eStart - EARLY_CHECKIN_MINUTES && t <= eEnd) {
-    return { session: "EVENING", lateMinutes: Math.max(0, t - eStart) };
+    return { session: "EVENING", lateMinutes: Math.max(0, t - eStart - LATE_GRACE_MINUTES) };
   }
   if (t < mStart - EARLY_CHECKIN_MINUTES) {
     return { session: null, message: `شیفت صبح از ساعت ${settings.morningStart} شروع می‌شود.` };

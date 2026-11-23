@@ -10,7 +10,7 @@ import { Button } from "@/components/ui/Button";
 import { Input, Label } from "@/components/ui/Input";
 import { apiJson, ApiError, errorMessage } from "@/lib/api";
 import { toFaDigits } from "@/lib/utils";
-import { CHECKOUT_REASON_MAX, LATE_REASON_MAX } from "@/lib/attendance";
+import { CHECKOUT_REASON_MAX, LATE_GRACE_MINUTES, LATE_REASON_MAX } from "@/lib/attendance";
 
 type SessionKey = "MORNING" | "EVENING";
 type SessionStatus = "done" | "working" | "late" | "absent" | "open" | "upcoming" | "off";
@@ -155,8 +155,9 @@ export function AttendanceTodayCard() {
   }
 
   async function onCheckIn(sessionKey: SessionKey, start: string) {
-    // ورود دیر است؟ اول دلیل را بگیر، بعد موقعیت و ثبت
-    if (nowTehranMinutes() > hhmmToMin(start)) {
+    // ورود دیر است؟ ۲۰ دقیقهٔ اول پس از شروع شیفت دیرکرد حساب نمی‌شود؛
+    // فقط پس از آن اول دلیل را بگیر، بعد موقعیت و ثبت
+    if (nowTehranMinutes() > hhmmToMin(start) + LATE_GRACE_MINUTES) {
       setReasonFor(sessionKey);
       setErr("");
       return;

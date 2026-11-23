@@ -98,8 +98,23 @@ describe("tehranParts / tehranDateOnly", () => {
 });
 
 describe("resolveSession", () => {
-  it("09:02 is MORNING, 2 minutes late", () => {
-    expect(resolveSession(atTehran("2026-11-23T09:02"), SETTINGS)).toEqual({ session: "MORNING", lateMinutes: 2 });
+  it("09:02 is MORNING, on time (inside the 20-minute grace)", () => {
+    expect(resolveSession(atTehran("2026-11-23T09:02"), SETTINGS)).toEqual({ session: "MORNING", lateMinutes: 0 });
+  });
+  it("09:15 is MORNING, on time (inside the 20-minute grace)", () => {
+    expect(resolveSession(atTehran("2026-11-23T09:15"), SETTINGS)).toEqual({ session: "MORNING", lateMinutes: 0 });
+  });
+  it("09:20 is MORNING, on time (grace boundary)", () => {
+    expect(resolveSession(atTehran("2026-11-23T09:20"), SETTINGS)).toEqual({ session: "MORNING", lateMinutes: 0 });
+  });
+  it("09:21 is MORNING, 1 minute late (grace just passed)", () => {
+    expect(resolveSession(atTehran("2026-11-23T09:21"), SETTINGS)).toEqual({ session: "MORNING", lateMinutes: 1 });
+  });
+  it("09:25 is MORNING, 5 minutes late (25 past start minus 20 grace)", () => {
+    expect(resolveSession(atTehran("2026-11-23T09:25"), SETTINGS)).toEqual({ session: "MORNING", lateMinutes: 5 });
+  });
+  it("08:30 is MORNING, on time (early check-in)", () => {
+    expect(resolveSession(atTehran("2026-11-23T08:30"), SETTINGS)).toEqual({ session: "MORNING", lateMinutes: 0 });
   });
   it("08:45 is MORNING, on time (early window)", () => {
     expect(resolveSession(atTehran("2026-11-23T08:45"), SETTINGS)).toEqual({ session: "MORNING", lateMinutes: 0 });
@@ -111,8 +126,8 @@ describe("resolveSession", () => {
     const r = resolveSession(atTehran("2026-11-23T07:59"), SETTINGS);
     expect(r.session).toBeNull();
   });
-  it("13:00 is still MORNING, 240 minutes late", () => {
-    expect(resolveSession(atTehran("2026-11-23T13:00"), SETTINGS)).toEqual({ session: "MORNING", lateMinutes: 240 });
+  it("13:00 is still MORNING, 220 minutes late (240 past start minus 20 grace)", () => {
+    expect(resolveSession(atTehran("2026-11-23T13:00"), SETTINGS)).toEqual({ session: "MORNING", lateMinutes: 220 });
   });
   it("14:00 is between sessions", () => {
     const r = resolveSession(atTehran("2026-11-23T14:00"), SETTINGS);
@@ -121,11 +136,14 @@ describe("resolveSession", () => {
   it("16:00 is the earliest EVENING check-in", () => {
     expect(resolveSession(atTehran("2026-11-23T16:00"), SETTINGS)).toEqual({ session: "EVENING", lateMinutes: 0 });
   });
-  it("17:30 is EVENING, 30 minutes late", () => {
-    expect(resolveSession(atTehran("2026-11-23T17:30"), SETTINGS)).toEqual({ session: "EVENING", lateMinutes: 30 });
+  it("17:20 is EVENING, on time (grace boundary)", () => {
+    expect(resolveSession(atTehran("2026-11-23T17:20"), SETTINGS)).toEqual({ session: "EVENING", lateMinutes: 0 });
+  });
+  it("17:30 is EVENING, 10 minutes late (30 past start minus 20 grace)", () => {
+    expect(resolveSession(atTehran("2026-11-23T17:30"), SETTINGS)).toEqual({ session: "EVENING", lateMinutes: 10 });
   });
   it("21:00 is still EVENING", () => {
-    expect(resolveSession(atTehran("2026-11-23T21:00"), SETTINGS)).toEqual({ session: "EVENING", lateMinutes: 240 });
+    expect(resolveSession(atTehran("2026-11-23T21:00"), SETTINGS)).toEqual({ session: "EVENING", lateMinutes: 220 });
   });
   it("21:01 is past the day", () => {
     const r = resolveSession(atTehran("2026-11-23T21:01"), SETTINGS);
