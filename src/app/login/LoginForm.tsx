@@ -3,6 +3,7 @@ import { useState } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 import { Label, PasswordInput, PhoneInput } from "@/components/ui/Input";
 import { Button } from "@/components/ui/Button";
+import { recordActivity } from "@/lib/idleTimeout";
 
 /** فرم ورود — تنها بخش تعاملی صفحه ورود؛ بقیه صفحه سرورکامپوننت است */
 export function LoginForm() {
@@ -24,6 +25,11 @@ export function LoginForm() {
       const res = await fetch("/api/auth/login", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ phone, password }) });
       const data = await res.json();
       if (!res.ok) { setError(data.error ?? "خطا"); return; }
+      // ورود تازه: «الان» را به‌عنوان آخرین فعالیت ثبت کن تا بررسی کهنگی
+      // هنگام بازشدن داشبورد (IdleLogout)، نشست تازه را بیرون نیندازد.
+      // بدون این ثبت، مقدار کهنهٔ قبلی در localStorage می‌ماند و کاربر
+      // لحظه‌ای پس از ورود، بیرون انداخته می‌شود.
+      recordActivity();
       router.push(next);
     } catch {
       setError("ارتباط با سرور برقرار نشد، لطفاً دوباره تلاش کنید");
