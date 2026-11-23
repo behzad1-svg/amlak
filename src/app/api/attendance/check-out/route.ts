@@ -1,16 +1,19 @@
 // ثبت خروج — رکوردِ بازِ امروز را می‌بندد. خروج بعد از پایان شیفت هم
 // قبول است (اضافه‌کاری مشکلی ندارد) و شعاع دفتر برای خروج اجباری نیست:
 // کسی که خروج را فراموش کرده و از خانه ثبت می‌کند نباید قفل شود.
+// اما خروج از بیرونِ محدودهٔ دفتر دلیل می‌خواهد: اول بدون دلیل رد می‌شود
+// («شما خارج از محدوده دفتر هستید» + فاصله) و با دلیلِ آزاد ثبت می‌شود.
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { getSessionFromCookies } from "@/lib/auth";
 import { getAttendanceSettings } from "@/lib/settings";
-import { haversineMeters, tehranDateOnly } from "@/lib/attendance";
+import { CHECKOUT_REASON_MAX, distanceToOffice, tehranDateOnly } from "@/lib/attendance";
 import { z } from "zod";
 
 const checkOutSchema = z.object({
   lat: z.number().min(-90).max(90).optional(),
   lng: z.number().min(-180).max(180).optional(),
+  reason: z.string().trim().max(CHECKOUT_REASON_MAX, "دلیل خروج خیلی طولانی است").optional(),
 });
 
 export async function POST(req: NextRequest) {
@@ -32,11 +35,24 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: "ورودی ثبت نشده است — اول ورود را ثبت کنید." }, { status: 400 });
   }
 
-  const { lat, lng } = parsed.data;
+  const { lat, lng, reason } = parsed.data;
   let distance: number | undefined;
+  let outOfRange = false;
   if (typeof lat === "number" && typeof lng === "number") {
     const settings = await getAttendanceSettings();
-    distance = Math.round(haversineMeters(lat, lng, settings.officeLat, settings.officeLng));
+    const d = distanceToOffice(lat, lng, settings);
+    distance = d.distanceM;
+    outOfRange = d.outside;
+  }
+  if (outOfRange && !reason?.trim()) {
+    return NextResponse.json(
+      {
+        error: "شما خارج از محدوده دفتر هستید",
+        outOfRange: true,
+        distanceM: distance,
+      },
+      { status: 400 }
+    );
   }
   const record = await prisma.attendance.update({
     where: { id: open.id },
@@ -45,6 +61,7 @@ export async function POST(req: NextRequest) {
       checkOutLat: lat ?? null,
       checkOutLng: lng ?? null,
       checkOutDistanceM: distance ?? null,
+      checkOutReason: reason?.trim() || null,
     },
   });
   return NextResponse.json(record);

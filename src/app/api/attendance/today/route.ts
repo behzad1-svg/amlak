@@ -72,6 +72,8 @@ export async function GET() {
         lateMinutes: rec?.lateMinutes ?? null,
         lateReason: rec?.lateReason ?? null,
         checkInDistanceM: rec?.checkInDistanceM ?? null,
+        checkOutReason: rec?.checkOutReason ?? null,
+        checkOutDistanceM: rec?.checkOutDistanceM ?? null,
       };
     }
     return { id: u.id, name: u.name, role: u.role, sessions };

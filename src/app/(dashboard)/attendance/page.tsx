@@ -26,6 +26,8 @@ interface SessionView {
   lateMinutes: number | null;
   lateReason: string | null;
   checkInDistanceM: number | null;
+  checkOutReason: string | null;
+  checkOutDistanceM: number | null;
 }
 
 interface TodayData {
@@ -221,6 +223,7 @@ export default function AttendancePage() {
                   <th className="py-2.5 text-center font-medium">خروج</th>
                   <th className="py-2.5 text-center font-medium">تاخیر</th>
                   <th className="py-2.5 text-right font-medium">دلیل تاخیر</th>
+                  <th className="py-2.5 text-right font-medium">دلیل خروج</th>
                   <th className="py-2.5 text-center font-medium">فاصله</th>
                   <th className="py-2.5 text-center font-medium">وضعیت</th>
                 </tr>
@@ -237,6 +240,7 @@ export default function AttendancePage() {
                         <td className="text-center">{timeHHMM(s.checkOutAt)}</td>
                         <td className="text-center">{(s.lateMinutes ?? 0) > 0 ? `${toFaDigits(String(s.lateMinutes))} دقیقه` : "—"}</td>
                         <td className="max-w-[180px] truncate">{s.lateReason ?? "—"}</td>
+                        <td className="max-w-[180px] truncate">{s.checkOutReason ?? "—"}</td>
                         <td className="text-center">{s.checkInDistanceM !== null ? `${toFaDigits(String(s.checkInDistanceM))} متر` : "—"}</td>
                         <td className="text-center">
                           <span className={s.status === "absent" ? "font-bold text-[var(--pomegranate)]" : s.status === "late" ? "font-bold text-amber-700" : ""}>

@@ -8,9 +8,9 @@ import { Clock3 } from "lucide-react";
 import { Card, CardHeader, CardTitle } from "@/components/ui/Card";
 import { Button } from "@/components/ui/Button";
 import { Input, Label } from "@/components/ui/Input";
-import { apiJson, errorMessage } from "@/lib/api";
+import { apiJson, ApiError, errorMessage } from "@/lib/api";
 import { toFaDigits } from "@/lib/utils";
-import { LATE_REASON_MAX } from "@/lib/attendance";
+import { CHECKOUT_REASON_MAX, LATE_REASON_MAX } from "@/lib/attendance";
 
 type SessionKey = "MORNING" | "EVENING";
 type SessionStatus = "done" | "working" | "late" | "absent" | "open" | "upcoming" | "off";
@@ -25,6 +25,8 @@ interface SessionView {
   lateMinutes: number | null;
   lateReason: string | null;
   checkInDistanceM: number | null;
+  checkOutReason: string | null;
+  checkOutDistanceM: number | null;
 }
 
 interface TodayData {
@@ -99,6 +101,11 @@ export function AttendanceTodayCard() {
   // فیلد دلیل تاخیر — فقط برای شیفتی که ورودش دیر است باز می‌شود
   const [reasonFor, setReasonFor] = useState<SessionKey | null>(null);
   const [reason, setReason] = useState("");
+  // خروج از بیرون محدوده — اول پیام + فیلد دلیل، بعد ثبت با دلیل
+  const [outOfRangeFor, setOutOfRangeFor] = useState<SessionKey | null>(null);
+  const [outReason, setOutReason] = useState("");
+  const [pendingPos, setPendingPos] = useState<{ lat: number; lng: number } | null>(null);
+  const [outDistanceM, setOutDistanceM] = useState<number | null>(null);
 
   const load = useCallback(async () => {
     try {
@@ -157,18 +164,41 @@ export function AttendanceTodayCard() {
     await submitCheckIn(sessionKey, "");
   }
 
+  async function submitCheckOut(sessionKey: SessionKey, reasonText: string, pos: { lat: number; lng: number }) {
+    setBusy(sessionKey);
+    setErr("");
+    try {
+      await apiJson("/api/attendance/check-out", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ lat: pos.lat, lng: pos.lng, reason: reasonText.trim() || undefined }),
+      });
+      setOutOfRangeFor(null);
+      setOutReason("");
+      setPendingPos(null);
+      setOutDistanceM(null);
+      flash("خروج ثبت شد.");
+      await load();
+    } catch (e) {
+      // بیرون محدودهٔ دفتر: خروج دلیل می‌خواهد، نه ردِ کامل
+      if (e instanceof ApiError && e.data?.outOfRange === true) {
+        setPendingPos(pos);
+        setOutOfRangeFor(sessionKey);
+        setOutDistanceM(typeof e.data.distanceM === "number" ? e.data.distanceM : null);
+        return;
+      }
+      flash("", errorMessage(e));
+    } finally {
+      setBusy(null);
+    }
+  }
+
   async function onCheckOut(sessionKey: SessionKey) {
     setBusy(sessionKey);
     setErr("");
     try {
       const pos = await getPosition();
-      await apiJson("/api/attendance/check-out", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ lat: pos.coords.latitude, lng: pos.coords.longitude }),
-      });
-      flash("خروج ثبت شد.");
-      await load();
+      await submitCheckOut(sessionKey, "", { lat: pos.coords.latitude, lng: pos.coords.longitude });
     } catch (e) {
       // اگر موقعیت در دسترس نبود، خروج بدون موقعیت هم قبول است
       if (e instanceof Error && e.message.includes("موقعیت")) {
@@ -224,6 +254,7 @@ export function AttendanceTodayCard() {
                     {s.checkOutAt ? ` · خروج ${timeHHMM(s.checkOutAt)}` : ""}
                     {(s.lateMinutes ?? 0) > 0 ? ` · تاخیر ${toFaDigits(String(s.lateMinutes ?? 0))} دقیقه` : ""}
                     {s.lateReason ? ` · دلیل: ${s.lateReason}` : ""}
+                    {s.checkOutReason ? ` · دلیل خروج: ${s.checkOutReason}` : ""}
                   </div>
                 </div>
                 <div className="flex shrink-0 gap-2">
@@ -255,6 +286,30 @@ export function AttendanceTodayCard() {
                       {busy === s.session ? "در حال ثبت…" : "ثبت ورود"}
                     </Button>
                     <Button size="sm" variant="ghost" disabled={busy !== null} onClick={() => { setReasonFor(null); setReason(""); }}>
+                      انصراف
+                    </Button>
+                  </div>
+                </div>
+              )}
+              {outOfRangeFor === s.session && (
+                <div className="mt-3 space-y-2 rounded-[12px] border border-[var(--line)] bg-white p-3">
+                  <p className="text-[13px] font-bold">
+                    شما خارج از محدوده دفتر هستید
+                    {outDistanceM !== null ? ` — فاصله‌تان ${toFaDigits(String(outDistanceM))} متر است` : ""}.
+                  </p>
+                  <Label htmlFor={`checkout-reason-${s.session}`}>دلیل خروج:</Label>
+                  <Input
+                    id={`checkout-reason-${s.session}`}
+                    value={outReason}
+                    maxLength={CHECKOUT_REASON_MAX}
+                    onChange={(e) => setOutReason(e.target.value)}
+                    placeholder="مثلا بازدید بودم"
+                  />
+                  <div className="flex gap-2">
+                    <Button size="sm" disabled={busy !== null || !outReason.trim() || !pendingPos} onClick={() => pendingPos && void submitCheckOut(s.session, outReason, pendingPos)}>
+                      {busy === s.session ? "در حال ثبت…" : "ثبت خروج"}
+                    </Button>
+                    <Button size="sm" variant="ghost" disabled={busy !== null} onClick={() => { setOutOfRangeFor(null); setOutReason(""); setPendingPos(null); setOutDistanceM(null); }}>
                       انصراف
                     </Button>
                   </div>

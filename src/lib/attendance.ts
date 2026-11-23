@@ -20,6 +20,9 @@ export interface AttendanceSettings {
 /** بیشینهٔ طول دلیل تاخیر که مشاور خودش می‌نویسد. */
 export const LATE_REASON_MAX = 200;
 
+/** بیشینهٔ طول دلیل خروج از بیرون محدوده — همان سقف دلیل تاخیر. */
+export const CHECKOUT_REASON_MAX = LATE_REASON_MAX;
+
 /** ورود زودتر از شروع شیفت تا این‌قدر دقیقه مجاز است (تاخیر صفر). */
 export const EARLY_CHECKIN_MINUTES = 60;
 
@@ -34,6 +37,19 @@ export function haversineMeters(lat1: number, lng1: number, lat2: number, lng2: 
     Math.sin(dLat / 2) * Math.sin(dLat / 2) +
     Math.cos(toRad(lat1)) * Math.cos(toRad(lat2)) * Math.sin(dLng / 2) * Math.sin(dLng / 2);
   return 2 * EARTH_RADIUS_M * Math.asin(Math.sqrt(a));
+}
+
+/**
+ * فاصلهٔ یک نقطه تا دفتر و اینکه بیرون شعاع است یا نه.
+ * خروج از بیرون محدوده با دلیل ثبت می‌شود؛ ورود حتماً باید داخل شعاع باشد.
+ */
+export function distanceToOffice(
+  lat: number,
+  lng: number,
+  settings: AttendanceSettings
+): { distanceM: number; outside: boolean } {
+  const distanceM = Math.round(haversineMeters(lat, lng, settings.officeLat, settings.officeLng));
+  return { distanceM, outside: distanceM > settings.radiusM };
 }
 
 /** اجزای تاریخ و ساعت تهران برای یک لحظه: تاریخ میلادی، ساعت و دقیقه، نام روز هفته. */

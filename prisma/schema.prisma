@@ -321,6 +321,8 @@ model Attendance {
   lateMinutes       Int?
   /// دلیل تاخیر — متن آزاد که خود مشاور می‌نویسد؛ هیچ گزینهٔ آماده‌ای نیست
   lateReason        String?
+  /// دلیل خروج از بیرون محدوده — متن آزاد که خود مشاور می‌نویسد؛ هیچ گزینهٔ آماده‌ای نیست
+  checkOutReason    String?
   createdAt         DateTime          @default(now())
   updatedAt         DateTime          @updatedAt
 

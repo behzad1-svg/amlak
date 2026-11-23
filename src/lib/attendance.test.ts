@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import {
+  distanceToOffice,
   haversineMeters,
   isWorkingDay,
   parseHHMM,
@@ -47,6 +48,29 @@ describe("haversineMeters", () => {
   it("a point 150 m away is outside the 100 m radius", () => {
     const d = haversineMeters(28.96246, 50.838971, 28.96246 + 150 / 111320, 50.838971);
     expect(d).toBeGreaterThan(SETTINGS.radiusM);
+  });
+});
+
+describe("distanceToOffice", () => {
+  it("office point is inside with distance 0", () => {
+    expect(distanceToOffice(28.96246, 50.838971, SETTINGS)).toEqual({ distanceM: 0, outside: false });
+  });
+  it("50 m north is inside the 100 m radius", () => {
+    const r = distanceToOffice(28.96246 + 50 / 111320, 50.838971, SETTINGS);
+    expect(r.outside).toBe(false);
+    expect(r.distanceM).toBeGreaterThan(45);
+    expect(r.distanceM).toBeLessThan(55);
+  });
+  it("150 m north is outside with distance ~150 m", () => {
+    const r = distanceToOffice(28.96246 + 150 / 111320, 50.838971, SETTINGS);
+    expect(r.outside).toBe(true);
+    expect(r.distanceM).toBeGreaterThan(145);
+    expect(r.distanceM).toBeLessThan(155);
+  });
+  it("Tehran is far outside", () => {
+    const r = distanceToOffice(35.68, 51.41, SETTINGS);
+    expect(r.outside).toBe(true);
+    expect(r.distanceM).toBeGreaterThan(700_000);
   });
 });
 

@@ -7,10 +7,13 @@
 
 export class ApiError extends Error {
   status: number;
-  constructor(status: number, message: string) {
+  /** بدنهٔ JSON خطای سرور، اگر داشت — مثلا outOfRange در ثبت خروج. */
+  data?: Record<string, unknown>;
+  constructor(status: number, message: string, data?: Record<string, unknown>) {
     super(message);
     this.name = "ApiError";
     this.status = status;
+    this.data = data;
   }
 }
 
@@ -37,13 +40,15 @@ export async function apiFetch(input: string, init?: RequestInit): Promise<Respo
   }
   if (!res.ok) {
     let message = `خطای سرور (${res.status})`;
+    let body: Record<string, unknown> | undefined;
     try {
       const data = await res.clone().json();
+      if (data && typeof data === "object") body = data as Record<string, unknown>;
       if (data && typeof data.error === "string" && data.error.trim()) message = data.error;
     } catch {
       // بدنه JSON نیست؛ همان پیام عمومی می‌ماند
     }
-    throw new ApiError(res.status, message);
+    throw new ApiError(res.status, message, body);
   }
   return res;
 }
