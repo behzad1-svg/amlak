@@ -49,8 +49,9 @@ export async function GET() {
       status: true,
       agentId: true,
       officePct: true, // فقط ورودی resolveSplit است؛ هیچ جمعی از آن مستقیم خوانده نمی‌شود
+      officeShiriniPct: true, // فقط ورودی resolveSplit است؛ هیچ جمعی از آن مستقیم خوانده نمی‌شود
       agent: { select: { id: true, name: true } },
-      shares: { select: { id: true, userId: true, name: true, pct: true, settled: true, settledAt: true } },
+      shares: { select: { id: true, userId: true, name: true, pct: true, shiriniPct: true, settled: true, settledAt: true } },
     },
   });
 
@@ -64,7 +65,11 @@ export async function GET() {
   let dealsWithCommission = 0;
   // سهم دفتر و بدهی به مشاوران فقط روی معامله‌های قطعی دارای درآمد
   let officeTotal = BigInt(0);
+  let officeCommissionTotal = BigInt(0);
+  let officeShiriniTotal = BigInt(0);
   let debtToAgents = BigInt(0);
+  let debtToAgentsCommission = BigInt(0);
+  let debtToAgentsShirini = BigInt(0);
   for (const d of deals) {
     if (d.status === "COMPLETED") dealsCompleted += 1;
     if (d.commissionToman != null) dealsWithCommission += 1;
@@ -93,10 +98,18 @@ export async function GET() {
         commissionUnpaid += amount;
         unpaidCount += 1;
       }
-      if (d.status === "COMPLETED") officeTotal += split.officeAmount ?? BigInt(0);
+      if (d.status === "COMPLETED") {
+        officeTotal += split.officeAmount ?? BigInt(0);
+        officeCommissionTotal += split.officeCommissionAmount ?? BigInt(0);
+        officeShiriniTotal += split.officeShiriniAmount ?? BigInt(0);
+      }
       for (const s of split.shares) {
         // سهم خارجی (تعاون) بدهی به مشاور نیست — جدا حساب می‌شود
-        if (!s.settled && !s.isExternal) debtToAgents += s.amount;
+        if (!s.settled && !s.isExternal) {
+          debtToAgents += s.amount;
+          debtToAgentsCommission += s.commissionAmount;
+          debtToAgentsShirini += s.shiriniAmount;
+        }
       }
     } else {
       // مشاور فقط سهم خودش را می‌بیند، نه مبلغ کامل معامله را
@@ -146,9 +159,13 @@ export async function GET() {
       unpaidCount,
       dealsCompleted,
       dealsWithCommission,
-      // فقط مدیر: سهم دفتر و بدهی به مشاوران
+      // فقط مدیر: سهم دفتر و بدهی به مشاوران — هر کدام با تفکیک کمیسیون و شیرینی
       officeTotal: isOwner ? officeTotal : null,
+      officeCommissionTotal: isOwner ? officeCommissionTotal : null,
+      officeShiriniTotal: isOwner ? officeShiriniTotal : null,
       debtToAgents: isOwner ? debtToAgents : null,
+      debtToAgentsCommission: isOwner ? debtToAgentsCommission : null,
+      debtToAgentsShirini: isOwner ? debtToAgentsShirini : null,
     })
   );
 }

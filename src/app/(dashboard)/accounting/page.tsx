@@ -32,7 +32,13 @@ type Summary = {
   dealsCompleted: number;
   dealsWithCommission: number;
   officeTotal: string | null;
+  /** فقط مدیر؛ تفکیک سهم دفتر به کمیسیون و شیرینی */
+  officeCommissionTotal: string | null;
+  officeShiriniTotal: string | null;
   debtToAgents: string | null;
+  /** فقط مدیر؛ تفکیک بدهی به مشاوران به کمیسیون و شیرینی */
+  debtToAgentsCommission: string | null;
+  debtToAgentsShirini: string | null;
 };
 
 type ShareView = {
@@ -40,6 +46,8 @@ type ShareView = {
   userId: string | null;
   name: string;
   pct: number;
+  /** سهم از شیرینی (٪) — همیشه عدد است؛ خالی ذخیره‌شده یعنی همان pct */
+  shiriniPct: number;
   settled: boolean;
   settledAt: string | null;
   isExternal: boolean;
@@ -74,6 +82,8 @@ type CommissionDeal = {
   dealDepositToman: string | null;
   dealMonthlyRentToman: string | null;
   officePct: number | null;
+  /** سهم دفتر از شیرینی (٪)؛ خالی یعنی همان officePct */
+  officeShiriniPct: number | null;
   officeAmount: string | null;
   officeCommissionAmount: string | null;
   officeShiriniAmount: string | null;
@@ -106,6 +116,9 @@ type AgentRow = {
   dealsWithCommission: number;
   saleVolume: string;
   commissionTotal: string;
+  /** تفکیک مجموع سهم مشاور به کمیسیون و شیرینی */
+  commissionPart: string;
+  shiriniPart: string;
   commissionPaid: string;
   commissionUnpaid: string;
 };
@@ -117,11 +130,19 @@ type AgentsData = {
     dealsWithCommission: number;
     saleVolume: string;
     commissionTotal: string;
+    commissionPart: string;
+    shiriniPart: string;
     commissionPaid: string;
     commissionUnpaid: string;
     officeTotal: string;
+    officeCommissionTotal: string;
+    officeShiriniTotal: string;
     externalTotal: string;
+    externalCommissionTotal: string;
+    externalShiriniTotal: string;
     commissionGrandTotal: string;
+    grandTotalCommission: string;
+    grandTotalShirini: string;
   };
 };
 
@@ -148,6 +169,8 @@ type EditShare = {
   userId: string | null;
   name: string;
   pct: string;
+  /** سهم از شیرینی (٪) — جدا از سهم از کمیسیون */
+  shiriniPct: string;
   isExternal: boolean;
 };
 
@@ -281,8 +304,13 @@ export default function AccountingPage() {
 
   // سهم‌بندی در مودال ویرایش (فقط مدیر)
   const [editOfficePct, setEditOfficePct] = useState("50");
+  const [editOfficeShiriniPct, setEditOfficeShiriniPct] = useState("50");
   const [editShares, setEditShares] = useState<EditShare[]>([]);
   const [users, setUsers] = useState<{ id: string; name: string; role: string; active: boolean }[]>([]);
+  // لیست مشاورها موقع باز شدن صفحه لود می‌شود تا کشوی انتخاب مشاور هیچ‌وقت
+  // خالی نماند؛ خطای لود پنهان نمی‌شود و دکمه تلاش دوباره دارد.
+  const [usersLoading, setUsersLoading] = useState(false);
+  const [usersError, setUsersError] = useState<string | null>(null);
   const [shareSettlingId, setShareSettlingId] = useState<string | null>(null);
 
   // فرم صندوق
@@ -342,6 +370,24 @@ export default function AccountingPage() {
       await loadBase();
     })();
   }, [loadBase]);
+
+  const loadUsers = useCallback(async () => {
+    setUsersLoading(true);
+    setUsersError(null);
+    try {
+      const u = await apiJson<{ id: string; name: string; role: string; active: boolean }[]>("/api/users");
+      setUsers(u.filter((x) => x.active));
+    } catch (e) {
+      setUsersError(errorMessage(e));
+    } finally {
+      setUsersLoading(false);
+    }
+  }, []);
+
+  // لیست مشاورها برای کشوی سهم‌ها، موقع باز شدن صفحه (فقط مدیر — کشو فقط در مودال مدیر است)
+  useEffect(() => {
+    if (isOwner) void loadUsers();
+  }, [isOwner, loadUsers]);
 
   useEffect(() => {
     void (async () => {
@@ -428,69 +474,92 @@ export default function AccountingPage() {
     // سهم‌بندی: اگر سهم واقعی دارد همان را بیاور؛ وگرنه پیش‌فرض دفتر ۵۰٪ + مشاور معامله ۵۰٪ —
     // چه کمیسیون داشته باشد چه هنوز «تعیین نشده» باشد؛ وگرنه با محاسبه خودکار مبلغ از روی
     // قیمت × درصد، بخش سهم‌بندی با دفتر ۵۰٪ تنها و هشدار مجموع ۵۰٪ باز می‌شد.
+    // هر سهم دو درصد جدا دارد (کمیسیون و شیرینی)؛ خالیِ ذخیره‌شده یعنی همان درصد کمیسیون.
     const realShares = deal.shares.filter((s) => !s.virtual);
     if (realShares.length > 0) {
       setEditOfficePct(deal.officePct != null ? String(deal.officePct) : "50");
+      setEditOfficeShiriniPct(
+        deal.officeShiriniPct != null ? String(deal.officeShiriniPct) : deal.officePct != null ? String(deal.officePct) : "50",
+      );
       setEditShares(
         realShares.map((s, i) => ({
           key: `s-${s.id ?? i}`,
           userId: s.userId,
           name: s.name,
           pct: String(s.pct),
+          shiriniPct: s.shiriniPct != null ? String(s.shiriniPct) : String(s.pct),
           isExternal: s.isExternal,
         }))
       );
     } else {
       setEditOfficePct("50");
-      setEditShares([{ key: "s-new-0", userId: deal.agent.id, name: deal.agent.name, pct: "50", isExternal: false }]);
+      setEditOfficeShiriniPct("50");
+      setEditShares([{ key: "s-new-0", userId: deal.agent.id, name: deal.agent.name, pct: "50", shiriniPct: "50", isExternal: false }]);
     }
-    // لیست کاربران برای انتخاب مشاور در سهم‌ها
-    apiJson<{ id: string; name: string; role: string; active: boolean }[]>("/api/users")
-      .then((u) => setUsers(u.filter((x) => x.active)))
-      .catch(() => undefined);
+    // لیست کاربران برای انتخاب مشاور در سهم‌ها — موقع باز شدن صفحه لود شده؛
+    // اگر خالی است (لود نشده یا خطا خورده) اینجا دوباره تلاش می‌شود.
+    if (users.length === 0 && !usersLoading) void loadUsers();
   }
 
   // تقسیم مساوی خودکار — فقط پیش‌فرض است؛ درصد دستی تا وقتی ترکیب عوض نشود می‌ماند.
   // با اضافه/حذف سهم یا عوض شدن سهم دفتر دوباره مساوی تقسیم می‌شود؛ تایپ دستی درصد، بقیه را عوض نمی‌کند.
-  function resplitShares(officePctStr: string, shares: EditShare[]): EditShare[] {
+  // هر دو مبنا جدا مساوی تقسیم می‌شوند: کمیسیون از (۱۰۰ − سهم دفتر از کمیسیون) و شیرینی از (۱۰۰ − سهم دفتر از شیرینی).
+  function resplitShares(officePctStr: string, officeShiriniPctStr: string, shares: EditShare[]): EditShare[] {
     const office = Number(toEnDigits(officePctStr).replace(/[^0-9.]/g, "")) || 0;
+    const officeShirini = Number(toEnDigits(officeShiriniPctStr).replace(/[^0-9.]/g, "")) || 0;
     const pcts = equalSplit(office, shares.length);
-    return shares.map((s, i) => ({ ...s, pct: String(pcts[i] ?? 0) }));
+    const shiriniPcts = equalSplit(officeShirini, shares.length);
+    return shares.map((s, i) => ({ ...s, pct: String(pcts[i] ?? 0), shiriniPct: String(shiriniPcts[i] ?? 0) }));
   }
 
   function onEditOfficePct(v: string) {
     const clean = toEnDigits(v).replace(/[^0-9.]/g, "");
     setEditOfficePct(clean);
-    setEditShares((prev) => resplitShares(clean, prev));
+    setEditShares((prev) => resplitShares(clean, editOfficeShiriniPct, prev));
+  }
+
+  function onEditOfficeShiriniPct(v: string) {
+    const clean = toEnDigits(v).replace(/[^0-9.]/g, "");
+    setEditOfficeShiriniPct(clean);
+    setEditShares((prev) => resplitShares(editOfficePct, clean, prev));
   }
 
   function addShareRow(isExternal: boolean) {
     setEditShares((prev) => {
       const next: EditShare[] = [...prev];
       if (isExternal) {
-        next.push({ key: `s-new-${Date.now()}`, userId: null, name: "", pct: "0", isExternal: true });
+        next.push({ key: `s-new-${Date.now()}`, userId: null, name: "", pct: "0", shiriniPct: "0", isExternal: true });
       } else {
         const used = new Set(prev.map((s) => s.userId));
-        const firstFree = users.find((u) => !used.has(u.id));
+        // پیش‌فرض: مشاور خود معامله، اگر هنوز سهمی ندارد؛ وگرنه اولین مشاور آزاد
+        const dealAgent =
+          editingDeal && !used.has(editingDeal.agent.id) ? users.find((u) => u.id === editingDeal.agent.id) : undefined;
+        const firstFree = dealAgent ?? users.find((u) => !used.has(u.id));
         next.push({
           key: `s-new-${Date.now()}`,
           userId: firstFree?.id ?? "",
           name: firstFree?.name ?? "",
           pct: "0",
+          shiriniPct: "0",
           isExternal: false,
         });
       }
-      return resplitShares(editOfficePct, next);
+      return resplitShares(editOfficePct, editOfficeShiriniPct, next);
     });
   }
 
   function removeShareRow(key: string) {
-    setEditShares((prev) => resplitShares(editOfficePct, prev.filter((s) => s.key !== key)));
+    setEditShares((prev) => resplitShares(editOfficePct, editOfficeShiriniPct, prev.filter((s) => s.key !== key)));
   }
 
   function onSharePct(key: string, v: string) {
     const clean = toEnDigits(v).replace(/[^0-9.]/g, "");
     setEditShares((prev) => prev.map((s) => (s.key === key ? { ...s, pct: clean } : s)));
+  }
+
+  function onShareShiriniPct(key: string, v: string) {
+    const clean = toEnDigits(v).replace(/[^0-9.]/g, "");
+    setEditShares((prev) => prev.map((s) => (s.key === key ? { ...s, shiriniPct: clean } : s)));
   }
 
   function onShareUser(key: string, userId: string) {
@@ -503,30 +572,37 @@ export default function AccountingPage() {
     );
   }
 
-  function sharesTotal(): number {
+  /** مجموع دو سهم‌بندی جدا: کمیسیون و شیرینی — هر دو باید دقیقاً ۱۰۰٪ شوند. */
+  function sharesTotal(): { commission: number; shirini: number } {
     const office = Number(toEnDigits(editOfficePct).replace(/[^0-9.]/g, "")) || 0;
-    return office + editShares.reduce((t, s) => t + (Number(toEnDigits(s.pct).replace(/[^0-9.]/g, "")) || 0), 0);
+    const officeShirini = Number(toEnDigits(editOfficeShiriniPct).replace(/[^0-9.]/g, "")) || 0;
+    return {
+      commission: office + editShares.reduce((t, s) => t + (Number(toEnDigits(s.pct).replace(/[^0-9.]/g, "")) || 0), 0),
+      shirini: officeShirini + editShares.reduce((t, s) => t + (Number(toEnDigits(s.shiriniPct).replace(/[^0-9.]/g, "")) || 0), 0),
+    };
   }
 
-  // بنر خطای مجموع، زنده با هر ویرایش به‌روز می‌شود: وقتی مجموع درست شد پاک می‌شود،
+  // بنر خطای مجموع، زنده با هر ویرایش به‌روز می‌شود: وقتی هر دو مجموع درست شد پاک می‌شود،
   // و تا وقتی غلط است عدد تازه را نشان می‌دهد — نه عدد لحظه ذخیره.
   useEffect(() => {
     void (async () => {
       if (!editError.startsWith("مجموع سهم دفتر")) return;
       const total = sharesTotal();
-      if (Math.abs(total - 100) < 0.01) {
+      if (Math.abs(total.commission - 100) < 0.01 && Math.abs(total.shirini - 100) < 0.01) {
         setEditError("");
       } else {
-        setEditError(`مجموع سهم دفتر و سهم‌ها باید دقیقاً ۱۰۰٪ شود (الان ${toFaDigits(String(Math.round(total * 100) / 100))}٪ است)`);
+        setEditError(
+          `مجموع سهم دفتر و سهم‌ها باید دقیقاً ۱۰۰٪ شود (کمیسیون الان ${toFaDigits(String(Math.round(total.commission * 100) / 100))}٪، شیرینی ${toFaDigits(String(Math.round(total.shirini * 100) / 100))}٪ است)`,
+        );
       }
     })();
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [editOfficePct, editShares]);
+  }, [editOfficePct, editOfficeShiriniPct, editShares]);
 
   // وقتی برای اولین بار مبلغ یا شیرینی یک طرف وارد می‌شود، سهم‌بندی با پیش‌فرض دفتر ۵۰٪ + مشاور معامله ۵۰٪ پر می‌شود
   function ensureSharesDefault() {
     if (editShares.length === 0 && editingDeal && !editingDeal.shares.some((s) => !s.virtual)) {
-      setEditShares([{ key: "s-new-0", userId: editingDeal.agent.id, name: editingDeal.agent.name, pct: "50", isExternal: false }]);
+      setEditShares([{ key: "s-new-0", userId: editingDeal.agent.id, name: editingDeal.agent.name, pct: "50", shiriniPct: "50", isExternal: false }]);
     }
   }
 
@@ -542,7 +618,7 @@ export default function AccountingPage() {
     const clean = toEnDigits(v).replace(/[^0-9]/g, "");
     setEditSellerShirini(clean);
     if (clean !== "" && editShares.length === 0 && editingDeal && !editingDeal.shares.some((s) => !s.virtual)) {
-      setEditShares([{ key: "s-new-0", userId: editingDeal.agent.id, name: editingDeal.agent.name, pct: "50", isExternal: false }]);
+      setEditShares([{ key: "s-new-0", userId: editingDeal.agent.id, name: editingDeal.agent.name, pct: "50", shiriniPct: "50", isExternal: false }]);
     }
   }
 
@@ -550,7 +626,7 @@ export default function AccountingPage() {
     const clean = toEnDigits(v).replace(/[^0-9]/g, "");
     setEditBuyerShirini(clean);
     if (clean !== "" && editShares.length === 0 && editingDeal && !editingDeal.shares.some((s) => !s.virtual)) {
-      setEditShares([{ key: "s-new-0", userId: editingDeal.agent.id, name: editingDeal.agent.name, pct: "50", isExternal: false }]);
+      setEditShares([{ key: "s-new-0", userId: editingDeal.agent.id, name: editingDeal.agent.name, pct: "50", shiriniPct: "50", isExternal: false }]);
     }
   }
 
@@ -696,7 +772,7 @@ export default function AccountingPage() {
         }
       }
     }
-    // سهم‌بندی: هر درصد دستی قابل تغییر است؛ فقط مجموع باید دقیقاً ۱۰۰٪ شود
+    // سهم‌بندی: هر درصد دستی قابل تغییر است؛ فقط هر دو مجموع باید دقیقاً ۱۰۰٪ شود
     const hasRealShares = editingDeal.shares.some((s) => !s.virtual);
     const sharesLocked = editingDeal.shares.some((s) => !s.virtual && s.settled);
     // درآمد قابل‌تقسیم (خالص) = کمیسیون دو طرف + هر دو شیرینی منهای تخفیف دو طرف؛ خالی یعنی صفر
@@ -731,7 +807,7 @@ export default function AccountingPage() {
         setEditError("سهمی تسویه شده است؛ برای تغییر اول تسویه را برگردانید");
         return;
       }
-      shareBody = { officePct: 100, shares: [] };
+      shareBody = { officePct: 100, officeShiriniPct: 100, shares: [] };
     } else if (editHasIncome && !sharesLocked) {
       if (editNet <= 0) {
         setEditError("جمع خالص (کمیسیون و شیرینی منهای تخفیف) باید بیشتر از صفر باشد");
@@ -739,16 +815,23 @@ export default function AccountingPage() {
       }
       const office = Number(toEnDigits(editOfficePct).replace(/[^0-9.]/g, ""));
       if (!Number.isFinite(office) || office < 0 || office > 100) {
-        setEditError("سهم دفتر باید بین ۰ تا ۱۰۰ باشد");
+        setEditError("سهم دفتر از کمیسیون باید بین ۰ تا ۱۰۰ باشد");
         return;
       }
-      if (editShares.length === 0 && office < 100) {
+      const officeShirini = Number(toEnDigits(editOfficeShiriniPct).replace(/[^0-9.]/g, ""));
+      if (!Number.isFinite(officeShirini) || officeShirini < 0 || officeShirini > 100) {
+        setEditError("سهم دفتر از شیرینی باید بین ۰ تا ۱۰۰ باشد");
+        return;
+      }
+      if (editShares.length === 0 && (office < 100 || officeShirini < 100)) {
         setEditError("مجموع سهم دفتر و سهم‌ها باید دقیقاً ۱۰۰٪ شود");
         return;
       }
       const total = sharesTotal();
-      if (Math.abs(total - 100) >= 0.01) {
-        setEditError(`مجموع سهم دفتر و سهم‌ها باید دقیقاً ۱۰۰٪ شود (الان ${toFaDigits(String(Math.round(total * 100) / 100))}٪ است)`);
+      if (Math.abs(total.commission - 100) >= 0.01 || Math.abs(total.shirini - 100) >= 0.01) {
+        setEditError(
+          `مجموع سهم دفتر و سهم‌ها باید دقیقاً ۱۰۰٪ شود (کمیسیون الان ${toFaDigits(String(Math.round(total.commission * 100) / 100))}٪، شیرینی ${toFaDigits(String(Math.round(total.shirini * 100) / 100))}٪ است)`,
+        );
         return;
       }
       const seen = new Set<string>();
@@ -756,6 +839,11 @@ export default function AccountingPage() {
         const pct = Number(toEnDigits(s.pct).replace(/[^0-9.]/g, ""));
         if (!Number.isFinite(pct) || pct <= 0 || pct > 100) {
           setEditError("درصد سهم هر مشاور باید بیشتر از صفر و حداکثر ۱۰۰ باشد");
+          return;
+        }
+        const shiriniPct = Number(toEnDigits(s.shiriniPct).replace(/[^0-9.]/g, ""));
+        if (!Number.isFinite(shiriniPct) || shiriniPct < 0 || shiriniPct > 100) {
+          setEditError("درصد شیرینی هر سهم باید بین ۰ تا ۱۰۰ باشد");
           return;
         }
         if (s.isExternal) {
@@ -777,10 +865,19 @@ export default function AccountingPage() {
       }
       shareBody = {
         officePct: office,
+        officeShiriniPct: officeShirini,
         shares: editShares.map((s) =>
           s.isExternal
-            ? { name: s.name.trim(), pct: Number(toEnDigits(s.pct).replace(/[^0-9.]/g, "")) }
-            : { userId: s.userId, pct: Number(toEnDigits(s.pct).replace(/[^0-9.]/g, "")) }
+            ? {
+                name: s.name.trim(),
+                pct: Number(toEnDigits(s.pct).replace(/[^0-9.]/g, "")),
+                shiriniPct: Number(toEnDigits(s.shiriniPct).replace(/[^0-9.]/g, "")),
+              }
+            : {
+                userId: s.userId,
+                pct: Number(toEnDigits(s.pct).replace(/[^0-9.]/g, "")),
+                shiriniPct: Number(toEnDigits(s.shiriniPct).replace(/[^0-9.]/g, "")),
+              }
         ),
       };
     }
@@ -877,6 +974,10 @@ export default function AccountingPage() {
 
   // مبنای پیش‌نمایش سهم‌بندی در فرم ویرایش: کمیسیون دو طرف + هر دو شیرینی منهای تخفیف دو طرف
   const editSplitBase = editCommissionTotal + editShiriniTotal - editDiscountTotal;
+  // دو مبنای مستقل تقسیم در پیش‌نمایش — مثل سرور: تخفیف اول از کمیسیون کم می‌شود،
+  // اضافه‌اش از شیرینی؛ جمعشان دقیقاً مبنای تقسیم است.
+  const editCommissionPool = Math.max(0, editCommissionTotal - editDiscountTotal);
+  const editShiriniPool = Math.max(0, editShiriniTotal - Math.max(0, editDiscountTotal - editCommissionTotal));
 
   // جمع ناخالص (کمیسیون + هر دو شیرینی) و خطاهای زنده تخفیف: تخفیف بیشتر از جمع ناخالص
   // همان خطای سرور است، ولی همان‌جا در فرم نشان داده می‌شود و ذخیره قفل می‌شود؛
@@ -894,16 +995,22 @@ export default function AccountingPage() {
   /** مالیات فرم ویرایش روی کمیسیون کل فعلی حساب می‌شود (نه روی مبنای خالص). */
   const editTax = editSellerVat + editBuyerVat;
 
-  /** تفکیک سهم به کمیسیون و شیرینی در پیش‌نمایش فرم ویرایش — مثل سرور: بخش کمیسیون
-   *  از کمیسیون خالص، بخش شیرینی = مبلغ سهم منهای بخش کمیسیون تا جمع دقیق شود. */
-  function editShareParts(pct: number): { amount: number; commission: number; shirini: number } {
-    const amount = editSplitBase <= 0 ? 0 : Math.round((editSplitBase * pct) / 100);
-    const commission = Math.round((Math.max(0, editCommissionTotal - editDiscountTotal) * pct) / 100);
-    return { amount, commission, shirini: amount - commission };
+  /** تفکیک سهم به کمیسیون و شیرینی در پیش‌نمایش فرم ویرایش — مثل سرور: دو درصد
+   *  جدا روی دو مبنای مستقل؛ وقتی درصد شیرینی برابر درصد کمیسیون است، مبلغ
+   *  دقیقاً مثل قبل روی مبنای کل حساب می‌شود. */
+  function editShareParts(pct: number, shiriniPct: number): { amount: number; commission: number; shirini: number } {
+    const commission = Math.round((editCommissionPool * pct) / 100);
+    if (shiriniPct === pct) {
+      const amount = editSplitBase <= 0 ? 0 : Math.round((editSplitBase * pct) / 100);
+      return { amount, commission, shirini: amount - commission };
+    }
+    const shirini = Math.round((editShiriniPool * shiriniPct) / 100);
+    return { amount: commission + shirini, commission, shirini };
   }
 
   const editOfficePctNum = Number(toEnDigits(editOfficePct).replace(/[^0-9.]/g, "")) || 0;
-  const editOfficeParts = editShareParts(editOfficePctNum);
+  const editOfficeShiriniPctNum = Number(toEnDigits(editOfficeShiriniPct).replace(/[^0-9.]/g, "")) || 0;
+  const editOfficeParts = editShareParts(editOfficePctNum, editOfficeShiriniPctNum);
 
   /** فرم یک طرف معامله در مودال ویرایش: دریافتی، درصد و مبلغ کمیسیون، شیرینی و تخفیف همان طرف. */
   function renderSideForm(side: "seller" | "buyer") {
@@ -1111,11 +1218,21 @@ export default function AccountingPage() {
                 <div className="rounded-[12px] border border-[var(--line)] bg-white px-3 py-2">
                   <div className="text-[11px] text-[var(--ink-3)]">سهم دفتر</div>
                   <div className="text-[20px] font-extrabold">{formatToman(summary.officeTotal)}</div>
+                  {summary.officeCommissionTotal != null && summary.officeShiriniTotal != null && (
+                    <div className="text-[12px] text-[var(--ink-3)]">
+                      کمیسیون {formatToman(summary.officeCommissionTotal)} · شیرینی {formatToman(summary.officeShiriniTotal)}
+                    </div>
+                  )}
                 </div>
                 <div className="rounded-[12px] border border-[var(--line)] bg-white px-3 py-2">
                   <div className="text-[11px] text-[var(--ink-3)]">بدهی به مشاوران</div>
                   <div className="text-[20px] font-extrabold text-red-600">{formatToman(summary.debtToAgents)}</div>
                   <div className="text-[12px] text-[var(--ink-3)]">سهم‌های تسویه‌نشده</div>
+                  {summary.debtToAgentsCommission != null && summary.debtToAgentsShirini != null && (
+                    <div className="text-[12px] text-[var(--ink-3)]">
+                      کمیسیون {formatToman(summary.debtToAgentsCommission)} · شیرینی {formatToman(summary.debtToAgentsShirini)}
+                    </div>
+                  )}
                 </div>
               </>
             )}
@@ -1214,7 +1331,7 @@ export default function AccountingPage() {
                               {!isOwner &&
                                 d.shares.map((s) => (
                                   <span key={s.id ?? s.name} className="block text-[12px] font-normal text-[var(--ink-3)]">
-                                    سهم من: {toFaDigits(String(s.pct))}٪ · {formatToman(s.amount)}
+                                    سهم من: {toFaDigits(String(s.pct))}٪ کمیسیون · {toFaDigits(String(s.shiriniPct))}٪ شیرینی · {formatToman(s.amount)}
                                     <span className="block text-[11px]">
                                       کمیسیون {formatToman(s.commissionAmount)} · شیرینی {formatToman(s.shiriniAmount)}
                                     </span>
@@ -1232,7 +1349,8 @@ export default function AccountingPage() {
                             ) : (
                               <div className="space-y-1">
                                 <div>
-                                  دفتر {toFaDigits(String(d.officePct ?? 0))}٪ · {formatToman(d.officeAmount)}
+                                  دفتر {toFaDigits(String(d.officePct ?? 0))}٪ کمیسیون
+                                  {d.officeShiriniPct != null && d.officeShiriniPct !== d.officePct ? ` · ${toFaDigits(String(d.officeShiriniPct))}٪ شیرینی` : ""} · {formatToman(d.officeAmount)}
                                   <span className="block text-[11px] text-[var(--ink-3)]">
                                     کمیسیون {formatToman(d.officeCommissionAmount)} · شیرینی {formatToman(d.officeShiriniAmount)}
                                   </span>
@@ -1240,7 +1358,7 @@ export default function AccountingPage() {
                                 {d.shares.map((s) => (
                                   <div key={s.id ?? s.name} className="flex items-center justify-between gap-1.5">
                                     <span>
-                                      {s.isExternal ? `تعاون: ${s.name}` : s.name} {toFaDigits(String(s.pct))}٪ · {formatToman(s.amount)}
+                                      {s.isExternal ? `تعاون: ${s.name}` : s.name} {toFaDigits(String(s.pct))}٪ کمیسیون · {toFaDigits(String(s.shiriniPct))}٪ شیرینی · {formatToman(s.amount)}
                                       <span className="block text-[11px] text-[var(--ink-3)]">
                                         کمیسیون {formatToman(s.commissionAmount)} · شیرینی {formatToman(s.shiriniAmount)}
                                       </span>
@@ -1469,7 +1587,12 @@ export default function AccountingPage() {
                         <td className="py-2.5 pr-2 font-medium text-right">{u.name} {u.role === "OWNER" ? "(مدیر)" : ""}</td>
                         <td className="text-center">{toFaDigits(String(u.dealsCompleted))}</td>
                         <td className="text-center">{formatToman(u.saleVolume)}</td>
-                        <td className="text-center font-bold">{formatToman(u.commissionTotal)}</td>
+                        <td className="text-center font-bold">
+                          {formatToman(u.commissionTotal)}
+                          <span className="block text-[11px] font-normal text-[var(--ink-3)]">
+                            کمیسیون {formatToman(u.commissionPart)} · شیرینی {formatToman(u.shiriniPart)}
+                          </span>
+                        </td>
                         <td className="text-center text-emerald-600">{formatToman(u.commissionPaid)}</td>
                         <td className="text-center">
                           <span className={BigInt(u.commissionUnpaid) > BigInt(0) ? "text-red-600 font-bold" : ""}>{formatToman(u.commissionUnpaid)}</span>
@@ -1480,7 +1603,12 @@ export default function AccountingPage() {
                       <td className="py-2.5 pr-2 text-right">جمع کل</td>
                       <td className="text-center">{toFaDigits(String(agents.totals.dealsCompleted))}</td>
                       <td className="text-center">{formatToman(agents.totals.saleVolume)}</td>
-                      <td className="text-center">{formatToman(agents.totals.commissionTotal)}</td>
+                      <td className="text-center">
+                        {formatToman(agents.totals.commissionTotal)}
+                        <span className="block text-[11px] font-normal text-[var(--ink-3)]">
+                          کمیسیون {formatToman(agents.totals.commissionPart)} · شیرینی {formatToman(agents.totals.shiriniPart)}
+                        </span>
+                      </td>
                       <td className="text-center">{formatToman(agents.totals.commissionPaid)}</td>
                       <td className="text-center">{formatToman(agents.totals.commissionUnpaid)}</td>
                     </tr>
@@ -1488,8 +1616,11 @@ export default function AccountingPage() {
                 </table>
               </div>
               <p className="mt-3 text-[12px] text-[var(--ink-3)]">
-                سهم دفتر: {formatToman(agents.totals.officeTotal)} · تعاون (بیرونی): {formatToman(agents.totals.externalTotal)} · جمع کل درآمد (کمیسیون +{" "}
-                شیرینی − تخفیف): {formatToman(agents.totals.commissionGrandTotal)}
+                سهم دفتر: {formatToman(agents.totals.officeTotal)} (کمیسیون {formatToman(agents.totals.officeCommissionTotal)} · شیرینی{" "}
+                {formatToman(agents.totals.officeShiriniTotal)}) · تعاون (بیرونی): {formatToman(agents.totals.externalTotal)} (کمیسیون{" "}
+                {formatToman(agents.totals.externalCommissionTotal)} · شیرینی {formatToman(agents.totals.externalShiriniTotal)}) · جمع کل درآمد (کمیسیون +{" "}
+                شیرینی − تخفیف): {formatToman(agents.totals.commissionGrandTotal)} (کمیسیون {formatToman(agents.totals.grandTotalCommission)} · شیرینی{" "}
+                {formatToman(agents.totals.grandTotalShirini)})
               </p>
               </>
             ) : null}
@@ -1587,12 +1718,16 @@ export default function AccountingPage() {
                     <b className="text-[13px]">سهم‌بندی</b>
                     <p className="mt-1 text-[12px] text-[var(--ink-3)]">سهمی تسویه شده است؛ برای تغییر اول تسویه را برگردانید.</p>
                     <div className="mt-2 space-y-1 text-[12px]">
-                      <div>دفتر {toFaDigits(String(editingDeal.officePct ?? 0))}٪</div>
+                      <div>
+                        دفتر {toFaDigits(String(editingDeal.officePct ?? 0))}٪ کمیسیون ·{" "}
+                        {toFaDigits(String(editingDeal.officeShiriniPct ?? editingDeal.officePct ?? 0))}٪ شیرینی
+                      </div>
                       {editingDeal.shares
                         .filter((s) => !s.virtual)
                         .map((s) => (
                           <div key={s.id ?? s.name}>
-                            {s.isExternal ? `تعاون: ${s.name}` : s.name} {toFaDigits(String(s.pct))}٪{s.settled ? " · تسویه شد" : ""}
+                            {s.isExternal ? `تعاون: ${s.name}` : s.name} {toFaDigits(String(s.pct))}٪ کمیسیون · {toFaDigits(String(s.shiriniPct))}٪ شیرینی
+                            {s.settled ? " · تسویه شد" : ""}
                           </div>
                         ))}
                     </div>
@@ -1601,15 +1736,22 @@ export default function AccountingPage() {
                   <div className="rounded-[12px] border border-[var(--line)] bg-[#fafcfe] p-3 space-y-3">
                     <div className="flex items-center justify-between gap-2">
                       <b className="text-[13px]">👥 سهم‌بندی کمیسیون و شیرینی</b>
-                      <span className={Math.abs(sharesTotal() - 100) < 0.01 ? "text-[12px] text-emerald-600 font-bold" : "text-[12px] text-red-600 font-bold"}>
-                        {Math.abs(sharesTotal() - 100) < 0.01
-                          ? "✓ مجموع ۱۰۰٪ است"
-                          : `⚠ مجموع ${toFaDigits(String(Math.round(sharesTotal() * 100) / 100))}٪ است — باید ۱۰۰٪ شود`}
-                      </span>
+                      {(() => {
+                        const t = sharesTotal();
+                        const okC = Math.abs(t.commission - 100) < 0.01;
+                        const okS = Math.abs(t.shirini - 100) < 0.01;
+                        return (
+                          <span className={okC && okS ? "text-[12px] text-emerald-600 font-bold" : "text-[12px] text-red-600 font-bold"}>
+                            {okC && okS
+                              ? "✓ هر دو مجموع ۱۰۰٪ است"
+                              : `⚠ مجموع کمیسیون ${toFaDigits(String(Math.round(t.commission * 100) / 100))}٪ · شیرینی ${toFaDigits(String(Math.round(t.shirini * 100) / 100))}٪ — هر دو باید ۱۰۰٪ شوند`}
+                          </span>
+                        );
+                      })()}
                     </div>
                     <div className="grid grid-cols-2 gap-3">
                       <label className="block text-[13px]">
-                        سهم دفتر ٪
+                        سهم دفتر از کمیسیون ٪
                         <input
                           className="mt-1 w-full rounded-[10px] border border-[var(--line)] px-3 py-2 text-[14px]"
                           inputMode="decimal"
@@ -1617,7 +1759,16 @@ export default function AccountingPage() {
                           onChange={(e) => onEditOfficePct(e.target.value)}
                         />
                       </label>
-                      <div className="text-[13px]">
+                      <label className="block text-[13px]">
+                        سهم دفتر از شیرینی ٪
+                        <input
+                          className="mt-1 w-full rounded-[10px] border border-[var(--line)] px-3 py-2 text-[14px]"
+                          inputMode="decimal"
+                          value={editOfficeShiriniPct}
+                          onChange={(e) => onEditOfficeShiriniPct(e.target.value)}
+                        />
+                      </label>
+                      <div className="col-span-2 text-[13px]">
                         مبلغ سهم دفتر
                         <div className="mt-1 rounded-[10px] border border-[var(--line)] bg-white px-3 py-2 text-[14px]">
                           {formatToman(editSplitBase <= 0 ? null : String(editOfficeParts.amount))}
@@ -1629,9 +1780,20 @@ export default function AccountingPage() {
                         )}
                       </div>
                     </div>
+                    {usersError && (
+                      <div className="rounded-lg bg-amber-50 px-3 py-2 text-[13px] text-amber-800">
+                        لیست مشاورها بارگذاری نشد ({usersError}){" "}
+                        <button type="button" className="font-bold underline" onClick={() => void loadUsers()}>
+                          تلاش دوباره
+                        </button>
+                      </div>
+                    )}
                     <div className="space-y-2">
                       {editShares.map((s) => {
-                        const parts = editShareParts(Number(toEnDigits(s.pct).replace(/[^0-9.]/g, "")) || 0);
+                        const parts = editShareParts(
+                          Number(toEnDigits(s.pct).replace(/[^0-9.]/g, "")) || 0,
+                          Number(toEnDigits(s.shiriniPct).replace(/[^0-9.]/g, "")) || 0,
+                        );
                         return (
                         <div key={s.key} className="flex flex-wrap items-end gap-2">
                           {s.isExternal ? (
@@ -1655,6 +1817,7 @@ export default function AccountingPage() {
                                 onChange={(e) => onShareUser(s.key, e.target.value)}
                               >
                                 <option value="">— انتخاب مشاور —</option>
+                                {usersLoading && <option value="" disabled>در حال بارگذاری…</option>}
                                 {users.map((u) => (
                                   <option key={u.id} value={u.id}>
                                     {u.name}
@@ -1664,12 +1827,21 @@ export default function AccountingPage() {
                             </label>
                           )}
                           <label className="block w-[90px] text-[13px]">
-                            سهم ٪
+                            سهم از کمیسیون ٪
                             <input
                               className="mt-1 w-full rounded-[10px] border border-[var(--line)] px-3 py-2 text-[14px]"
                               inputMode="decimal"
                               value={s.pct}
                               onChange={(e) => onSharePct(s.key, e.target.value)}
+                            />
+                          </label>
+                          <label className="block w-[90px] text-[13px]">
+                            سهم از شیرینی ٪
+                            <input
+                              className="mt-1 w-full rounded-[10px] border border-[var(--line)] px-3 py-2 text-[14px]"
+                              inputMode="decimal"
+                              value={s.shiriniPct}
+                              onChange={(e) => onShareShiriniPct(s.key, e.target.value)}
                             />
                           </label>
                           <span className="pb-2 text-[12px] text-[var(--ink-3)]">
@@ -1686,16 +1858,16 @@ export default function AccountingPage() {
                       })}
                     </div>
                     <div className="flex flex-wrap gap-2">
-                      <Button type="button" size="sm" variant="outline" onClick={() => addShareRow(false)}>
-                        ＋ افزودن مشاور
+                      <Button type="button" size="sm" variant="outline" onClick={() => addShareRow(false)} disabled={usersLoading}>
+                        {usersLoading ? "در حال بارگذاری…" : "＋ افزودن مشاور"}
                       </Button>
                       <Button type="button" size="sm" variant="outline" onClick={() => addShareRow(true)}>
                         ＋ افزودن همکار بیرونی (تعاون)
                       </Button>
                     </div>
                     <p className="text-[11px] text-[var(--ink-3)]">
-                      با اضافه یا حذف سهم، یا با عوض شدن سهم دفتر، سهم مشاورها خودکار مساوی تقسیم می‌شود؛ هر درصد را می‌توانید دستی هم عوض کنید و تا وقتی ترکیب
-                      عوض نشود می‌ماند.
+                      کمیسیون و شیرینی دو مبنای جدا دارند و هر کدام باید جدا به ۱۰۰٪ برسد؛ با اضافه یا حذف سهم، یا با عوض شدن سهم دفتر، هر دو سهم خودکار
+                      مساوی تقسیم می‌شوند؛ هر درصد را می‌توانید دستی هم عوض کنید و تا وقتی ترکیب عوض نشود می‌ماند.
                     </p>
                   </div>
                 )}
@@ -1780,6 +1952,37 @@ export default function AccountingPage() {
                   دریافتی: {formatToman(previewReceived)} {previewDeal.commissionPaid ? "· دریافت شد" : "· پرداخت‌نشده"}
                 </div>
                 <div className={previewOutstanding > 0 ? "font-bold text-red-600" : ""}>مانده: {formatToman(previewOutstanding)}</div>
+              </div>
+            )}
+            {/* سهم‌بندی — فقط مدیر؛ مثل جدول: دو درصد جدا (کمیسیون و شیرینی) با مبلغ هر بخش */}
+            {dealHasIncome(previewDeal) && previewDeal.shares.length > 0 && (
+              <div className="mt-3 rounded-[12px] border border-[var(--line)] bg-[var(--paper-2)] p-3 text-[13px] space-y-1">
+                <b>سهم‌بندی</b>
+                {previewDeal.shares.some((s) => s.virtual) ? (
+                  <div className="text-[var(--ink-3)]">تقسیم نشده — {previewDeal.shares[0]?.name} ۱۰۰٪</div>
+                ) : (
+                  <>
+                    {previewDeal.officeAmount != null && previewDeal.officePct != null && (
+                      <div>
+                        دفتر {toFaDigits(String(previewDeal.officePct))}٪ کمیسیون ·{" "}
+                        {toFaDigits(String(previewDeal.officeShiriniPct ?? previewDeal.officePct))}٪ شیرینی · {formatToman(previewDeal.officeAmount)}
+                        <span className="block text-[11px] text-[var(--ink-3)]">
+                          کمیسیون {formatToman(previewDeal.officeCommissionAmount)} · شیرینی {formatToman(previewDeal.officeShiriniAmount)}
+                        </span>
+                      </div>
+                    )}
+                    {previewDeal.shares.map((s) => (
+                      <div key={s.id ?? s.name}>
+                        {s.isExternal ? `تعاون: ${s.name}` : s.name} {toFaDigits(String(s.pct))}٪ کمیسیون · {toFaDigits(String(s.shiriniPct))}٪ شیرینی ·{" "}
+                        {formatToman(s.amount)}
+                        {s.settled ? " · تسویه شد" : ""}
+                        <span className="block text-[11px] text-[var(--ink-3)]">
+                          کمیسیون {formatToman(s.commissionAmount)} · شیرینی {formatToman(s.shiriniAmount)}
+                        </span>
+                      </div>
+                    ))}
+                  </>
+                )}
               </div>
             )}
             <div className="flex gap-2 pt-3">

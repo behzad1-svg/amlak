@@ -3,13 +3,15 @@ import { toFaDigits } from "./utils";
 /**
  * سهم‌بندی کمیسیون و شیرینی معامله‌ها.
  *
- * هر معامله یک «سهم دفتر» (officePct) و چند «سهم» دارد؛ سهم یا مشاور داخلی
- * (userId) است یا همکار بیرونی «تعاون» (userId خالی + نام متنی).
- * مبنای تقسیم = کمیسیون + شیرینی فروشنده + شیرینی خریدار؛ درصدها روی همین
- * جمع اعمال می‌شوند و هر سهم جداگانه تسویه می‌شود. مالیات اینجا نیست.
+ * هر معامله یک «سهم دفتر» و چند «سهم» دارد؛ سهم یا مشاور داخلی (userId)
+ * است یا همکار بیرونی «تعاون» (userId خالی + نام متنی). هر سهم دو درصد
+ * جدا دارد: سهم از کمیسیون و سهم از شیرینی. دو مبنای مستقل‌اند — کمیسیون
+ * خالص (کمیسیون کل منهای تخفیف کل) و شیرینی کل؛ مالیات اینجا نیست.
+ * درصد شیرینی خالی یعنی همان درصد کمیسیون (معامله‌های قدیمی دقیقاً همان
+ * مبلغ قبلی را می‌بینند).
  *
  * معامله‌های قدیمی که سهم واقعی ندارند، از درصد دفتر ذخیره‌شده استفاده
- * می‌کنند: دفتر officePct٪ از مبنا می‌گیرد و بقیه (۱۰۰ − officePct) با یک
+ * می‌کنند: دفتر officePct٪ از هر دو مبنا می‌گیرد و بقیه (۱۰۰ − officePct) با یک
  * سهم مجازی به مشاور معامله می‌رسد (تسویه‌شده بودنش همان commissionPaid
  * معامله است). وقتی مدیر روی چنین معامله‌ای تقسیم را ویرایش کند، سهم‌های
  * واقعی ساخته می‌شوند. این قانون از ۲۰۲۶-۱۱-۲۰ است (تصمیم بهزاد: دفتر
@@ -24,7 +26,10 @@ import { toFaDigits } from "./utils";
 export type ShareInput = {
   userId?: string | null;
   name?: string | null;
+  /** سهم از کمیسیون (٪) */
   pct: number;
+  /** سهم از شیرینی (٪)؛ خالی یعنی همان pct */
+  shiriniPct?: number | null;
 };
 
 export type ResolvedShare = {
@@ -32,11 +37,14 @@ export type ResolvedShare = {
   id: string | null;
   userId: string | null;
   name: string;
+  /** سهم از کمیسیون (٪) */
   pct: number;
+  /** سهم از شیرینی (٪) — همیشه عدد است؛ خالی ذخیره‌شده یعنی همان pct */
+  shiriniPct: number;
   settled: boolean;
   settledAt: Date | string | null;
   isExternal: boolean;
-  /** مبلغ سهم = گرد شدهٔ مبنای تقسیم × pct / ۱۰۰ */
+  /** مبلغ سهم = بخش کمیسیون + بخش شیرینی */
   amount: bigint;
   /** تفکیک مبلغ سهم: چقدرش کمیسیون (خالص پس از تخفیف) و چقدرش شیرینی — جمعشان دقیقاً amount است */
   commissionAmount: bigint;
@@ -45,8 +53,10 @@ export type ResolvedShare = {
 };
 
 export type ResolvedSplit = {
-  /** سهم دفتر ٪؛ برای مشاور null است (سهم دفتر را نمی‌بیند) */
+  /** سهم دفتر از کمیسیون ٪؛ برای مشاور null است (سهم دفتر را نمی‌بیند) */
   officePct: number | null;
+  /** سهم دفتر از شیرینی ٪؛ برای مشاور null است */
+  officeShiriniPct: number | null;
   officeAmount: bigint | null;
   /** تفکیک سهم دفتر به کمیسیون و شیرینی — جمعشان دقیقاً officeAmount است */
   officeCommissionAmount: bigint | null;
@@ -117,6 +127,7 @@ type DealShareLike = {
   userId: string | null;
   name: string;
   pct: unknown;
+  shiriniPct?: unknown;
   settled: boolean;
   settledAt: Date | string | null;
 };
@@ -132,6 +143,7 @@ type DealLike = {
   buyerDiscountToman?: bigint | null;
   commissionPaid: boolean;
   officePct: unknown;
+  officeShiriniPct?: unknown;
   agentId: string;
   agent?: { id: string; name: string } | null;
   shares: DealShareLike[];
@@ -193,39 +205,82 @@ export function dealTaxBase(deal: {
   return dealTotalCommission(deal);
 }
 
+/**
+ * دو مبنای مستقل تقسیم: کمیسیون خالص و شیرینی. تخفیف اول از کمیسیون کم
+ * می‌شود؛ اگر تخفیف بیشتر از کمیسیون باشد، اضافه‌اش از شیرینی کم می‌شود.
+ * جمع دو مبنا دقیقاً مبنای تقسیم (dealSplittable) است — برای داده معتبر
+ * (تخفیف حداکثر جمع کمیسیون + شیرینی) هر دو مبنا نامنفی‌اند.
+ */
+export function dealSplitPools(deal: {
+  commissionToman: bigint | null;
+  sellerCommissionToman?: bigint | null;
+  buyerCommissionToman?: bigint | null;
+  sellerShiriniToman?: bigint | null;
+  buyerShiriniToman?: bigint | null;
+  discountToman?: bigint | null;
+  sellerDiscountToman?: bigint | null;
+  buyerDiscountToman?: bigint | null;
+}): { commission: bigint; shirini: bigint } {
+  const totalCommission = dealTotalCommission(deal);
+  const totalDiscount = dealTotalDiscount(deal);
+  const totalShirini = dealTotalShirini(deal);
+  const overCommission = totalDiscount > totalCommission ? totalDiscount - totalCommission : BigInt(0);
+  const commission = totalCommission - totalDiscount > BigInt(0) ? totalCommission - totalDiscount : BigInt(0);
+  const shirini = totalShirini - overCommission > BigInt(0) ? totalShirini - overCommission : BigInt(0);
+  return { commission, shirini };
+}
+
+/**
+ * مبلغ یک سهم از روی دو درصدش. وقتی درصد شیرینی برابر درصد کمیسیون است
+ * (یا خالی است)، دقیقاً محاسبهٔ قبلی روی مبنای کل انجام می‌شود تا
+ * معامله‌های قدیمی همان مبلغ قبلی را ببینند؛ وگرنه مبلغ جمع دو بخش
+ * مستقل است. تفکیک برگشتی همیشه دقیقاً با مبلغ جمع می‌شود.
+ */
+export function splitShareAmount(
+  deal: Parameters<typeof dealSplitPools>[0],
+  pct: number,
+  shiriniPct: number | null | undefined,
+): { amount: bigint; commissionAmount: bigint; shiriniAmount: bigint } {
+  const ps = shiriniPct ?? pct;
+  const pools = dealSplitPools(deal);
+  const commissionAmount = shareAmount(pools.commission, pct);
+  if (ps === pct) {
+    const amount = shareAmount(dealSplittable(deal), pct);
+    return { amount, commissionAmount, shiriniAmount: amount - commissionAmount };
+  }
+  const shiriniAmount = shareAmount(pools.shirini, ps);
+  return { amount: commissionAmount + shiriniAmount, commissionAmount, shiriniAmount };
+}
+
 /** سهم‌بندی حل‌شدهٔ یک معامله — واقعی اگر سهم دارد، وگرنه دفتر officePct ذخیره‌شده + بقیه مجازی برای مشاور معامله. */
 export function resolveSplit(deal: DealLike): ResolvedSplit {
   const base = dealSplittable(deal);
-  // تفکیک هر سهم به کمیسیون و شیرینی: بخش کمیسیون از کمیسیون خالص (کمیسیون کل
-  // منهای تخفیف کل) و بخش شیرینی از شیرینی کل حساب می‌شود؛ بخش شیرینی = مبلغ
-  // سهم منهای بخش کمیسیون تا جمع تفکیک دقیقاً مبلغ سهم شود (خطای گرد کردن ±۱ تومان
-  // جذب بخش شیرینی می‌شود). مبلغ سهم (amount) مثل قبل همان shareAmount روی مبنای
-  // کل است — هیچ جمعی عوض نمی‌شود.
-  const commissionNet = dealTotalCommission(deal) - dealTotalDiscount(deal);
-  const splitParts = (pct: number): { commissionAmount: bigint; shiriniAmount: bigint } => {
-    const amount = shareAmount(base, pct);
-    const commissionAmount = shareAmount(commissionNet > BigInt(0) ? commissionNet : BigInt(0), pct);
-    return { commissionAmount, shiriniAmount: amount - commissionAmount };
-  };
+  // هر سهم دو درصد جدا دارد (کمیسیون و شیرینی)؛ درصد شیرینی خالی یعنی همان
+  // درصد کمیسیون — آن وقت splitShareAmount دقیقاً محاسبهٔ قبلی را می‌دهد.
+  const officePct = Number(deal.officePct ?? 0);
+  const officeShiriniPct = deal.officeShiriniPct != null ? Number(deal.officeShiriniPct) : officePct;
+  const officeParts = splitShareAmount(deal, officePct, officeShiriniPct);
   if (deal.shares.length > 0) {
-    const officePct = Number(deal.officePct ?? 0);
-    const officeParts = splitParts(officePct);
     return {
       officePct,
-      officeAmount: shareAmount(base, officePct),
+      officeShiriniPct,
+      officeAmount: officeParts.amount,
       officeCommissionAmount: officeParts.commissionAmount,
       officeShiriniAmount: officeParts.shiriniAmount,
       shares: deal.shares.map((s) => {
-        const parts = splitParts(Number(s.pct));
+        const pct = Number(s.pct);
+        const shiriniPct = s.shiriniPct != null ? Number(s.shiriniPct) : pct;
+        const parts = splitShareAmount(deal, pct, shiriniPct);
         return {
           id: s.id,
           userId: s.userId,
           name: s.name,
-          pct: Number(s.pct),
+          pct,
+          shiriniPct,
           settled: s.settled,
           settledAt: s.settledAt,
           isExternal: s.userId == null,
-          amount: shareAmount(base, Number(s.pct)),
+          amount: parts.amount,
           commissionAmount: parts.commissionAmount,
           shiriniAmount: parts.shiriniAmount,
           virtual: false,
@@ -234,17 +289,27 @@ export function resolveSplit(deal: DealLike): ResolvedSplit {
     };
   }
   if (base <= BigInt(0))
-    return { officePct: 0, officeAmount: BigInt(0), officeCommissionAmount: BigInt(0), officeShiriniAmount: BigInt(0), shares: [] };
+    return {
+      officePct: 0,
+      officeShiriniPct: 0,
+      officeAmount: BigInt(0),
+      officeCommissionAmount: BigInt(0),
+      officeShiriniAmount: BigInt(0),
+      shares: [],
+    };
   // معامله بدون سهم واقعی: دفتر officePct ذخیره‌شده را می‌گیرد و بقیه به‌صورت
   // سهم مجازی به مشاور معامله می‌رسد. اگر دفتر ۱۰۰٪ باشد سهمی برای مشاور نمی‌ماند.
-  const officePct = Math.min(100, Math.max(0, Number(deal.officePct ?? 0)));
-  const agentPct = 100 - officePct;
-  const officeParts = splitParts(officePct);
+  const officePctClamped = Math.min(100, Math.max(0, officePct));
+  const officeShiriniPctClamped = Math.min(100, Math.max(0, officeShiriniPct));
+  const officePartsClamped = splitShareAmount(deal, officePctClamped, officeShiriniPctClamped);
+  const agentPct = 100 - officePctClamped;
+  const agentParts = splitShareAmount(deal, agentPct, agentPct);
   return {
-    officePct,
-    officeAmount: shareAmount(base, officePct),
-    officeCommissionAmount: officeParts.commissionAmount,
-    officeShiriniAmount: officeParts.shiriniAmount,
+    officePct: officePctClamped,
+    officeShiriniPct: officeShiriniPctClamped,
+    officeAmount: officePartsClamped.amount,
+    officeCommissionAmount: officePartsClamped.commissionAmount,
+    officeShiriniAmount: officePartsClamped.shiriniAmount,
     shares:
       agentPct > 0
         ? [
@@ -253,12 +318,13 @@ export function resolveSplit(deal: DealLike): ResolvedSplit {
               userId: deal.agentId,
               name: deal.agent?.name ?? "مشاور معامله",
               pct: agentPct,
+              shiriniPct: agentPct,
               settled: deal.commissionPaid,
               settledAt: null,
               isExternal: false,
-              amount: shareAmount(base, agentPct),
-              commissionAmount: splitParts(agentPct).commissionAmount,
-              shiriniAmount: splitParts(agentPct).shiriniAmount,
+              amount: agentParts.amount,
+              commissionAmount: agentParts.commissionAmount,
+              shiriniAmount: agentParts.shiriniAmount,
               virtual: true,
             },
           ]
@@ -274,6 +340,7 @@ export function splitForViewer(split: ResolvedSplit, viewerId: string | null, is
   if (isOwner) return split;
   return {
     officePct: null,
+    officeShiriniPct: null,
     officeAmount: null,
     officeCommissionAmount: null,
     officeShiriniAmount: null,
@@ -281,19 +348,33 @@ export function splitForViewer(split: ResolvedSplit, viewerId: string | null, is
   };
 }
 
-/** اعتبارسنجی ورودی سهم‌بندی؛ null یعنی معتبر، وگرنه پیام خطای فارسی. */
-export function validateSplitInput(officePct: number, shares: ShareInput[]): string | null {
+/**
+ * اعتبارسنجی ورودی سهم‌بندی؛ null یعنی معتبر، وگرنه پیام خطای فارسی.
+ * دو جمع جدا چک می‌شوند: مجموع سهم‌های کمیسیون و مجموع سهم‌های شیرینی —
+ * هر دو باید دقیقاً ۱۰۰٪ شوند. درصد شیرینی هر سهم خالی یعنی همان درصد کمیسیون.
+ */
+export function validateSplitInput(officePct: number, officeShiriniPct: number | null, shares: ShareInput[]): string | null {
   if (!Number.isFinite(officePct) || officePct < 0 || officePct > 100) {
     return "سهم دفتر باید بین ۰ تا ۱۰۰ باشد";
   }
-  if (shares.length === 0 && officePct < 100) {
-    return "مجموع سهم دفتر و سهم‌ها باید دقیقاً ۱۰۰٪ شود";
+  // درصد شیرینی دفتر خالی یعنی همان درصد کمیسیون دفتر
+  const officeShirini = officeShiriniPct ?? officePct;
+  if (!Number.isFinite(officeShirini) || officeShirini < 0 || officeShirini > 100) {
+    return "سهم دفتر از شیرینی باید بین ۰ تا ۱۰۰ باشد";
+  }
+  if (shares.length === 0 && (officePct < 100 || officeShirini < 100)) {
+    return `مجموع سهم دفتر و سهم‌ها باید دقیقاً ۱۰۰٪ شود (کمیسیون الان ${toFaDigits(String(Math.round(officePct * 100) / 100))}٪، شیرینی ${toFaDigits(String(Math.round(officeShirini * 100) / 100))}٪ است)`;
   }
   const seen = new Set<string>();
-  let total = officePct;
+  let totalCommission = officePct;
+  let totalShirini = officeShirini;
   for (const s of shares) {
     if (!Number.isFinite(s.pct) || s.pct <= 0 || s.pct > 100) {
       return "درصد سهم هر مشاور باید بیشتر از صفر و حداکثر ۱۰۰ باشد";
+    }
+    const spct = s.shiriniPct ?? s.pct;
+    if (!Number.isFinite(spct) || spct < 0 || spct > 100) {
+      return "درصد شیرینی هر سهم باید بین ۰ تا ۱۰۰ باشد";
     }
     if (s.userId) {
       if (seen.has(s.userId)) return "یک مشاور نمی‌تواند دو سهم در یک معامله داشته باشد";
@@ -301,10 +382,13 @@ export function validateSplitInput(officePct: number, shares: ShareInput[]): str
     } else if (!s.name || !s.name.trim()) {
       return "هر سهم باید مشاور یا نام همکار بیرونی داشته باشد";
     }
-    total += s.pct;
+    totalCommission += s.pct;
+    totalShirini += spct;
   }
-  if (Math.abs(total - 100) >= SHARE_TOTAL_TOLERANCE) {
-    return `مجموع سهم دفتر و سهم‌ها باید دقیقاً ۱۰۰٪ شود (الان ${toFaDigits(String(Math.round(total * 100) / 100))}٪ است)`;
+  const commissionOk = Math.abs(totalCommission - 100) < SHARE_TOTAL_TOLERANCE;
+  const shiriniOk = Math.abs(totalShirini - 100) < SHARE_TOTAL_TOLERANCE;
+  if (!commissionOk || !shiriniOk) {
+    return `مجموع سهم دفتر و سهم‌ها باید دقیقاً ۱۰۰٪ شود (کمیسیون الان ${toFaDigits(String(Math.round(totalCommission * 100) / 100))}٪، شیرینی ${toFaDigits(String(Math.round(totalShirini * 100) / 100))}٪ است)`;
   }
   return null;
 }

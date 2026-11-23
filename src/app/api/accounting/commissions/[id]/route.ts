@@ -103,7 +103,7 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
         property: { select: { id: true, title: true, dealType: true, region: true } },
         agent: { select: { id: true, name: true } },
         shares: {
-          select: { id: true, userId: true, name: true, pct: true, settled: true, settledAt: true },
+          select: { id: true, userId: true, name: true, pct: true, shiriniPct: true, settled: true, settledAt: true },
           orderBy: { createdAt: "asc" },
         },
       },
@@ -129,6 +129,7 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
   const out = {
     ...updated,
     officePct: split.officePct,
+    officeShiriniPct: split.officeShiriniPct,
     officeAmount: split.officeAmount,
     officeCommissionAmount: split.officeCommissionAmount,
     officeShiriniAmount: split.officeShiriniAmount,

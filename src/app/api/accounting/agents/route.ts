@@ -2,7 +2,7 @@ import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { getSessionFromCookies } from "@/lib/auth";
 import { serializeBigInt } from "@/lib/utils";
-import { dealSplittable, resolveSplit } from "@/lib/shares";
+import { dealSplitPools, dealSplittable, resolveSplit } from "@/lib/shares";
 
 /**
  * گزارش حسابداری به تفکیک هر مشاور — فقط مدیر.
@@ -55,8 +55,9 @@ export async function GET() {
         commissionPaid: true,
         dealSalePriceToman: true,
         officePct: true, // فقط ورودی resolveSplit است؛ هیچ جمعی از آن مستقیم خوانده نمی‌شود
+        officeShiriniPct: true, // فقط ورودی resolveSplit است؛ هیچ جمعی از آن مستقیم خوانده نمی‌شود
         agent: { select: { id: true, name: true } },
-        shares: { select: { id: true, userId: true, name: true, pct: true, settled: true, settledAt: true } },
+        shares: { select: { id: true, userId: true, name: true, pct: true, shiriniPct: true, settled: true, settledAt: true } },
       },
     }),
   ]);
@@ -66,16 +67,31 @@ export async function GET() {
 
   // سهم دفتر و تعاون روی معامله‌های قطعی دارای درآمد؛ جمع کل مبنای تقسیم (کمیسیون + هر دو شیرینی منهای تخفیف) می‌ماند
   let officeTotal = BigInt(0);
+  let officeCommissionTotal = BigInt(0);
+  let officeShiriniTotal = BigInt(0);
   let externalTotal = BigInt(0);
+  let externalCommissionTotal = BigInt(0);
+  let externalShiriniTotal = BigInt(0);
   let commissionGrandTotal = BigInt(0);
+  let grandTotalCommission = BigInt(0);
+  let grandTotalShirini = BigInt(0);
   deals.forEach((d, i) => {
     const base = dealSplittable(d);
     if (base <= BigInt(0)) return;
     commissionGrandTotal += base;
+    const pools = dealSplitPools(d);
+    grandTotalCommission += pools.commission;
+    grandTotalShirini += pools.shirini;
     const split = splits[i];
     officeTotal += split.officeAmount ?? BigInt(0);
+    officeCommissionTotal += split.officeCommissionAmount ?? BigInt(0);
+    officeShiriniTotal += split.officeShiriniAmount ?? BigInt(0);
     for (const s of split.shares) {
-      if (s.isExternal) externalTotal += s.amount;
+      if (s.isExternal) {
+        externalTotal += s.amount;
+        externalCommissionTotal += s.commissionAmount;
+        externalShiriniTotal += s.shiriniAmount;
+      }
     }
   });
 
@@ -103,6 +119,8 @@ export async function GET() {
     let dealsWithCommission = 0;
     let saleVolume = BigInt(0);
     let commissionTotal = BigInt(0);
+    let commissionPart = BigInt(0);
+    let shiriniPart = BigInt(0);
     let commissionPaid = BigInt(0);
     let commissionUnpaid = BigInt(0);
     deals.forEach((d, i) => {
@@ -124,6 +142,8 @@ export async function GET() {
         for (const s of splits[i].shares) {
           if (s.userId !== u.id) continue;
           commissionTotal += s.amount;
+          commissionPart += s.commissionAmount;
+          shiriniPart += s.shiriniAmount;
           if (s.settled) commissionPaid += s.amount;
           else commissionUnpaid += s.amount;
         }
@@ -137,6 +157,8 @@ export async function GET() {
       dealsWithCommission,
       saleVolume,
       commissionTotal,
+      commissionPart,
+      shiriniPart,
       commissionPaid,
       commissionUnpaid,
     };
@@ -148,10 +170,12 @@ export async function GET() {
       dealsWithCommission: t.dealsWithCommission + r.dealsWithCommission,
       saleVolume: t.saleVolume + r.saleVolume,
       commissionTotal: t.commissionTotal + r.commissionTotal,
+      commissionPart: t.commissionPart + r.commissionPart,
+      shiriniPart: t.shiriniPart + r.shiriniPart,
       commissionPaid: t.commissionPaid + r.commissionPaid,
       commissionUnpaid: t.commissionUnpaid + r.commissionUnpaid,
     }),
-    { dealsCompleted: 0, dealsWithCommission: 0, saleVolume: BigInt(0), commissionTotal: BigInt(0), commissionPaid: BigInt(0), commissionUnpaid: BigInt(0) }
+    { dealsCompleted: 0, dealsWithCommission: 0, saleVolume: BigInt(0), commissionTotal: BigInt(0), commissionPart: BigInt(0), shiriniPart: BigInt(0), commissionPaid: BigInt(0), commissionUnpaid: BigInt(0) }
   );
 
   // جمع «قرارداد قطعی» تعداد معامله‌های یکتاست، نه جمع ردیف‌ها — یک معامله
@@ -167,6 +191,8 @@ export async function GET() {
     let dealsWithCommission = 0;
     let saleVolume = BigInt(0);
     let commissionTotal = BigInt(0);
+    let commissionPart = BigInt(0);
+    let shiriniPart = BigInt(0);
     let commissionPaid = BigInt(0);
     let commissionUnpaid = BigInt(0);
     deals.forEach((d, i) => {
@@ -178,6 +204,8 @@ export async function GET() {
       if (d.commissionToman != null) dealsWithCommission += 1;
       saleVolume += d.dealSalePriceToman ?? BigInt(0);
       commissionTotal += officeAmount;
+      commissionPart += splits[i].officeCommissionAmount ?? BigInt(0);
+      shiriniPart += splits[i].officeShiriniAmount ?? BigInt(0);
       // سهم دفتر تسویه جداگانه ندارد؛ «دریافت شد» خوردن معامله یعنی سهم
       // دفترش وصول‌شده است و بقیه وصول‌نشده.
       if (d.commissionPaid) commissionPaid += officeAmount;
@@ -191,6 +219,8 @@ export async function GET() {
       dealsWithCommission,
       saleVolume,
       commissionTotal,
+      commissionPart,
+      shiriniPart,
       commissionPaid,
       commissionUnpaid,
     };
@@ -203,11 +233,19 @@ export async function GET() {
     ...totals,
     dealsCompleted: completedDealsTotal,
     commissionTotal: totals.commissionTotal + officeRow.commissionTotal,
+    commissionPart: totals.commissionPart + officeRow.commissionPart,
+    shiriniPart: totals.shiriniPart + officeRow.shiriniPart,
     commissionPaid: totals.commissionPaid + officeRow.commissionPaid,
     commissionUnpaid: totals.commissionUnpaid + officeRow.commissionUnpaid,
     officeTotal,
+    officeCommissionTotal,
+    officeShiriniTotal,
     externalTotal,
+    externalCommissionTotal,
+    externalShiriniTotal,
     commissionGrandTotal,
+    grandTotalCommission,
+    grandTotalShirini,
   };
 
   return NextResponse.json(serializeBigInt({ users: [...rows, officeRow], totals: totalsWithOffice }));

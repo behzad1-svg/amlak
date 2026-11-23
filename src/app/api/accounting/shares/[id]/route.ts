@@ -4,7 +4,7 @@ import { getSessionFromCookies } from "@/lib/auth";
 import { shareSettleSchema } from "@/lib/validation";
 import { serializeBigInt } from "@/lib/utils";
 import { createAuditLog } from "@/lib/audit";
-import { dealSplittable, shareAmount } from "@/lib/shares";
+import { dealSplittable, splitShareAmount } from "@/lib/shares";
 
 /**
  * تسویه یا برگرداندن تسویه یک سهم — فقط مدیر.
@@ -56,7 +56,13 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
 
   const settled = parsed.data.settled;
   const now = new Date();
-  const amount = shareAmount(dealSplittable(share.deal), Number(share.pct));
+  // مبلغ تسویه همان مبلغ حل‌شدهٔ سهم است — دو درصد جدا (کمیسیون و شیرینی)؛
+  // درصد شیرینی خالی یعنی همان درصد کمیسیون (معامله‌های قدیمی همان مبلغ قبلی).
+  const amount = splitShareAmount(
+    share.deal,
+    Number(share.pct),
+    share.shiriniPct != null ? Number(share.shiriniPct) : null,
+  ).amount;
   // P2002: دو درخواست هم زمان «تسویه» می توانند هر دو از findFirst عبور کنند؛
   // ایندکس یکتای جزئی روی OUT هر سهم، دومی را با 409 رد می کند.
   const updated = await prisma.$transaction(async (tx) => {

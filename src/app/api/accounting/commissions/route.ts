@@ -45,7 +45,7 @@ export async function GET(req: NextRequest) {
       property: { select: { id: true, title: true, dealType: true, region: true, salePriceToman: true, depositToman: true, monthlyRentToman: true } },
       agent: { select: { id: true, name: true } },
       shares: {
-        select: { id: true, userId: true, name: true, pct: true, settled: true, settledAt: true },
+        select: { id: true, userId: true, name: true, pct: true, shiriniPct: true, settled: true, settledAt: true },
         orderBy: { createdAt: "asc" },
       },
     },
@@ -56,6 +56,7 @@ export async function GET(req: NextRequest) {
     return {
       ...d,
       officePct: split.officePct,
+      officeShiriniPct: split.officeShiriniPct,
       officeAmount: split.officeAmount,
       officeCommissionAmount: split.officeCommissionAmount,
       officeShiriniAmount: split.officeShiriniAmount,

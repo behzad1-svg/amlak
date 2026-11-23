@@ -270,6 +270,7 @@ export const dealShareInputSchema = z.object({
   userId: z.string().min(1).optional().nullable(),
   name: z.string().max(120).optional().nullable(),
   pct: z.number().min(0.01, "درصد سهم باید بیشتر از صفر باشد").max(100, "درصد سهم حداکثر ۱۰۰ است"),
+  shiriniPct: z.number().min(0, "درصد شیرینی سهم باید بین ۰ تا ۱۰۰ باشد").max(100, "درصد شیرینی سهم باید بین ۰ تا ۱۰۰ باشد").optional().nullable(),
 });
 
 export const shareSettleSchema = z.object({
@@ -299,6 +300,7 @@ export const dealUpdateSchema = z.object({
   dealMonthlyRentToman: z.string().regex(/^[0-9]*$/, "فقط عدد").optional().nullable(),
   /// سهم‌بندی کمیسیون — فقط مدیر؛ officePct و shares همیشه با هم می‌آیند
   officePct: z.number().min(0, "سهم دفتر باید بین ۰ تا ۱۰۰ باشد").max(100, "سهم دفتر باید بین ۰ تا ۱۰۰ باشد").optional(),
+  officeShiriniPct: z.number().min(0, "سهم دفتر از شیرینی باید بین ۰ تا ۱۰۰ باشد").max(100, "سهم دفتر از شیرینی باید بین ۰ تا ۱۰۰ باشد").optional(),
   shares: z.array(dealShareInputSchema).max(10, "حداکثر ۱۰ سهم").optional(),
 });
 

@@ -147,13 +147,13 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
   }
 
   // سهم‌بندی را فقط مدیر تعیین می‌کند؛ officePct و shares همیشه با هم می‌آیند
-  const wantsShares = d.officePct !== undefined || d.shares !== undefined;
+  const wantsShares = d.officePct !== undefined || d.officeShiriniPct !== undefined || d.shares !== undefined;
   if (wantsShares && session.user.role !== "OWNER") {
     return NextResponse.json({ error: "سهم‌بندی را فقط مدیر تعیین می‌کند" }, { status: 403 });
   }
 
   // سهم‌بندی فقط وقتی معنا دارد که درآمد قابل‌تقسیم معامله (کمیسیون + شیرینی‌ها) بیشتر از صفر باشد
-  let shareRows: { userId: string | null; name: string; pct: number }[] | null = null;
+  let shareRows: { userId: string | null; name: string; pct: number; shiriniPct: number | null }[] | null = null;
   if (wantsShares) {
     if (d.officePct === undefined || d.shares === undefined) {
       return NextResponse.json({ error: "سهم دفتر و سهم‌ها را با هم بفرستید" }, { status: 400 });
@@ -177,9 +177,11 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
         { status: 400 }
       );
     }
+    const officeShiriniPct = d.officeShiriniPct ?? d.officePct;
     const splitError = validateSplitInput(
       d.officePct,
-      d.shares.map((s) => ({ userId: s.userId ?? null, name: s.name ?? null, pct: s.pct }))
+      officeShiriniPct,
+      d.shares.map((s) => ({ userId: s.userId ?? null, name: s.name ?? null, pct: s.pct, shiriniPct: s.shiriniPct ?? null }))
     );
     if (splitError) return NextResponse.json({ error: splitError }, { status: 400 });
     // مشاور داخلی باید کاربر فعال موجود باشد؛ نامش از روی کاربر برداشته می‌شود
@@ -197,8 +199,8 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
     const userById = new Map(users.map((u) => [u.id, u.name]));
     shareRows = d.shares.map((s) =>
       s.userId
-        ? { userId: s.userId, name: userById.get(s.userId) ?? "", pct: s.pct }
-        : { userId: null, name: (s.name ?? "").trim(), pct: s.pct }
+        ? { userId: s.userId, name: userById.get(s.userId) ?? "", pct: s.pct, shiriniPct: s.shiriniPct ?? null }
+        : { userId: null, name: (s.name ?? "").trim(), pct: s.pct, shiriniPct: s.shiriniPct ?? null }
     );
   }
 
@@ -419,6 +421,7 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
     if (d.buyerShiriniToman !== undefined)
       data.buyerShiriniToman = d.buyerShiriniToman ? BigInt(d.buyerShiriniToman) : null;
     if (d.officePct !== undefined) data.officePct = d.officePct;
+    if (d.officeShiriniPct !== undefined) data.officeShiriniPct = d.officeShiriniPct;
   }
   if (d.dealSalePriceToman !== undefined)
     data.dealSalePriceToman = d.dealSalePriceToman ? BigInt(d.dealSalePriceToman) : null;
@@ -463,6 +466,7 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
             userId: r.userId,
             name: r.name,
             pct: r.pct,
+            shiriniPct: r.shiriniPct,
             settled: false,
             settledAt: null,
           })),

@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import {
   commissionAmountFor,
+  dealSplitPools,
   dealSplittable,
   dealTaxBase,
   dealTotalCommission,
@@ -10,6 +11,7 @@ import {
   resolveSplit,
   shareAmount,
   splitForViewer,
+  splitShareAmount,
   validateCommissionAmount,
   validateSplitInput,
 } from "./shares";
@@ -312,6 +314,7 @@ describe("resolveSplit", () => {
     });
     expect(split).toEqual({
       officePct: 0,
+      officeShiriniPct: 0,
       officeAmount: BigInt(0),
       officeCommissionAmount: BigInt(0),
       officeShiriniAmount: BigInt(0),
@@ -344,36 +347,63 @@ describe("splitForViewer", () => {
 describe("validateSplitInput", () => {
   it("accepts a split that totals exactly 100%", () => {
     expect(
-      validateSplitInput(50, [
+      validateSplitInput(50, null, [
         { userId: "u1", pct: 25 },
         { userId: "u2", pct: 25 },
       ]),
     ).toBeNull();
-    expect(validateSplitInput(100, [])).toBeNull();
+    expect(validateSplitInput(100, null, [])).toBeNull();
   });
 
   it("rejects an office share outside 0–100", () => {
-    expect(validateSplitInput(101, [])).toBe("سهم دفتر باید بین ۰ تا ۱۰۰ باشد");
-    expect(validateSplitInput(-1, [])).toBe("سهم دفتر باید بین ۰ تا ۱۰۰ باشد");
-    expect(validateSplitInput(NaN, [])).toBe("سهم دفتر باید بین ۰ تا ۱۰۰ باشد");
+    expect(validateSplitInput(101, null, [])).toBe("سهم دفتر باید بین ۰ تا ۱۰۰ باشد");
+    expect(validateSplitInput(-1, null, [])).toBe("سهم دفتر باید بین ۰ تا ۱۰۰ باشد");
+    expect(validateSplitInput(NaN, null, [])).toBe("سهم دفتر باید بین ۰ تا ۱۰۰ باشد");
+  });
+
+  it("rejects an office shirini share outside 0–100", () => {
+    expect(validateSplitInput(50, 101, [{ userId: "u1", pct: 50, shiriniPct: 50 }])).toBe(
+      "سهم دفتر از شیرینی باید بین ۰ تا ۱۰۰ باشد",
+    );
+    expect(validateSplitInput(50, -1, [{ userId: "u1", pct: 50, shiriniPct: 50 }])).toBe(
+      "سهم دفتر از شیرینی باید بین ۰ تا ۱۰۰ باشد",
+    );
+    expect(validateSplitInput(50, NaN, [{ userId: "u1", pct: 50, shiriniPct: 50 }])).toBe(
+      "سهم دفتر از شیرینی باید بین ۰ تا ۱۰۰ باشد",
+    );
   });
 
   it("rejects an office share under 100% with no shares", () => {
-    expect(validateSplitInput(50, [])).toBe("مجموع سهم دفتر و سهم‌ها باید دقیقاً ۱۰۰٪ شود");
+    expect(validateSplitInput(50, null, [])).toBe(
+      "مجموع سهم دفتر و سهم‌ها باید دقیقاً ۱۰۰٪ شود (کمیسیون الان ۵۰٪، شیرینی ۵۰٪ است)",
+    );
   });
 
   it("rejects a share percent of zero or over 100", () => {
-    expect(validateSplitInput(50, [{ userId: "u1", pct: 0 }])).toBe(
+    expect(validateSplitInput(50, null, [{ userId: "u1", pct: 0 }])).toBe(
       "درصد سهم هر مشاور باید بیشتر از صفر و حداکثر ۱۰۰ باشد",
     );
-    expect(validateSplitInput(50, [{ userId: "u1", pct: 101 }])).toBe(
+    expect(validateSplitInput(50, null, [{ userId: "u1", pct: 101 }])).toBe(
       "درصد سهم هر مشاور باید بیشتر از صفر و حداکثر ۱۰۰ باشد",
     );
+  });
+
+  it("rejects a shirini percent outside 0–100", () => {
+    expect(validateSplitInput(50, 50, [{ userId: "u1", pct: 50, shiriniPct: 101 }])).toBe(
+      "درصد شیرینی هر سهم باید بین ۰ تا ۱۰۰ باشد",
+    );
+    expect(validateSplitInput(50, 50, [{ userId: "u1", pct: 50, shiriniPct: -1 }])).toBe(
+      "درصد شیرینی هر سهم باید بین ۰ تا ۱۰۰ باشد",
+    );
+  });
+
+  it("allows a share to take no shirini at all", () => {
+    expect(validateSplitInput(50, 100, [{ userId: "u1", pct: 50, shiriniPct: 0 }])).toBeNull();
   });
 
   it("rejects the same advisor twice", () => {
     expect(
-      validateSplitInput(50, [
+      validateSplitInput(50, null, [
         { userId: "u1", pct: 25 },
         { userId: "u1", pct: 25 },
       ]),
@@ -381,28 +411,149 @@ describe("validateSplitInput", () => {
   });
 
   it("requires an external share to have a name", () => {
-    expect(validateSplitInput(75, [{ userId: null, name: "", pct: 25 }])).toBe(
+    expect(validateSplitInput(75, null, [{ userId: null, name: "", pct: 25 }])).toBe(
       "هر سهم باید مشاور یا نام همکار بیرونی داشته باشد",
     );
-    expect(validateSplitInput(75, [{ userId: null, name: "تعاون", pct: 25 }])).toBeNull();
+    expect(validateSplitInput(75, null, [{ userId: null, name: "تعاون", pct: 25 }])).toBeNull();
   });
 
-  it("reports the actual total in Persian digits when it is not 100%", () => {
+  it("reports both actual totals in Persian digits when either is not 100%", () => {
     expect(
-      validateSplitInput(50, [
+      validateSplitInput(50, null, [
         { userId: "u1", pct: 25 },
         { userId: "u2", pct: 24 },
       ]),
-    ).toBe("مجموع سهم دفتر و سهم‌ها باید دقیقاً ۱۰۰٪ شود (الان ۹۹٪ است)");
+    ).toBe("مجموع سهم دفتر و سهم‌ها باید دقیقاً ۱۰۰٪ شود (کمیسیون الان ۹۹٪، شیرینی ۹۹٪ است)");
+    // کمیسیون درست است، شیرینی نه — خطا فقط شیرینی را نشان می‌دهد
+    expect(validateSplitInput(50, 50, [{ userId: "u1", pct: 50, shiriniPct: 40 }])).toBe(
+      "مجموع سهم دفتر و سهم‌ها باید دقیقاً ۱۰۰٪ شود (کمیسیون الان ۱۰۰٪، شیرینی ۹۰٪ است)",
+    );
   });
 
   it("accepts totals within the 0.01 tolerance", () => {
     expect(
-      validateSplitInput(50, [
+      validateSplitInput(50, null, [
         { userId: "u1", pct: 25 },
         { userId: "u2", pct: 24.995 },
       ]),
     ).toBeNull();
+  });
+});
+
+describe("dealSplitPools and splitShareAmount", () => {
+  // معامله تست F-0024: کمیسیون کل ۵۰ میلیون، شیرینی ۲۲٫۵ میلیون، تخفیف ۲۲٫۵ میلیون —
+  // مبنای کمیسیون خالص ۲۷٫۵ میلیون، مبنای شیرینی ۲۲٫۵ میلیون، جمع قابل‌تقسیم ۵۰ میلیون.
+  function dealF0024() {
+    return {
+      commissionToman: BigInt(50_000_000),
+      sellerCommissionToman: BigInt(25_000_000),
+      buyerCommissionToman: BigInt(25_000_000),
+      sellerShiriniToman: BigInt(22_500_000),
+      buyerShiriniToman: BigInt(0),
+      sellerDiscountToman: null,
+      buyerDiscountToman: BigInt(22_500_000),
+      discountToman: null,
+      commissionPaid: false,
+      officePct: 60,
+      officeShiriniPct: null,
+      agentId: "agent-1",
+      agent: { id: "agent-1", name: "مشاور تست" },
+      shares: [
+        { id: "s1", userId: "u1", name: "مشاور", pct: 40, shiriniPct: null, settled: false, settledAt: null },
+      ],
+    };
+  }
+
+  it("splits the splittable base into a net-commission pool and a shirini pool", () => {
+    expect(dealSplitPools(dealF0024())).toEqual({
+      commission: BigInt(27_500_000),
+      shirini: BigInt(22_500_000),
+    });
+  });
+
+  it("takes discount from commission first, then from shirini", () => {
+    // کمیسیون ۱۰ میلیون، شیرینی ۹۰ میلیون، تخفیف ۲۰ میلیون → کمیسیون صفر، شیرینی ۸۰ میلیون
+    expect(
+      dealSplitPools({
+        commissionToman: BigInt(10_000_000),
+        sellerShiriniToman: BigInt(90_000_000),
+        discountToman: BigInt(20_000_000),
+      }),
+    ).toEqual({ commission: BigInt(0), shirini: BigInt(80_000_000) });
+  });
+
+  it("computes a share from two percents on the two pools (F-0024 example)", () => {
+    // دفتر ۵۰٪ کمیسیون / ۴۰٪ شیرینی → ۱۳٫۷۵ + ۹ = ۲۲٫۷۵ میلیون
+    expect(splitShareAmount(dealF0024(), 50, 40)).toEqual({
+      amount: BigInt(22_750_000),
+      commissionAmount: BigInt(13_750_000),
+      shiriniAmount: BigInt(9_000_000),
+    });
+    // مشاور ۵۰٪ کمیسیون / ۶۰٪ شیرینی → ۱۳٫۷۵ + ۱۳٫۵ = ۲۷٫۲۵ میلیون؛ جمع هر دو ۵۰ میلیون
+    expect(splitShareAmount(dealF0024(), 50, 60)).toEqual({
+      amount: BigInt(27_250_000),
+      commissionAmount: BigInt(13_750_000),
+      shiriniAmount: BigInt(13_500_000),
+    });
+  });
+
+  it("falls back to the commission percent when the shirini percent is null", () => {
+    // همان محاسبه قدیمی روی مبنای کل: ۵۰٪ از ۵۰ میلیون = ۲۵ میلیون
+    expect(splitShareAmount(dealF0024(), 50, null)).toEqual({
+      amount: BigInt(25_000_000),
+      commissionAmount: BigInt(13_750_000),
+      shiriniAmount: BigInt(11_250_000),
+    });
+  });
+
+  it("resolves F-0024 with null shirini percents to exactly today's amounts", () => {
+    const split = resolveSplit(dealF0024());
+    expect(split.officePct).toBe(60);
+    expect(split.officeShiriniPct).toBe(60);
+    expect(split.officeAmount).toBe(BigInt(30_000_000));
+    expect(split.officeCommissionAmount).toBe(BigInt(16_500_000));
+    expect(split.officeShiriniAmount).toBe(BigInt(13_500_000));
+    expect(split.shares[0]).toMatchObject({
+      pct: 40,
+      shiriniPct: 40,
+      amount: BigInt(20_000_000),
+      commissionAmount: BigInt(11_000_000),
+      shiriniAmount: BigInt(9_000_000),
+    });
+    expect(split.officeAmount! + split.shares[0].amount).toBe(BigInt(50_000_000));
+  });
+
+  it("resolves two different percents per share", () => {
+    const split = resolveSplit({
+      ...dealF0024(),
+      officePct: 50,
+      officeShiriniPct: 40,
+      shares: [
+        { id: "s1", userId: "u1", name: "مشاور", pct: 50, shiriniPct: 60, settled: false, settledAt: null },
+      ],
+    });
+    expect(split.officeAmount).toBe(BigInt(22_750_000));
+    expect(split.officeCommissionAmount).toBe(BigInt(13_750_000));
+    expect(split.officeShiriniAmount).toBe(BigInt(9_000_000));
+    expect(split.shares[0]).toMatchObject({
+      pct: 50,
+      shiriniPct: 60,
+      amount: BigInt(27_250_000),
+      commissionAmount: BigInt(13_750_000),
+      shiriniAmount: BigInt(13_500_000),
+    });
+  });
+
+  it("gives the virtual fallback the same percent on both bases", () => {
+    const split = resolveSplit({ ...dealF0024(), shares: [], officePct: 60, officeShiriniPct: null });
+    expect(split.officeShiriniPct).toBe(60);
+    expect(split.officeAmount).toBe(BigInt(30_000_000));
+    expect(split.shares[0]).toMatchObject({
+      pct: 40,
+      shiriniPct: 40,
+      amount: BigInt(20_000_000),
+      virtual: true,
+    });
   });
 });
 

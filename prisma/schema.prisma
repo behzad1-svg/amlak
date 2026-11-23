@@ -539,6 +539,9 @@ model Deal {
   commissionPaid    Boolean  @default(false)
   commissionPaidAt  DateTime?
   officePct         Decimal  @default(50) @db.Decimal(5, 2)
+  /// سهم دفتر از شیرینی (٪) — جدا از سهم دفتر از کمیسیون (officePct)؛ خالی
+  /// یعنی همان officePct (معامله‌های قدیمی دقیقاً همان مبلغ قبلی را می‌بینند).
+  officeShiriniPct  Decimal? @db.Decimal(5, 2)
 
   dealSalePriceToman   BigInt?
   dealDepositToman     BigInt?
@@ -563,6 +566,8 @@ model DealShare {
   user      User?    @relation("DealShareUser", fields: [userId], references: [id], onDelete: SetNull)
   name      String
   pct       Decimal  @db.Decimal(5, 2)
+  /// سهم این ردیف از شیرینی (٪) — جدا از سهم از کمیسیون (pct)؛ خالی یعنی همان pct.
+  shiriniPct Decimal? @db.Decimal(5, 2)
   settled   Boolean  @default(false)
   settledAt DateTime?
   createdAt DateTime @default(now())
