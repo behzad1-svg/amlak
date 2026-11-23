@@ -47,8 +47,10 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
       where: { phone: d.phone, deletedAt: null, id: { not: id } },
     });
     if (clash) {
+      // existingId فقط وقتی برگردد که رکورد تکراری مال خودِ درخواست‌دهنده (یا مدیر) باشد — مثل POST
+      const ownClash = session.user.role === "OWNER" || clash.ownerId === session.user.id;
       return NextResponse.json(
-        { error: "این شماره در دفترچه تلفن ثبت شده است", existingId: clash.id },
+        { error: "این شماره در دفترچه تلفن ثبت شده است", ...(ownClash ? { existingId: clash.id } : {}) },
         { status: 409 },
       );
     }
