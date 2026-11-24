@@ -1,8 +1,10 @@
 "use client";
-import { useCallback, useEffect, useState } from "react";
+import { Fragment, useCallback, useEffect, useState } from "react";
+import Link from "next/link";
 import { Header } from "@/components/layout/Header";
 import { Card, CardHeader, CardTitle } from "@/components/ui/Card";
 import { Button } from "@/components/ui/Button";
+import { DateText } from "@/components/ui/DateText";
 import { PageError, PageSkeleton } from "@/components/ui/LoadState";
 import { useRole } from "@/hooks/useRole";
 import { apiJson, errorMessage } from "@/lib/api";
@@ -28,6 +30,8 @@ type PerfData = {
   since: string;
   users: PerfRow[];
   totals: { files: number; appraisals: number; advertised: number; sessionCards: number; fileFindings: number; viewings: number; deals: number; overdue: number };
+  /** فایل‌های آگهی‌شده در بازه — برای بازکردن لیست هر مشاور (کد + عنوان + تاریخ) */
+  advertisedItems: { agentId: string; propertyId: string | null; code: string | null; title: string | null; date: string }[];
 };
 
 const METRICS = [
@@ -71,6 +75,8 @@ export default function ReportsPage() {
   const [data, setData] = useState<PerfData | null>(null);
   const [loading, setLoading] = useState(true);
   const [loadError, setLoadError] = useState<string | null>(null);
+  /** مشاوری که لیست فایل‌های آگهی‌شده‌اش باز است (فقط یکی هم‌زمان) */
+  const [expandedAdvertised, setExpandedAdvertised] = useState<string | null>(null);
 
   const load = useCallback(async (r: number) => {
     setLoading(true);
@@ -158,19 +164,62 @@ export default function ReportsPage() {
               </thead>
               <tbody>
                 {data.users.map((u) => (
-                  <tr key={u.id} className="border-b last:border-0">
-                    <td className="py-2.5 pr-2 font-medium text-right">{u.name} {u.role === "OWNER" ? "(مدیر)" : ""}{u.active === false ? " (غیرفعال)" : ""}</td>
-                    <td className="text-center">{toFaDigits(String(u.files))}</td>
-                    <td className="text-center font-bold text-[var(--sea)]">{toFaDigits(String(u.appraisals))}</td>
-                    <td className="text-center font-bold text-violet-700">{toFaDigits(String(u.advertised))}</td>
-                    <td className="text-center font-bold text-teal-700">{toFaDigits(String(u.sessionCards))}</td>
-                    <td className="text-center">{toFaDigits(String(u.fileFindings))}</td>
-                    <td className="text-center">{toFaDigits(String(u.viewings))}</td>
-                    <td className="text-center font-bold">{toFaDigits(String(u.deals))}</td>
-                    <td className="text-center">
-                      <span className={u.overdue > 0 ? "text-red-600 font-bold" : ""}>{toFaDigits(String(u.overdue))}</span>
-                    </td>
-                  </tr>
+                  <Fragment key={u.id}>
+                    <tr className="border-b last:border-0">
+                      <td className="py-2.5 pr-2 font-medium text-right">{u.name} {u.role === "OWNER" ? "(مدیر)" : ""}{u.active === false ? " (غیرفعال)" : ""}</td>
+                      <td className="text-center">{toFaDigits(String(u.files))}</td>
+                      <td className="text-center font-bold text-[var(--sea)]">{toFaDigits(String(u.appraisals))}</td>
+                      <td className="text-center font-bold text-violet-700">
+                        {u.advertised > 0 ? (
+                          <button
+                            type="button"
+                            onClick={() => setExpandedAdvertised(expandedAdvertised === u.id ? null : u.id)}
+                            aria-expanded={expandedAdvertised === u.id}
+                            title="نمایش فایل‌های آگهی‌شده"
+                            className="underline decoration-dotted underline-offset-4 hover:text-violet-900"
+                          >
+                            {toFaDigits(String(u.advertised))} {expandedAdvertised === u.id ? "▴" : "▾"}
+                          </button>
+                        ) : (
+                          toFaDigits("0")
+                        )}
+                      </td>
+                      <td className="text-center font-bold text-teal-700">{toFaDigits(String(u.sessionCards))}</td>
+                      <td className="text-center">{toFaDigits(String(u.fileFindings))}</td>
+                      <td className="text-center">{toFaDigits(String(u.viewings))}</td>
+                      <td className="text-center font-bold">{toFaDigits(String(u.deals))}</td>
+                      <td className="text-center">
+                        <span className={u.overdue > 0 ? "text-red-600 font-bold" : ""}>{toFaDigits(String(u.overdue))}</span>
+                      </td>
+                    </tr>
+                    {expandedAdvertised === u.id && (
+                      <tr className="border-b bg-violet-50/70">
+                        <td colSpan={9} className="py-2 pr-2">
+                          <div className="text-[12px] font-medium text-violet-900">فایل‌های آگهی‌شده در این بازه:</div>
+                          {(data.advertisedItems ?? []).filter((it) => it.agentId === u.id).length === 0 ? (
+                            <p className="mt-1 text-[12px] text-[var(--ink-3)]">موردی ثبت نشده است.</p>
+                          ) : (
+                            <ul className="mt-1 space-y-1">
+                              {(data.advertisedItems ?? [])
+                                .filter((it) => it.agentId === u.id)
+                                .map((it, i) => (
+                                  <li key={`${it.propertyId ?? "?"}-${it.date}-${i}`} className="flex flex-wrap items-center gap-2 text-[13px]">
+                                    <DateText value={it.date} />
+                                    {it.propertyId ? (
+                                      <Link href={`/properties/${it.propertyId}`} className="font-medium text-[var(--sea)] hover:underline">
+                                        {it.code ? `${it.code} — ${it.title ?? "بدون عنوان"}` : (it.title ?? "فایل")}
+                                      </Link>
+                                    ) : (
+                                      <span>{it.title ?? "فایل حذف‌شده"}</span>
+                                    )}
+                                  </li>
+                                ))}
+                            </ul>
+                          )}
+                        </td>
+                      </tr>
+                    )}
+                  </Fragment>
                 ))}
                 <tr className="font-bold bg-[var(--paper-2)]">
                   <td className="py-2.5 pr-2 text-right">جمع کل</td>
@@ -187,7 +236,7 @@ export default function ReportsPage() {
             </table>
           </div>
           <p className="mt-3 text-[12px] text-[var(--ink-3)]">
-            «قرارداد» یعنی معامله قطعی‌شده؛ «بازدید» بازدیدهای لغونشده در بازه است؛ «پیگیری عقب‌افتاده» وضعیت امروز است، نه مربوط به بازه. «آگهی» تعداد دفعاتی است که مشاور در بازه فایلی را آگهی کرده است (هر فایل در هر روز یک بار). «کارت جلسه» تعداد کارت‌های جلسه‌ای است که مشاور در بازه ثبت کرده است (به نام سازندهٔ کارت).
+            «قرارداد» یعنی معامله قطعی‌شده؛ «بازدید» بازدیدهای لغونشده در بازه است؛ «پیگیری عقب‌افتاده» وضعیت امروز است، نه مربوط به بازه. «آگهی» تعداد دفعاتی است که مشاور در بازه فایلی را آگهی کرده است (هر فایل در هر روز یک بار) — روی عدد ستون «آگهی» بزنید تا فایل‌های آگهی‌شده همان مشاور در بازه دیده شود. «کارت جلسه» تعداد کارت‌های جلسه‌ای است که مشاور در بازه ثبت کرده است (به نام سازندهٔ کارت).
           </p>
         </Card>
       </div>

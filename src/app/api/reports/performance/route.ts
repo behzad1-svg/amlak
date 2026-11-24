@@ -13,6 +13,9 @@ import { serializeBigInt } from "@/lib/utils";
  * file findings, viewings (except canceled), deals (completed) and currently
  * overdue follow-ups. "Deals" are measured by contract date (contractAt);
  * old deals without contractAt fall back to createdAt.
+ * `advertisedItems` lists the advertised files in range (agent, file code +
+ * title, date) so the report can show WHICH file was advertised, not just
+ * how many — scoped exactly like the rows (an advisor sees only their own).
  */
 export async function GET(req: NextRequest) {
   const session = await getSessionFromCookies();
@@ -24,7 +27,7 @@ export async function GET(req: NextRequest) {
   const since = new Date(Date.now() - range * 24 * 60 * 60 * 1000);
   const now = new Date();
 
-  const [activeUsers, files, appraisals, advertised, sessionCards, fileFindings, viewings, deals, dealShares, overdue] = await Promise.all([
+  const [activeUsers, files, appraisals, advertised, sessionCards, fileFindings, viewings, deals, dealShares, overdue, advertisedItems] = await Promise.all([
     prisma.user.findMany({ where: { active: true }, select: { id: true, name: true, role: true }, orderBy: { name: "asc" } }),
     prisma.property.groupBy({
       by: ["listedById"],
@@ -75,6 +78,13 @@ export async function GET(req: NextRequest) {
       by: ["assignedAgentId"],
       where: { deletedAt: null, stage: { notIn: ["LOST", "FAILED", "WON", "CONTRACT"] }, nextFollowUpAt: { lt: now } },
       _count: true,
+    }),
+    // جزئیات آگهی‌ها — ردیف‌های ADVERTISED بازه (مشاور، فایل، تاریخ)؛
+    // شمارش از groupBy بالا می‌آید، اما «کدوم فایل» فقط از این ردیف‌ها معلوم می‌شود
+    prisma.activity.findMany({
+      where: { type: "ADVERTISED", createdAt: { gte: since } },
+      select: { agentId: true, propertyId: true, createdAt: true },
+      orderBy: { createdAt: "desc" },
     }),
   ]);
 
@@ -127,6 +137,23 @@ export async function GET(req: NextRequest) {
     users = [self];
   }
 
+  // فایل‌های آگهی‌شده در بازه — فقط برای کاربرانی که در پاسخ دیده می‌شوند؛
+  // مشاور فقط فایل‌های خودش را می‌بیند، چون users برای او فقط خودش است.
+  // کد/عنوان از خود فایل خوانده می‌شود (بدون فیلتر deletedAt — فایل حذف‌شده
+  // هم باید با عنوانش دیده شود، نه به‌صورت «نامشخص»).
+  const visibleIds = new Set(users.map((u) => u.id));
+  const advertisedRows = advertisedItems.filter((a) => a.propertyId && visibleIds.has(a.agentId));
+  const advertisedPropIds = [...new Set(advertisedRows.map((a) => a.propertyId as string))];
+  const advertisedProps =
+    advertisedPropIds.length > 0
+      ? await prisma.property.findMany({ where: { id: { in: advertisedPropIds } }, select: { id: true, code: true, title: true } })
+      : [];
+  const advertisedPropMap = new Map(advertisedProps.map((p) => [p.id, p]));
+  const advertisedDetail = advertisedRows.map((a) => {
+    const p = advertisedPropMap.get(a.propertyId as string);
+    return { agentId: a.agentId, propertyId: a.propertyId, code: p?.code ?? null, title: p?.title ?? null, date: a.createdAt };
+  });
+
   const rows = users.map((u) => ({
     id: u.id,
     name: u.name,
@@ -156,5 +183,5 @@ export async function GET(req: NextRequest) {
     { files: 0, appraisals: 0, advertised: 0, sessionCards: 0, fileFindings: 0, viewings: 0, deals: 0, overdue: 0 }
   );
 
-  return NextResponse.json(serializeBigInt({ range, since, users: rows, totals }));
+  return NextResponse.json(serializeBigInt({ range, since, users: rows, totals, advertisedItems: advertisedDetail }));
 }
