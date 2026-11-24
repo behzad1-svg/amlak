@@ -29,14 +29,16 @@ function isPublic(pathname: string): boolean {
 // در هدر x-nonce می‌گذارد تا layout آن را به اسکریپت تم بدهد، و همان CSP را
 // در هدر پاسخ می‌گذارد تا مرورگر اجرا کند. 'strict-dynamic' جای 'unsafe-inline'
 // را می‌گیرد: اسکریپت‌های دارای nonce می‌توانند اسکریپت‌های دیگر را بار کنند.
-// style-src 'unsafe-inline' می‌ماند چون experimental.inlineCss استایل را داخل
-// تگ <style> می‌گذارد و nonce به آن نمی‌خورد.
+// style-src دیگر 'unsafe-inline' ندارد: experimental.inlineCss خاموش است و استایل
+// به‌جای تگ <style> به‌صورت فایل جداگانه می‌آید. style-src-attr می‌ماند چون چند
+// جا style={{...}} داریم (مثلاً نوار پیشرفت در گزارش‌ها) و بدون آن خراب می‌شوند.
 function buildCsp(nonce: string): string {
   const isDev = process.env.NODE_ENV === "development";
   return [
     "default-src 'self'",
     `script-src 'self' 'nonce-${nonce}' 'strict-dynamic'${isDev ? " 'unsafe-eval'" : ""}`,
-    "style-src 'self' 'unsafe-inline'",
+    "style-src 'self'",
+    "style-src-attr 'unsafe-inline'",
     "img-src 'self' data: blob:",
     "font-src 'self' data:",
     "connect-src 'self' https://*.ingest.sentry.io https://*.ingest.de.sentry.io",

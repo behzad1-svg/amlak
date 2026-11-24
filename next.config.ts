@@ -16,8 +16,10 @@ const securityHeaders = [
 
 const nextConfig: NextConfig = {
   poweredByHeader: false,
-  // CSS را داخل HTML می‌گذارد تا درخواست جداگانه‌ استایل، اولین رندر را مسدود نکند (لایت‌هاوس: render-blocking CSS ~۲۸۰ms موبایل). برای Tailwind و CSS ۱۴٫۶ کیلوبایتی ما مناسب است؛ در بیلد پروداکشن اعمال می‌شود.
-  experimental: { inlineCss: true },
+  // inlineCss خاموش است تا CSP بتواند style-src را بدون 'unsafe-inline' ببندد
+  // (ممیزی امنیتی ۲ آذر): استایل به‌صورت فایل جداگانه می‌آید و در بازدیدهای بعدی
+  // از کش خوانده می‌شود؛ هزینه‌اش یک درخواست مسدودکننده رندر در اولین لود است
+  // (لایت‌هاوس: render-blocking CSS ~۲۸۰ms موبایل).
   async headers() {
     return [
       {
