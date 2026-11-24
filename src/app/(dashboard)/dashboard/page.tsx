@@ -14,6 +14,7 @@ import { CUSTOMER_STAGE_LABELS } from "@/lib/constants";
 import { AlertTriangle, Users, ArrowUpLeft, Eye, CalendarCheck, ListChecks } from "lucide-react";
 import { AdvertiseTodayCard } from "@/components/dashboard/AdvertiseTodayCard";
 import { AttendanceTodayCard } from "@/components/attendance/AttendanceTodayCard";
+import { NotesCard } from "@/components/dashboard/NotesCard";
 import { CommissionCalculator } from "@/components/dashboard/CommissionCalculator";
 import { TodayBadge } from "@/components/ui/TodayBadge";
 import { DateText } from "@/components/ui/DateText";
@@ -189,6 +190,8 @@ export default async function DashboardPage() {
         {/* حضور امروز — ورود/خروج با GPS */}
         <AttendanceTodayCard />
 
+        {/* دفترچه یادداشت شخصی — هر کسی واسه خودش */}
+        <NotesCard />
         {/* برنامهٔ سه روز — امروز یکپارچه با تأکید قرمز، فردا و پس‌فردا آبی */}
         <div className="grid gap-4 lg:grid-cols-3">
           <DayScheduleCard title="امروز" schedule={data.today} accent="red" />

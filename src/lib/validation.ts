@@ -346,6 +346,19 @@ export const taskCreateSchema = z.object({
   relatedId: z.string().optional().nullable(),
 });
 
+export const noteCreateSchema = z.object({
+  title: z.string().max(200).optional().nullable(),
+  content: z.string().min(1, "متن یادداشت الزامی است").max(5000),
+  remindAt: z.string().optional().nullable(),
+});
+
+export const noteUpdateSchema = z.object({
+  title: z.string().max(200).optional().nullable(),
+  content: z.string().min(1, "متن یادداشت الزامی است").max(5000).optional(),
+  remindAt: z.string().optional().nullable(),
+  done: z.boolean().optional(),
+});
+
 export const propertyAccessCreateSchema = z.object({
   userId: z.string().min(1),
   reason: z.string().max(500).optional().nullable(),
