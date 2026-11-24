@@ -21,6 +21,7 @@ export default function UsersPage() {
   const [userBusy, setUserBusy] = useState(false);
   const [pwFor, setPwFor] = useState<string | null>(null);
   const [pwValue, setPwValue] = useState("");
+  const [pwErr, setPwErr] = useState("");
   const [editFor, setEditFor] = useState<string | null>(null);
   const [editValue, setEditValue] = useState({ name: "", phone: "" });
   const [msg, setMsg] = useState("");
@@ -58,7 +59,7 @@ export default function UsersPage() {
     })();
   }, [role, roleLoading]);
 
-  async function patchUser(id: string, body: Record<string, unknown>, okMsg: string) {
+  async function patchUser(id: string, body: Record<string, unknown>, okMsg: string, onError?: (msg: string) => void) {
     setUserBusy(true);
     try {
       await apiFetch(`/api/users/${id}`, {
@@ -69,7 +70,9 @@ export default function UsersPage() {
       flash(okMsg);
       await loadUsers();
     } catch (e) {
-      flash("", errorMessage(e));
+      const m = errorMessage(e);
+      flash("", m);
+      onError?.(m);
     } finally {
       setUserBusy(false);
     }
@@ -100,10 +103,13 @@ export default function UsersPage() {
 
   async function resetUserPassword(u: ManagedUser) {
     if (pwValue.length < 12 || !/[A-Za-z]/.test(pwValue) || !/[0-9]/.test(pwValue)) {
-      flash("", "رمز تازه باید حداقل ۱۲ کاراکتر و شامل حرف لاتین و رقم باشد");
+      const m = "رمز تازه باید حداقل ۱۲ کاراکتر و شامل حرف لاتین و رقم باشد";
+      setPwErr(m);
+      flash("", m);
       return;
     }
-    await patchUser(u.id, { password: pwValue }, `رمز ${u.name} ریست شد — جلسه‌های او بسته شد`);
+    setPwErr("");
+    await patchUser(u.id, { password: pwValue }, `رمز ${u.name} ریست شد — جلسه‌های او بسته شد`, setPwErr);
     setPwFor(null);
     setPwValue("");
   }
@@ -153,6 +159,11 @@ export default function UsersPage() {
                 ? `${toFaDigits(String(visibleUsers.length))} نفر از ${toFaDigits(String(users.length))} نفر`
                 : `${toFaDigits(String(users.length))} نفر`}
             </span>
+            {q && (
+              <Button variant="outline" onClick={() => setQuery("")} className="text-[12px]">
+                پاک کردن جستجو
+              </Button>
+            )}
           </div>
           <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-3">
             {visibleUsers.map((u) => (
@@ -190,7 +201,7 @@ export default function UsersPage() {
                   >
                     {u.active ? "غیرفعال کردن" : "فعال کردن"}
                   </Button>
-                  <Button variant="outline" disabled={userBusy} onClick={() => { setPwFor(pwFor === u.id ? null : u.id); setPwValue(""); }}>
+                  <Button variant="outline" disabled={userBusy} onClick={() => { setPwFor(pwFor === u.id ? null : u.id); setPwValue(""); setPwErr(""); }}>
                     ریست رمز
                   </Button>
                   <Button
@@ -238,16 +249,19 @@ export default function UsersPage() {
                   <p className="text-[11px] text-zinc-400 mt-1">مدیر قرارداد فقط در کشوی مدیر قرارداد کارت جلسه دیده می‌شود و اعلان کارت جلسه را می‌گیرد؛ دسترسی دیگری نمی‌دهد.</p>
                 </div>
                 {pwFor === u.id && (
-                  <div className="mt-2 flex flex-col gap-2 sm:flex-row">
-                    <PasswordInput
-                      value={pwValue}
-                      onChange={(e) => setPwValue(e.target.value)}
-                      placeholder="رمز تازه (حداقل ۱۲ کاراکتر، حرف و رقم)"
-                      className="flex-1"
-                    />
-                    <Button disabled={userBusy} onClick={() => void resetUserPassword(u)} className="w-full sm:w-auto">
-                      ثبت رمز تازه
-                    </Button>
+                  <div className="mt-2 flex flex-col gap-2">
+                    <div className="flex flex-col gap-2 sm:flex-row">
+                      <PasswordInput
+                        value={pwValue}
+                        onChange={(e) => setPwValue(e.target.value)}
+                        placeholder="رمز تازه (حداقل ۱۲ کاراکتر، حرف و رقم)"
+                        className="flex-1"
+                      />
+                      <Button disabled={userBusy} onClick={() => void resetUserPassword(u)} className="w-full sm:w-auto">
+                        ثبت رمز تازه
+                      </Button>
+                    </div>
+                    {pwErr && <p className="text-[13px] text-red-700" role="alert">{pwErr}</p>}
                   </div>
                 )}
                 {editFor === u.id && (
