@@ -9,7 +9,7 @@
 import { NextResponse } from "next/server";
 import type { NextRequest } from "next/server";
 import { verifyToken, COOKIE_NAME } from "./lib/jwt";
-import { isForeignOrigin, needsOriginCheck } from "./lib/csrf";
+import { isForeignOrigin, needsOriginCheck, KNOWN_SITE_ORIGIN } from "./lib/csrf";
 
 // مسیرهای عمومی — تطبیق دقیق یا بر اساس سگمنت، نه startsWith
 // /api/cron/reminders اینجا عمومی است چون خودش با CRON_SECRET احراز هویت می‌کند.
@@ -65,7 +65,13 @@ export async function proxy(req: NextRequest) {
   // بررسی مبدأ برای درخواست‌های تغییردهندهٔ API (لایهٔ اول CSRF):
   // اگر Origin/Referer آمده و با مبدأ سایت نمی‌خواند، 403 بده.
   // وقتی هدر نیست (مثلاً cron با curl) رد نمی‌شود.
-  if (needsOriginCheck(req.method, pathname) && isForeignOrigin(req.headers.get("origin"), req.headers.get("referer"), req.nextUrl.origin)) {
+  // مقایسه روی هاست است، نه req.nextUrl.origin: پشت CDN ‏(WCDN) و Caddy،
+  // Next.js مبدأ داخلی سرور را می‌بیند و مقایسه با آن همهٔ درخواست‌های
+  // قانونی را رد می‌کرد.
+  if (
+    needsOriginCheck(req.method, pathname) &&
+    isForeignOrigin(req.headers.get("origin"), req.headers.get("referer"), KNOWN_SITE_ORIGIN, req.headers.get("host"))
+  ) {
     return withCsp(NextResponse.json({ error: "مبدأ درخواست معتبر نیست" }, { status: 403 }));
   }
   if (isPublic(pathname)) {

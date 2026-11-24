@@ -49,3 +49,26 @@ describe("needsOriginCheck", () => {
     expect(needsOriginCheck("POST", "/dashboard")).toBe(false);
   });
 });
+
+describe("isForeignOrigin behind a CDN / reverse proxy", () => {
+  it("allows the site Origin when the app sees an internal origin (WCDN + Caddy)", () => {
+    // پشت WCDN و Caddy، ‏Next.js مبدأ داخلی را می‌بیند؛
+    // هاست هدر Host همان هاست عمومی سایت است.
+    expect(isForeignOrigin(SITE, null, "http://127.0.0.1:3000", "crm.amlaksaj.ir")).toBe(false);
+    expect(isForeignOrigin(null, `${SITE}/dashboard`, "http://127.0.0.1:3000", "crm.amlaksaj.ir")).toBe(false);
+  });
+
+  it("rejects a foreign Origin even when the request Host is the site host", () => {
+    expect(isForeignOrigin("https://evil.example.com", null, SITE, "crm.amlaksaj.ir")).toBe(true);
+    expect(isForeignOrigin(null, "https://evil.example.com/login", SITE, "crm.amlaksaj.ir")).toBe(true);
+  });
+
+  it("ignores scheme and port differences when comparing hosts", () => {
+    expect(isForeignOrigin("https://crm.amlaksaj.ir:443", null, SITE, "crm.amlaksaj.ir")).toBe(false);
+    expect(isForeignOrigin("http://crm.amlaksaj.ir:3000", null, SITE, "crm.amlaksaj.ir")).toBe(false);
+  });
+
+  it("rejects a lookalike subdomain", () => {
+    expect(isForeignOrigin("https://crm.amlaksaj.ir.evil.example.com", null, SITE, "crm.amlaksaj.ir")).toBe(true);
+  });
+});
