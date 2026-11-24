@@ -24,7 +24,7 @@ export function Sidebar({ role, userName, unreadCount, unreadMatchCount, pending
     router.push("/login");
   }
   return (
-    <div className="flex flex-1 flex-col bg-white">
+    <div className="flex min-h-0 flex-1 flex-col bg-white">
       <div className="flex h-[64px] items-center justify-between border-b border-[var(--line)] px-5 shrink-0">
         <div className="flex items-center gap-3">
           <Image src="/saj-logo-mark.png" alt="املاک ساج" width={1331} height={464} className="saj-logo h-9 w-auto" />
@@ -45,7 +45,7 @@ export function Sidebar({ role, userName, unreadCount, unreadMatchCount, pending
         </div>
       </div>
 
-      <nav className="flex-1 space-y-1 p-3 overflow-y-auto">
+      <nav className="min-h-0 flex-1 space-y-1 p-3 overflow-y-auto">
         {nav.map((item) => {
           const active = pathname?.startsWith(item.href);
           return (

@@ -67,8 +67,8 @@ export function DashboardShell({
     <RoleContext.Provider value={role ?? null}>
     <IdleLogout />
     <div className="flex min-h-screen bg-[var(--paper)]">
-      {/* Desktop: inline sidebar — full or mini. sticky is on the aside itself: an overflow-hidden ancestor would break sticky, so the aside carries sticky + h-screen (its own overflow-hidden does not break it). */}
-      <aside className={`hidden lg:flex lg:shrink-0 lg:flex-col lg:sticky lg:top-0 lg:h-screen overflow-hidden border-l border-[var(--line)] bg-white transition-all duration-200 ${sidebarWidthClass}`}>
+      {/* Desktop: inline sidebar — full or mini. sticky is on the aside itself: an overflow-hidden ancestor would break sticky, so the aside carries sticky + h-screen. The aside itself scrolls (overflow-y-auto) so the whole menu stays reachable on short screens; its own overflow does not break its own stickiness. */}
+      <aside className={`hidden lg:flex lg:shrink-0 lg:flex-col lg:sticky lg:top-0 lg:h-screen overflow-y-auto border-l border-[var(--line)] bg-white transition-all duration-200 ${sidebarWidthClass}`}>
         {showMini ? <SidebarMini role={role} userName={userName} unreadCount={unreadCount} unreadMatchCount={unreadMatchCount} pendingSessionCardCount={pendingSessionCardCount} onExpand={toggleDesktop} /> : <Sidebar role={role} userName={userName} unreadCount={unreadCount} unreadMatchCount={unreadMatchCount} pendingSessionCardCount={pendingSessionCardCount} />}
       </aside>
 

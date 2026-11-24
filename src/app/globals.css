@@ -92,6 +92,8 @@ body {
 [data-theme="dark"] .bg-amber-100 { background-color: #372B13; }
 [data-theme="dark"] .hover\:bg-amber-50:hover { background-color: #2A2110; }
 [data-theme="dark"] .bg-violet-100 { background-color: #241D33; }
+[data-theme="dark"] .bg-violet-50 { background-color: #241D33; }
+[data-theme="dark"] .bg-violet-50\/70 { background-color: rgb(36 29 51 / 0.7); }
 [data-theme="dark"] .bg-zinc-50 { background-color: var(--paper-2); }
 [data-theme="dark"] .bg-zinc-100 { background-color: var(--paper-3); }
 [data-theme="dark"] .bg-\[\#EFF4FF\] { background-color: #1A2338; }
@@ -112,7 +114,9 @@ body {
 [data-theme="dark"] .text-amber-700,
 [data-theme="dark"] .text-amber-600 { color: #E3B341; }
 [data-theme="dark"] .text-violet-800,
-[data-theme="dark"] .text-violet-700 { color: #C4B5FD; }
+[data-theme="dark"] .text-violet-700,
+[data-theme="dark"] .text-violet-900 { color: #C4B5FD; }
+[data-theme="dark"] .hover\:text-violet-900:hover { color: #C4B5FD; }
 [data-theme="dark"] .text-teal-700 { color: #5EEAD4; }
 [data-theme="dark"] .text-zinc-700,
 [data-theme="dark"] .text-zinc-600 { color: #D3D8E2; }
