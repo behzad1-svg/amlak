@@ -248,11 +248,11 @@ export default function MatchingPage() {
   return (
     <div>
       <Header title="تطبیق" action={<Button variant="outline" onClick={markAll}>همه خوانده شد</Button>} />
-      <div className="p-4 sm:p-6 space-y-3 max-w-3xl">
+      <div className="p-4 sm:p-6 max-w-[1200px] space-y-3">
         {actionError && (
           <div className="rounded-lg bg-red-50 px-3 py-2 text-sm text-red-700" role="alert">{actionError}</div>
         )}
-        {list.length === 0 ? <p className="text-zinc-400">تطبیقی ندارید</p> : list.map((n) => (
+        {list.length === 0 ? <p className="text-zinc-400">تطبیقی ندارید</p> : (<div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-3">{list.map((n) => (
           <Card key={n.id} className={n.read ? "bg-[var(--paper-2)]" : "border-amber-200 bg-amber-50/30"}>
             <div className="flex items-start justify-between gap-3">
               <div className="flex-1 min-w-0">
@@ -278,7 +278,7 @@ export default function MatchingPage() {
               </div>
             </div>
           </Card>
-        ))}
+        ))}</div>)}
       </div>
     </div>
   );

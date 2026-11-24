@@ -71,6 +71,16 @@ export function getTehranWeekdayLong(now: Date = new Date()): string {
   return new Intl.DateTimeFormat("fa-IR", { timeZone: "Asia/Tehran", weekday: "long" }).format(now);
 }
 
+// ساعت به وقت تهران، مثل «۱۵:۱۱» — برای ساعت زندهٔ سربرگ
+export function formatTehranTime(now: Date = new Date()): string {
+  return new Intl.DateTimeFormat("fa-IR", {
+    timeZone: "Asia/Tehran",
+    hour: "2-digit",
+    minute: "2-digit",
+    hourCycle: "h23",
+  }).format(now);
+}
+
 // Compare two Jalali dates: negative means a is before b
 export function compareJalali(a: JalaliDate, b: JalaliDate): number {
   if (a.jy !== b.jy) return a.jy - b.jy;

@@ -5,9 +5,27 @@ import { Sidebar } from "./Sidebar";
 import { SidebarMini } from "./SidebarMini";
 import { ThemeToggle } from "@/components/ThemeToggle";
 import { IdleLogout } from "@/components/IdleLogout";
+import { formatJalaliDayMonth, formatTehranTime, getTehranWeekdayLong } from "@/lib/jalali";
 
 /** نقش کاربر — layout سرور آن را می‌دهد تا صفحات نیازی به فراخوانی /api/auth/me نداشته باشند (نقد ۸) */
 export const RoleContext = createContext<string | null>(null);
+
+// ساعت زندهٔ سربرگ — روز + تاریخ شمسی + ساعت تهران، کنار «سامانه CRM بنگاه»
+// فقط بعد از mount رندر می‌شود تا هیدریشن سرور/کلاینت ناسازگار نشود؛ هر ۲۰ ثانیه به‌روز می‌شود.
+function HeaderClock() {
+  const [now, setNow] = useState<Date | null>(null);
+  useEffect(() => {
+    setNow(new Date());
+    const t = setInterval(() => setNow(new Date()), 20000);
+    return () => clearInterval(t);
+  }, []);
+  if (!now) return null;
+  return (
+    <span className="hidden sm:inline text-[12px] text-[var(--ink-3)]">
+      {getTehranWeekdayLong(now)} {formatJalaliDayMonth(now)} · {formatTehranTime(now)}
+    </span>
+  );
+}
 
 export function DashboardShell({
   role,
@@ -99,6 +117,7 @@ export function DashboardShell({
           <span className="text-[13px] font-extrabold tracking-tight">املاک ساج</span>
           <span className="hidden sm:inline text-[11px] text-[var(--ink-3)]">بوشهر · SAJ</span>
           <span className="mr-auto hidden sm:inline text-[12px] text-[var(--ink-3)]">سامانه CRM بنگاه</span>
+          <HeaderClock />
           <ThemeToggle />
         </div>
         <div className="flex-1 bg-[var(--paper)]">{children}</div>

@@ -5,6 +5,7 @@ import {
   formatJalaliDateTime,
   formatJalaliDayMonth,
   formatJalaliShort,
+  formatTehranTime,
   getJalaliDaysInMonth,
   getTodayJalali,
   isPastJalaliDate,
@@ -249,5 +250,14 @@ describe("formatJalaliDayMonth", () => {
 
   it("returns a dash for missing input", () => {
     expect(formatJalaliDayMonth(null)).toBe("—");
+  });
+});
+
+describe("formatTehranTime", () => {
+  it("formats Tehran time with Persian digits", () => {
+    // 2026-11-24T11:41:00Z = 15:11 Tehran (UTC+3:30, no DST)
+    expect(formatTehranTime(new Date("2026-11-24T11:41:00Z"))).toBe("۱۵:۱۱");
+    // midnight renders 00:00, not 24:00
+    expect(formatTehranTime(new Date("2026-11-24T20:30:00Z"))).toBe("۰۰:۰۰");
   });
 });
