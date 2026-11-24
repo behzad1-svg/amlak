@@ -8,6 +8,7 @@ import { Input, PasswordInput, Select } from "@/components/ui/Input";
 import { PageError, PageSkeleton } from "@/components/ui/LoadState";
 import { useRole } from "@/hooks/useRole";
 import { apiFetch, apiJson, errorMessage } from "@/lib/api";
+import { toEnDigits, toFaDigits } from "@/lib/utils";
 import { PERMISSIONS, hasPermission } from "@/lib/permissions";
 
 type ManagedUser = { id: string; name: string; phone: string; role: string; active: boolean; createdAt: string; permissions?: Record<string, boolean>; isContractManager?: boolean };
@@ -28,6 +29,8 @@ export default function UsersPage() {
   const [loadError, setLoadError] = useState<string | null>(null);
   const [pendingRole, setPendingRole] = useState<{ user: ManagedUser; nextRole: string } | null>(null);
   const [pendingToggle, setPendingToggle] = useState<ManagedUser | null>(null);
+  /** جستجوی کاربر با نام یا شماره تماس */
+  const [query, setQuery] = useState("");
 
   // پیام موفقیت خودبه‌خود پاک می‌شود؛ پیام خطا تا اقدام بعدی می‌ماند
   function flash(ok: string, bad?: string) {
@@ -105,6 +108,17 @@ export default function UsersPage() {
     setPwValue("");
   }
 
+  // کاربرانِ دیده‌شده با جستجو — نام یا شماره تماس (ارقام فارسی هم به لاتین برگردانده می‌شوند)
+  const q = query.trim();
+  const qDigits = toEnDigits(q).replace(/\D/g, "");
+  const visibleUsers = q
+    ? users.filter(
+        (u) =>
+          u.name.toLowerCase().includes(q.toLowerCase()) ||
+          (qDigits !== "" && toEnDigits(u.phone).replace(/\D/g, "").includes(qDigits))
+      )
+    : users;
+
   if (loading || roleLoading) return <PageSkeleton rows={3} />;
   if (loadError) return <PageError message={loadError} onRetry={() => { setLoadError(null); setLoading(true); void loadUsers().finally(() => setLoading(false)); }} />;
   if (role !== "OWNER") {
@@ -121,13 +135,27 @@ export default function UsersPage() {
   return (
     <div>
       <Header title="کاربران" subtitle="ساختن کاربر، تغییر نقش و دسترسی، فعال/غیرفعال و ریست رمز" />
-      <div className="p-4 sm:p-6 max-w-2xl space-y-6">
+      <div className="p-4 sm:p-6 max-w-[1200px] space-y-6">
         {msg && <div className="rounded-lg bg-emerald-50 px-3 py-2 text-sm text-emerald-700">{msg}</div>}
         {err && <div className="rounded-lg bg-red-50 px-3 py-2 text-sm text-red-700" role="alert">{err}</div>}
         <Card>
           <h3 className="font-semibold mb-3">مدیریت کاربران</h3>
-          <div className="space-y-3">
-            {users.map((u) => (
+          <div className="mb-3 flex flex-wrap items-center gap-2">
+            <Input
+              value={query}
+              onChange={(e) => setQuery(e.target.value)}
+              placeholder="جستجوی نام یا شماره تماس…"
+              className="max-w-xs flex-1"
+              aria-label="جستجوی کاربر"
+            />
+            <span className="text-[12px] text-[var(--ink-3)]">
+              {q
+                ? `${toFaDigits(String(visibleUsers.length))} نفر از ${toFaDigits(String(users.length))} نفر`
+                : `${toFaDigits(String(users.length))} نفر`}
+            </span>
+          </div>
+          <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-3">
+            {visibleUsers.map((u) => (
               <div key={u.id} className="rounded-[12px] border border-[var(--line)] p-3">
                 <div className="flex flex-wrap items-center gap-2">
                   <span className="font-bold text-[13px]">{u.name}</span>
@@ -241,6 +269,7 @@ export default function UsersPage() {
               </div>
             ))}
             {users.length === 0 && <p className="text-sm text-zinc-400">کاربری نیست.</p>}
+            {users.length > 0 && visibleUsers.length === 0 && <p className="text-sm text-zinc-400">کاربری با این نام یا شماره پیدا نشد.</p>}
           </div>
           <form onSubmit={createUser} className="mt-4 border-t border-[var(--line)] pt-3 space-y-2">
             <div className="text-[13px] font-bold">کاربر تازه</div>
