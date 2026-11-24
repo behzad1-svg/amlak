@@ -4,7 +4,7 @@ import { Header } from "@/components/layout/Header";
 import { Card } from "@/components/ui/Card";
 import { Button } from "@/components/ui/Button";
 import { ConfirmDialog } from "@/components/ui/ConfirmDialog";
-import { Input, PasswordInput, Select } from "@/components/ui/Input";
+import { Input, PasswordInput, PhoneInput, Select } from "@/components/ui/Input";
 import { PageError, PageSkeleton } from "@/components/ui/LoadState";
 import { useRole } from "@/hooks/useRole";
 import { apiFetch, apiJson, errorMessage } from "@/lib/api";
@@ -86,7 +86,7 @@ export default function UsersPage() {
       await apiFetch("/api/users", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(newUser),
+        body: JSON.stringify({ ...newUser, phone: toEnDigits(newUser.phone) }),
       });
       setNewUser({ name: "", phone: "", password: "", role: "AGENT" });
       flash("کاربر ساخته شد");
@@ -253,11 +253,11 @@ export default function UsersPage() {
                 {editFor === u.id && (
                   <div className="mt-2 flex flex-col gap-2 sm:flex-row">
                     <Input value={editValue.name} onChange={(e) => setEditValue({ ...editValue, name: e.target.value })} placeholder="نام" className="flex-1" />
-                    <Input value={editValue.phone} onChange={(e) => setEditValue({ ...editValue, phone: e.target.value })} placeholder="شماره تماس" dir="ltr" className="flex-1 text-left" />
+                    <PhoneInput value={editValue.phone} onChange={(e) => setEditValue({ ...editValue, phone: e.target.value })} placeholder="شماره تماس" className="flex-1" />
                     <Button
                       disabled={userBusy}
                       onClick={async () => {
-                        await patchUser(u.id, { name: editValue.name.trim(), phone: editValue.phone.trim() }, "مشخصات به‌روز شد");
+                        await patchUser(u.id, { name: editValue.name.trim(), phone: toEnDigits(editValue.phone.trim()) }, "مشخصات به‌روز شد");
                         setEditFor(null);
                       }}
                       className="w-full sm:w-auto"
@@ -275,7 +275,7 @@ export default function UsersPage() {
             <div className="text-[13px] font-bold">کاربر تازه</div>
             <div className="grid gap-2 sm:grid-cols-2">
               <Input value={newUser.name} onChange={(e) => setNewUser({ ...newUser, name: e.target.value })} placeholder="نام و نام خانوادگی" required />
-              <Input value={newUser.phone} onChange={(e) => setNewUser({ ...newUser, phone: e.target.value })} placeholder="شماره تماس (مثلا 09170000004)" dir="ltr" className="text-left" required />
+              <PhoneInput value={newUser.phone} onChange={(e) => setNewUser({ ...newUser, phone: e.target.value })} placeholder="شماره تماس (مثلا 09170000004)" required />
               <PasswordInput value={newUser.password} onChange={(e) => setNewUser({ ...newUser, password: e.target.value })} placeholder="رمز (حداقل ۱۲ کاراکتر، حرف و رقم)" required minLength={12} />
               <Select value={newUser.role} onChange={(e) => setNewUser({ ...newUser, role: e.target.value })} aria-label="نقش کاربر تازه">
                 <option value="AGENT">مشاور</option>
@@ -283,6 +283,7 @@ export default function UsersPage() {
               </Select>
             </div>
             <Button type="submit" disabled={creatingUser}>{creatingUser ? "..." : "ساختن کاربر"}</Button>
+            {err && <p className="text-[13px] text-red-700" role="alert">{err}</p>}
           </form>
           <p className="mt-2 text-[12px] text-[var(--ink-3)]">
             حذف کاربر در سیستم نیست؛ برای قطع دسترسی، کاربر را غیرفعال کنید. با ریست رمز یا تغییر نقش، جلسه‌های آن کاربر بسته می‌شود.

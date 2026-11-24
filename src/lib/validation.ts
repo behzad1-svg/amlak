@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { toEnDigits } from "./utils";
 
 /**
  * اعتبارسنجی پارامترهای عددی query string؛
@@ -46,7 +47,13 @@ export const loginSchema = z.object({
   password: z.string().min(1, "رمز عبور الزامی است"),
 });
 
-const phoneSchema = z.string().regex(/^[0-9]{11}$/, "شماره تماس باید ۱۱ رقم باشد");
+const phoneSchema = z.preprocess(
+  (v) =>
+    typeof v === "string"
+      ? toEnDigits(v).replace(/[\s-]/g, "").replace(/^(?:\+98|0098)/, "0")
+      : v,
+  z.string().regex(/^[0-9]{11}$/, "شماره تماس باید ۱۱ رقم باشد"),
+);
 const passwordSchema = z
   .string()
   .min(12, "رمز عبور باید حداقل ۱۲ کاراکتر باشد")

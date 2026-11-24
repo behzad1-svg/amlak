@@ -113,6 +113,18 @@ describe("userCreateSchema", () => {
     expect(userCreateSchema.safeParse({ ...valid, phone: "091700000011" }).success).toBe(false);
   });
 
+  it("accepts Persian and Arabic digits in the phone and normalizes them", () => {
+    const fa = userCreateSchema.safeParse({ ...valid, phone: "۰۹۱۷۰۰۰۰۰۰۱" });
+    expect(fa.success).toBe(true);
+    if (fa.success) expect(fa.data.phone).toBe("09170000001");
+    const ar = userCreateSchema.safeParse({ ...valid, phone: "٠٩١٧٠٠٠٠٠٠١" });
+    expect(ar.success).toBe(true);
+    if (ar.success) expect(ar.data.phone).toBe("09170000001");
+    const prefixed = userCreateSchema.safeParse({ ...valid, phone: "+98 917 000 0001" });
+    expect(prefixed.success).toBe(true);
+    if (prefixed.success) expect(prefixed.data.phone).toBe("09170000001");
+  });
+
   it("rejects weak passwords", () => {
     expect(userCreateSchema.safeParse({ ...valid, password: "Abc123" }).success).toBe(false);
     expect(userCreateSchema.safeParse({ ...valid, password: "Abcdefghijkl" }).success).toBe(false);
