@@ -61,13 +61,14 @@ export function DashboardShell({
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
   }, [drawerOpen]);
-
+  // عرض سایدبار دسکتاپ با کلاس (۶۴/۲۷۲/۰) — جایگزین inline style شد تا style-src-attr از CSP حذف شود.
+  const sidebarWidthClass = !isDesktop ? "w-0" : mode === "mini" ? "w-16" : mode === "full" ? "w-[272px]" : "w-0";
   return (
     <RoleContext.Provider value={role ?? null}>
     <IdleLogout />
     <div className="flex min-h-screen bg-[var(--paper)]">
       {/* Desktop: inline sidebar — full or mini. sticky is on the aside itself: an overflow-hidden ancestor would break sticky, so the aside carries sticky + h-screen (its own overflow-hidden does not break it). */}
-      <aside className="hidden lg:flex lg:shrink-0 lg:flex-col lg:sticky lg:top-0 lg:h-screen overflow-hidden border-l border-[var(--line)] bg-white transition-all duration-200" style={{ width: isDesktop ? (mode === "mini" ? 64 : mode === "full" ? 272 : 0) : 0 }}>
+      <aside className={`hidden lg:flex lg:shrink-0 lg:flex-col lg:sticky lg:top-0 lg:h-screen overflow-hidden border-l border-[var(--line)] bg-white transition-all duration-200 ${sidebarWidthClass}`}>
         {showMini ? <SidebarMini role={role} userName={userName} unreadCount={unreadCount} unreadMatchCount={unreadMatchCount} pendingSessionCardCount={pendingSessionCardCount} onExpand={toggleDesktop} /> : <Sidebar role={role} userName={userName} unreadCount={unreadCount} unreadMatchCount={unreadMatchCount} pendingSessionCardCount={pendingSessionCardCount} />}
       </aside>
 

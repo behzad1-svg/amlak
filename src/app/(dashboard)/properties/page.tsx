@@ -509,8 +509,7 @@ export default function PropertiesPage() {
                 <Link key={p.id} href={`/properties/${p.id}`} className="group">
                   <Card className={`h-full p-0 overflow-hidden hover:shadow-[0_8px_24px_rgba(22,26,36,0.08)] transition-shadow ${PROPERTY_TYPE_CARD[p.type] ?? ""}`}>
                     <div
-                      className="h-1.5 w-full"
-                      style={{ background: p.dealType === "SALE" ? "var(--pomegranate)" : "var(--sea)" }}
+                      className={`h-1.5 w-full ${p.dealType === "SALE" ? "bg-[var(--pomegranate)]" : "bg-[var(--sea)]"}`}
                     />
                     <div className="p-3.5">
                       <div className="flex items-center justify-between gap-2">

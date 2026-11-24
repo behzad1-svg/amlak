@@ -46,7 +46,7 @@ export default function LoginPage() {
 
         {/* Left — editorial panel */}
         <div className="hidden lg:flex lg:w-[52%] relative overflow-hidden border-r border-[var(--line)] bg-[var(--ink)] text-white">
-          <div className="absolute inset-0 opacity-[0.08]" style={{ backgroundImage: "radial-gradient(circle at 30% 20%, white 1px, transparent 1px)", backgroundSize: "18px 18px" }} />
+          <div className="login-dot-pattern absolute inset-0 opacity-[0.08]" />
           <div className="absolute -top-24 -left-24 h-[380px] w-[380px] rounded-full bg-[var(--pomegranate)] opacity-20 blur-3xl" />
           <div className="absolute -bottom-24 -right-24 h-[380px] w-[380px] rounded-full bg-[var(--sea)] opacity-20 blur-3xl" />
           <div className="relative flex flex-1 flex-col p-10">

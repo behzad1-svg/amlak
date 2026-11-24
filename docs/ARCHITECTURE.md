@@ -216,8 +216,8 @@ Next.js — systemd service saj-crm  (Node 22، 127.0.0.1:3000)
 | PostgreSQL فقط روی 127.0.0.1 | ✅ |
 | fail2ban (sshd): ۵ خطا در ۱۰ دقیقه → بن ۱ ساعت | ✅ زنده (تا ۱ آذر: ۴۰۵ بن ثبت‌شده) |
 | هدرهای امنیتی (HSTS، X-Frame-Options DENY، nosniff، Referrer، Permissions-Policy) | ✅ در `next.config.ts` |
-| CSP | ⚠️ هنوز `unsafe-inline` دارد (اسکریپت و استایل) — شناخته‌شده، در چک‌لیست لانچ |
-| CSRF token | ❌ ندارد — شناخته‌شده |
+| CSP | ✅ بدون `unsafe-inline` — اسکریپت با nonce، استایل با کلاس؛ style-src-attr هم حذف شد |
+| CSRF token | ⚠️ توکن کامل ندارد؛ بررسی Origin/Referer در `src/proxy.ts` اضافه شد (لایهٔ اول) — توکن double-submit هنوز ندارد |
 | ورود با SSH پسورد + لاگین root | ⚠️ هنوز باز — **پارک‌شده با تصمیم مدیر**: اول کلید SSH خودش ساخته و تست شود، بعد بسته شود؛ تا لانچ دست نزنید |
 | 2FA برای مدیران | ❌ ندارد — موکول به لانچ |
 | هشدار ورود مشکوک | ❌ ندارد |

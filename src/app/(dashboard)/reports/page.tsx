@@ -44,6 +44,16 @@ const METRICS = [
   { key: "deals" as const, label: "قرارداد", color: "bg-[var(--pomegranate)]" },
 ] as const;
 
+// پله‌های عرض نوار پیشرفت (۵٪) — کلاس‌ها به‌صورت literal آمده‌اند تا Tailwind آن‌ها را بسازد؛
+// جایگزین style={{ width }} شد تا style-src-attr از CSP حذف شود.
+const BAR_WIDTH_STEPS = ["w-0", "w-[5%]", "w-[10%]", "w-[15%]", "w-[20%]", "w-[25%]", "w-[30%]", "w-[35%]", "w-[40%]", "w-[45%]", "w-[50%]", "w-[55%]", "w-[60%]", "w-[65%]", "w-[70%]", "w-[75%]", "w-[80%]", "w-[85%]", "w-[90%]", "w-[95%]", "w-full"];
+
+function barWidthClass(value: number, max: number): string {
+  const pct = (value / max) * 100;
+  const step = value > 0 ? Math.max(1, Math.round(pct / 5)) : 0;
+  return BAR_WIDTH_STEPS[Math.min(20, step)];
+}
+
 function BarChart({ title, rows, valueKey, color }: { title: string; rows: PerfRow[]; valueKey: (typeof METRICS)[number]["key"]; color: string }) {
   const sorted = [...rows].sort((a, b) => b[valueKey] - a[valueKey]);
   const max = Math.max(1, ...sorted.map((r) => r[valueKey]));
@@ -58,7 +68,7 @@ function BarChart({ title, rows, valueKey, color }: { title: string; rows: PerfR
             <div key={r.id} className="flex items-center gap-2 text-[13px]">
               <span className="w-28 shrink-0 truncate font-medium">{r.name}{r.role === "OWNER" ? " (مدیر)" : ""}{r.active === false ? " (غیرفعال)" : ""}</span>
               <div className="h-5 flex-1 overflow-hidden rounded-full bg-[var(--paper-2)]">
-                <div className={`h-full rounded-full ${color}`} style={{ width: `${Math.max(r[valueKey] > 0 ? 4 : 0, (r[valueKey] / max) * 100)}%` }} />
+                <div className={`h-full rounded-full ${color} ${barWidthClass(r[valueKey], max)}`} />
               </div>
               <span className="w-8 shrink-0 text-left font-bold">{toFaDigits(String(r[valueKey]))}</span>
             </div>

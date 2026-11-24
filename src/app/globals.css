@@ -180,3 +180,9 @@ body {
 
 /* لوگوی ساج مشکی روی شفاف است — در تم تاریک معکوس می شود تا روی پس زمینه ی تیره دیده شود */
 [data-theme="dark"] .saj-logo { filter: invert(1); }
+
+/* الگوی نقطه‌ای پنل لاگین — پیش‌تر inline style بود؛ برای حذف style-src-attr از CSP به کلاس منتقل شد */
+.login-dot-pattern {
+  background-image: radial-gradient(circle at 30% 20%, white 1px, transparent 1px);
+  background-size: 18px 18px;
+}

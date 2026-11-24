@@ -9,6 +9,7 @@
 import { NextResponse } from "next/server";
 import type { NextRequest } from "next/server";
 import { verifyToken, COOKIE_NAME } from "./lib/jwt";
+import { isForeignOrigin, needsOriginCheck } from "./lib/csrf";
 
 // مسیرهای عمومی — تطبیق دقیق یا بر اساس سگمنت، نه startsWith
 // /api/cron/reminders اینجا عمومی است چون خودش با CRON_SECRET احراز هویت می‌کند.
@@ -30,15 +31,15 @@ function isPublic(pathname: string): boolean {
 // در هدر پاسخ می‌گذارد تا مرورگر اجرا کند. 'strict-dynamic' جای 'unsafe-inline'
 // را می‌گیرد: اسکریپت‌های دارای nonce می‌توانند اسکریپت‌های دیگر را بار کنند.
 // style-src دیگر 'unsafe-inline' ندارد: experimental.inlineCss خاموش است و استایل
-// به‌جای تگ <style> به‌صورت فایل جداگانه می‌آید. style-src-attr می‌ماند چون چند
-// جا style={{...}} داریم (مثلاً نوار پیشرفت در گزارش‌ها) و بدون آن خراب می‌شوند.
+// به‌جای تگ <style> به‌صورت فایل جداگانه می‌آید. style-src-attr هم حذف شد:
+// چهار استفادهٔ inline style به کلاس تبدیل شد (بج فایل‌ها، نوار پیشرفت گزارش‌ها،
+// الگوی نقطه‌ای لاگین، عرض سایدبار).
 function buildCsp(nonce: string): string {
   const isDev = process.env.NODE_ENV === "development";
   return [
     "default-src 'self'",
     `script-src 'self' 'nonce-${nonce}' 'strict-dynamic'${isDev ? " 'unsafe-eval'" : ""}`,
     "style-src 'self'",
-    "style-src-attr 'unsafe-inline'",
     "img-src 'self' data: blob:",
     "font-src 'self' data:",
     "connect-src 'self' https://*.ingest.sentry.io https://*.ingest.de.sentry.io",
@@ -61,6 +62,12 @@ export async function proxy(req: NextRequest) {
     res.headers.set("Content-Security-Policy", csp);
     return res;
   };
+  // بررسی مبدأ برای درخواست‌های تغییردهندهٔ API (لایهٔ اول CSRF):
+  // اگر Origin/Referer آمده و با مبدأ سایت نمی‌خواند، 403 بده.
+  // وقتی هدر نیست (مثلاً cron با curl) رد نمی‌شود.
+  if (needsOriginCheck(req.method, pathname) && isForeignOrigin(req.headers.get("origin"), req.headers.get("referer"), req.nextUrl.origin)) {
+    return withCsp(NextResponse.json({ error: "مبدأ درخواست معتبر نیست" }, { status: 403 }));
+  }
   if (isPublic(pathname)) {
     return withCsp(NextResponse.next({ request: { headers: requestHeaders } }));
   }
