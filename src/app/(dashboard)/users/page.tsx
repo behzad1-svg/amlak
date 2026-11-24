@@ -153,6 +153,7 @@ export default function UsersPage() {
               placeholder="جستجوی نام یا شماره تماس…"
               className="max-w-xs flex-1"
               aria-label="جستجوی کاربر"
+              autoComplete="off"
             />
             <span className="text-[12px] text-[var(--ink-3)]">
               {q
@@ -256,6 +257,7 @@ export default function UsersPage() {
                         onChange={(e) => setPwValue(e.target.value)}
                         placeholder="رمز تازه (حداقل ۱۲ کاراکتر، حرف و رقم)"
                         className="flex-1"
+                        autoComplete="new-password"
                       />
                       <Button disabled={userBusy} onClick={() => void resetUserPassword(u)} className="w-full sm:w-auto">
                         ثبت رمز تازه
@@ -285,12 +287,12 @@ export default function UsersPage() {
             {users.length === 0 && <p className="text-sm text-zinc-400">کاربری نیست.</p>}
             {users.length > 0 && visibleUsers.length === 0 && <p className="text-sm text-zinc-400">کاربری با این نام یا شماره پیدا نشد.</p>}
           </div>
-          <form onSubmit={createUser} className="mt-4 border-t border-[var(--line)] pt-3 space-y-2">
+          <form onSubmit={createUser} autoComplete="off" className="mt-4 border-t border-[var(--line)] pt-3 space-y-2">
             <div className="text-[13px] font-bold">کاربر تازه</div>
             <div className="grid gap-2 sm:grid-cols-2">
-              <Input value={newUser.name} onChange={(e) => setNewUser({ ...newUser, name: e.target.value })} placeholder="نام و نام خانوادگی" required />
-              <PhoneInput value={newUser.phone} onChange={(e) => setNewUser({ ...newUser, phone: e.target.value })} placeholder="شماره تماس (مثلا 09170000004)" required />
-              <PasswordInput value={newUser.password} onChange={(e) => setNewUser({ ...newUser, password: e.target.value })} placeholder="رمز (حداقل ۱۲ کاراکتر، حرف و رقم)" required minLength={12} />
+              <Input value={newUser.name} onChange={(e) => setNewUser({ ...newUser, name: e.target.value })} placeholder="نام و نام خانوادگی" autoComplete="off" required />
+              <PhoneInput value={newUser.phone} onChange={(e) => setNewUser({ ...newUser, phone: e.target.value })} placeholder="شماره تماس (مثلا 09170000004)" autoComplete="off" required />
+              <PasswordInput value={newUser.password} onChange={(e) => setNewUser({ ...newUser, password: e.target.value })} placeholder="رمز (حداقل ۱۲ کاراکتر، حرف و رقم)" autoComplete="new-password" required minLength={12} />
               <Select value={newUser.role} onChange={(e) => setNewUser({ ...newUser, role: e.target.value })} aria-label="نقش کاربر تازه">
                 <option value="AGENT">مشاور</option>
                 <option value="OWNER">مدیر</option>
