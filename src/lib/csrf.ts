@@ -8,8 +8,9 @@
 // (req.nextUrl.origin) مبدأ داخلی سرور است (مثلاً http://127.0.0.1:3000)،
 // نه مبدأ عمومی سایت — پس مقایسه با آن همهٔ درخواست‌های قانونی را رد
 // می‌کند (لاگین هم با 403 «مبدأ درخواست معتبر نیست» می‌شکست).
-// به‌جای آن، هاست Origin/Referer را با هاست هدر Host و با مبدأ
-// شناخته‌شدهٔ سایت مقایسه می‌کنیم (بدون scheme و port).
+// به‌جای آن، فقط با مبدأ شناخته‌شدهٔ سایت مقایسه می‌کنیم
+// (بدون scheme و port). به هدر Host اعتماد نمی‌کنیم: هدر Host
+// را مهاجم می‌تواند جعل کند، پس تنها مبدأ شناخته‌شده مجاز است.
 
 /** مبدأ عمومی شناخته‌شدهٔ سایت. */
 export const KNOWN_SITE_ORIGIN = "https://crm.amlaksaj.ir";
@@ -28,7 +29,6 @@ export function isForeignOrigin(
   origin: string | null,
   referer: string | null,
   siteOrigin: string,
-  requestHost?: string | null,
 ): boolean {
   const candidate = origin ?? referer;
   if (!candidate) return false;
@@ -37,12 +37,6 @@ export function isForeignOrigin(
   // مبدأ شناخته‌شدهٔ سایت همیشه مجاز است.
   const siteHost = hostnameOf(siteOrigin);
   if (siteHost && candidateHost === siteHost) return false;
-  // پشت reverse-proxy هاست هدر Host همان هاست عمومی سایت است،
-  // حتی اگر Next.js مبدأ داخلی را ببیند؛ مقایسه فقط روی هاست.
-  if (requestHost) {
-    const host = requestHost.split(":")[0].trim().toLowerCase();
-    if (host && candidateHost === host) return false;
-  }
   return true;
 }
 

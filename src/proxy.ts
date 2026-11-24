@@ -65,12 +65,12 @@ export async function proxy(req: NextRequest) {
   // بررسی مبدأ برای درخواست‌های تغییردهندهٔ API (لایهٔ اول CSRF):
   // اگر Origin/Referer آمده و با مبدأ سایت نمی‌خواند، 403 بده.
   // وقتی هدر نیست (مثلاً cron با curl) رد نمی‌شود.
-  // مقایسه روی هاست است، نه req.nextUrl.origin: پشت CDN ‏(WCDN) و Caddy،
-  // Next.js مبدأ داخلی سرور را می‌بیند و مقایسه با آن همهٔ درخواست‌های
-  // قانونی را رد می‌کرد.
+  // مقایسه فقط با مبدأ شناخته‌شدهٔ سایت است، نه req.nextUrl.origin
+  // (پشت CDN و Caddy مبدأ داخلی دیده می‌شود) و نه هدر Host
+  // (قابل جعل است) — فقط crm.amlaksaj.ir مجاز است.
   if (
     needsOriginCheck(req.method, pathname) &&
-    isForeignOrigin(req.headers.get("origin"), req.headers.get("referer"), KNOWN_SITE_ORIGIN, req.headers.get("host"))
+    isForeignOrigin(req.headers.get("origin"), req.headers.get("referer"), KNOWN_SITE_ORIGIN)
   ) {
     return withCsp(NextResponse.json({ error: "مبدأ درخواست معتبر نیست" }, { status: 403 }));
   }
