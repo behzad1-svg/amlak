@@ -1,13 +1,15 @@
-// ثبت خروج — رکوردِ بازِ امروز را می‌بندد. خروج بعد از پایان شیفت هم
-// قبول است (اضافه‌کاری مشکلی ندارد) و شعاع دفتر برای خروج اجباری نیست:
-// کسی که خروج را فراموش کرده و از خانه ثبت می‌کند نباید قفل شود.
-// اما خروج از بیرونِ محدودهٔ دفتر دلیل می‌خواهد: اول بدون دلیل رد می‌شود
-// («شما خارج از محدوده دفتر هستید» + فاصله) و با دلیلِ آزاد ثبت می‌شود.
+// ثبت خروج — رکوردِ بازِ امروز را می‌بندد. خروج تا یک ساعت پس از پایان
+// شیفت ممکن است (صبح تا ۱۴:۰۰، عصر تا ۲۲:۰۰)؛ پس از آن خروج بسته است و
+// رکورد با همان ورودِ بدون خروج می‌ماند («مشاور خروج نزده»).
+// شعاع دفتر برای خروج اجباری نیست: کسی که خروج را فراموش کرده و از خانه
+// ثبت می‌کند نباید قفل شود. اما خروج از بیرونِ محدودهٔ دفتر دلیل می‌خواهد:
+// اول بدون دلیل رد می‌شود («شما خارج از محدوده دفتر هستید» + فاصله) و با
+// دلیلِ آزاد ثبت می‌شود.
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { getSessionFromCookies } from "@/lib/auth";
 import { getAttendanceSettings } from "@/lib/settings";
-import { CHECKOUT_REASON_MAX, distanceToOffice, tehranDateOnly } from "@/lib/attendance";
+import { CHECKOUT_REASON_MAX, distanceToOffice, isCheckoutOpen, tehranDateOnly } from "@/lib/attendance";
 import { z } from "zod";
 
 const checkOutSchema = z.object({
@@ -35,11 +37,17 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({ error: "ورودی ثبت نشده است — اول ورود را ثبت کنید." }, { status: 400 });
   }
 
+  // مهلت خروج: یک ساعت پس از پایان شیفت؛ پس از آن خروج بسته است.
+  const settings = await getAttendanceSettings();
+  const checkoutAllowed = isCheckoutOpen(now, open.session, settings);
+  if (!checkoutAllowed.ok) {
+    return NextResponse.json({ error: checkoutAllowed.message }, { status: 400 });
+  }
+
   const { lat, lng, reason } = parsed.data;
   let distance: number | undefined;
   let outOfRange = false;
   if (typeof lat === "number" && typeof lng === "number") {
-    const settings = await getAttendanceSettings();
     const d = distanceToOffice(lat, lng, settings);
     distance = d.distanceM;
     outOfRange = d.outside;

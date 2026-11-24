@@ -7,6 +7,7 @@ import { formatJalaliDateTime } from "@/lib/jalali";
 import { normalizeCoAdvisorIds } from "@/lib/sessionCards";
 import { canAccessCustomer, hasRestrictedAccess } from "@/lib/access";
 import { createAuditLog } from "@/lib/audit";
+import { sendSms, sessionCardSmsText } from "@/lib/sms";
 
 const CARD_INCLUDE = {
   customer: { select: { id: true, name: true, phone: true } },
@@ -90,7 +91,7 @@ export async function POST(req: NextRequest) {
   if (d.contractManagerId) {
     contractManager = await prisma.user.findUnique({
       where: { id: d.contractManagerId },
-      select: { id: true, active: true, isContractManager: true },
+      select: { id: true, active: true, isContractManager: true, phone: true },
     });
     if (!contractManager || !contractManager.active || !contractManager.isContractManager)
       return NextResponse.json({ error: "مدیر قرارداد معتبر نیست" }, { status: 400 });
@@ -148,6 +149,15 @@ export async function POST(req: NextRequest) {
         message: `کارت جلسه تازه: ${customer.name} — ${fileLabel} — ${formatJalaliDateTime(scheduledAt)}`,
       })),
     });
+  }
+  // پیامک به مدیر قرارداد انتخاب‌شده — بعد از ذخیرهٔ کارت، و هرگز مانع
+  // ثبت کارت نمی‌شود: خطا فقط در لاگ سرور می‌ماند.
+  if (contractManager?.phone) {
+    try {
+      await sendSms(contractManager.phone, sessionCardSmsText(session.user.name));
+    } catch (e) {
+      console.error("[session-card-sms] failed:", e instanceof Error ? e.message : "");
+    }
   }
   return NextResponse.json(serializeBigInt(card), { status: 201 });
 }

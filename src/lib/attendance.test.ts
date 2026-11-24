@@ -1,8 +1,11 @@
 import { describe, expect, it } from "vitest";
 import {
   canRequestLeave,
+  checkoutDeadlineMin,
   distanceToOffice,
   haversineMeters,
+  isCheckoutMissed,
+  isCheckoutOpen,
   isWorkingDay,
   leaveCoversSession,
   parseHHMM,
@@ -216,5 +219,41 @@ describe("canRequestLeave", () => {
   });
   it("a past day is rejected", () => {
     expect(canRequestLeave(atTehran("2026-11-24T08:00"), SETTINGS, pastDay, "MORNING").ok).toBe(false);
+  });
+});
+
+describe("checkoutDeadlineMin / isCheckoutOpen / isCheckoutMissed", () => {
+  // مهلت خروج: یک ساعت پس از پایان شیفت — صبح تا ۱۴:۰۰، عصر تا ۲۲:۰۰.
+  it("morning deadline is 14:00, evening deadline is 22:00", () => {
+    expect(checkoutDeadlineMin("MORNING", SETTINGS)).toBe(14 * 60);
+    expect(checkoutDeadlineMin("EVENING", SETTINGS)).toBe(22 * 60);
+  });
+  it("check-out at 13:59 for the morning session is still open", () => {
+    expect(isCheckoutOpen(atTehran("2026-11-23T13:59"), "MORNING", SETTINGS).ok).toBe(true);
+  });
+  it("check-out at exactly 14:00 for the morning session is still open", () => {
+    expect(isCheckoutOpen(atTehran("2026-11-23T14:00"), "MORNING", SETTINGS).ok).toBe(true);
+  });
+  it("check-out at 14:01 for the morning session is closed", () => {
+    const r = isCheckoutOpen(atTehran("2026-11-23T14:01"), "MORNING", SETTINGS);
+    expect(r.ok).toBe(false);
+    if (!r.ok) expect(r.message).toContain("14:00");
+  });
+  it("check-out at 22:00 for the evening session is still open", () => {
+    expect(isCheckoutOpen(atTehran("2026-11-23T22:00"), "EVENING", SETTINGS).ok).toBe(true);
+  });
+  it("check-out at 22:01 for the evening session is closed", () => {
+    const r = isCheckoutOpen(atTehran("2026-11-23T22:01"), "EVENING", SETTINGS);
+    expect(r.ok).toBe(false);
+    if (!r.ok) expect(r.message).toContain("22:00");
+  });
+  it("the morning deadline does not close the evening check-out", () => {
+    expect(isCheckoutOpen(atTehran("2026-11-23T18:00"), "EVENING", SETTINGS).ok).toBe(true);
+  });
+  it("isCheckoutMissed is true only after the deadline", () => {
+    expect(isCheckoutMissed(atTehran("2026-11-23T14:00"), "MORNING", SETTINGS)).toBe(false);
+    expect(isCheckoutMissed(atTehran("2026-11-23T14:01"), "MORNING", SETTINGS)).toBe(true);
+    expect(isCheckoutMissed(atTehran("2026-11-23T21:59"), "EVENING", SETTINGS)).toBe(false);
+    expect(isCheckoutMissed(atTehran("2026-11-23T22:01"), "EVENING", SETTINGS)).toBe(true);
   });
 });

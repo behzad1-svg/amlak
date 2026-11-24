@@ -17,8 +17,26 @@ const MAX_ATTEMPTS_PHONE_ONLY = 50;
 
 /** سقف هر کلید: IP بیست تلاش، سطل صرف تلفن پنجاه تلاش، بقیه (شماره تماس، ساده یا ترکیبی با IP) پنج تلاش. */
 export function rateLimitForKey(key: string): number {
-  if (key.startsWith("login:phone-only:")) return MAX_ATTEMPTS_PHONE_ONLY;
-  return key.startsWith("login:ip:") ? MAX_ATTEMPTS_IP : MAX_ATTEMPTS_PHONE;
+  if (key.startsWith("login:phone-only:") || key.startsWith("forgot:phone-only:")) return MAX_ATTEMPTS_PHONE_ONLY;
+  if (key.startsWith("login:ip:") || key.startsWith("forgot:ip:")) return MAX_ATTEMPTS_IP;
+  return MAX_ATTEMPTS_PHONE;
+}
+
+/** کلید سطل IP برای بازیابی رمز: forgot:ip:<ip> — سقف ۲۰. */
+export function forgotIpRateLimitKey(ip: string): string {
+  return `forgot:ip:${ip}`;
+}
+
+/** کلید سطل تلفن برای بازیابی رمز: ترکیبی با IP — forgot:phone:<phone>:<ip>؛
+ *  وقتی IP در دسترس نیست، به کلید صرف تلفن برمی‌گردد. سقف ۵. */
+export function forgotPhoneRateLimitKey(phone: string, ip: string | null): string {
+  return ip ? `forgot:phone:${phone}:${ip}` : `forgot:phone:${phone}`;
+}
+
+/** کلید سطل صرف تلفن برای بازیابی رمز: forgot:phone-only:<phone> — مستقل
+ *  از IP، سقف ۵۰؛ تا چرخش IP نتواند سقف ۵ تایی شماره را دور بزند. */
+export function forgotPhoneOnlyRateLimitKey(phone: string): string {
+  return `forgot:phone-only:${phone}`;
 }
 
 /** کلید سطل IP: login:ip:<ip> — سقف ۲۰؛ دفتر یک IP مشترک دارد و تنگ نمی شود. */

@@ -9,6 +9,7 @@ import {
   toPersianDigits,
 } from "@/lib/jalali";
 import {
+  isCheckoutMissed,
   leaveCoversSession,
   tehranDateOnly,
   tehranParts,
@@ -81,6 +82,9 @@ export async function GET() {
         status,
         checkInAt: rec?.checkInAt?.toISOString() ?? null,
         checkOutAt: rec?.checkOutAt?.toISOString() ?? null,
+        // ورود ثبت شده ولی خروج نه، و مهلت خروج (یک ساعت پس از پایان شیفت)
+        // گذشته — در جدول «مشاور خروج نزده» نشان داده می‌شود.
+        checkoutMissed: !!rec && !rec.checkOutAt && isCheckoutMissed(now, s, settings),
         lateMinutes: rec?.lateMinutes ?? null,
         lateReason: rec?.lateReason ?? null,
         checkInDistanceM: rec?.checkInDistanceM ?? null,

@@ -25,6 +25,29 @@ type PerfRow = {
   overdue: number;
 };
 
+/** یک ردیفِ قابل بازکردن زیر عدد هر ستون — کد + عنوان + تاریخ، با لینک. */
+type ReportItem = {
+  agentId: string;
+  id: string;
+  code: string | null;
+  title: string | null;
+  date: string | null;
+  href: string;
+};
+
+type MetricKey = "files" | "appraisals" | "advertised" | "sessionCards" | "fileFindings" | "viewings" | "deals" | "overdue";
+
+const METRIC_EXPAND_TITLE: Record<MetricKey, string> = {
+  files: "فایل‌های ثبت‌شده در این بازه:",
+  appraisals: "فایل‌های کارشناسی‌شده در این بازه:",
+  advertised: "فایل‌های آگهی‌شده در این بازه:",
+  sessionCards: "کارت‌های جلسهٔ ثبت‌شده در این بازه:",
+  fileFindings: "مشتری‌های فایل‌یابی در این بازه:",
+  viewings: "بازدیدها در این بازه:",
+  deals: "قراردادهای قطعی در این بازه:",
+  overdue: "پیگیری‌های عقب‌افتادهٔ امروز:",
+};
+
 type PerfData = {
   range: number;
   since: string;
@@ -32,7 +55,72 @@ type PerfData = {
   totals: { files: number; appraisals: number; advertised: number; sessionCards: number; fileFindings: number; viewings: number; deals: number; overdue: number };
   /** فایل‌های آگهی‌شده در بازه — برای بازکردن لیست هر مشاور (کد + عنوان + تاریخ) */
   advertisedItems: { agentId: string; propertyId: string | null; code: string | null; title: string | null; date: string }[];
+  fileItems: ReportItem[];
+  appraisalItems: ReportItem[];
+  sessionCardItems: ReportItem[];
+  fileFindingItems: ReportItem[];
+  viewingItems: ReportItem[];
+  dealItems: ReportItem[];
+  overdueItems: ReportItem[];
 };
+
+/** لیست موارد هر ستون از روی دادهٔ گزارش — «آگهی» شکل قدیمی خودش را دارد و اینجا یک‌شکل می‌شود. */
+function itemsForMetric(d: PerfData, metric: MetricKey): ReportItem[] {
+  switch (metric) {
+    case "files": return d.fileItems ?? [];
+    case "appraisals": return d.appraisalItems ?? [];
+    case "advertised":
+      return (d.advertisedItems ?? []).map((it) => ({
+        agentId: it.agentId,
+        id: it.propertyId ?? "",
+        code: it.code,
+        title: it.title,
+        date: it.date,
+        href: it.propertyId ? `/properties/${it.propertyId}` : "",
+      }));
+    case "sessionCards": return d.sessionCardItems ?? [];
+    case "fileFindings": return d.fileFindingItems ?? [];
+    case "viewings": return d.viewingItems ?? [];
+    case "deals": return d.dealItems ?? [];
+    case "overdue": return d.overdueItems ?? [];
+  }
+}
+
+/** سلول عدد یک ستون — اگر عدد بیشتر از صفر باشد، با زدن رویش لیست موارد همان مشاور باز می‌شود. */
+function MetricCell({
+  value,
+  metric,
+  agentId,
+  expanded,
+  onToggle,
+  className,
+}: {
+  value: number;
+  metric: MetricKey;
+  agentId: string;
+  expanded: { metric: MetricKey; agentId: string } | null;
+  onToggle: (metric: MetricKey, agentId: string) => void;
+  className?: string;
+}) {
+  const open = expanded?.metric === metric && expanded?.agentId === agentId;
+  return (
+    <td className={`text-center ${className ?? ""}`}>
+      {value > 0 ? (
+        <button
+          type="button"
+          onClick={() => onToggle(metric, agentId)}
+          aria-expanded={open}
+          title="نمایش موارد"
+          className="underline decoration-dotted underline-offset-4 hover:opacity-80"
+        >
+          {toFaDigits(String(value))} {open ? "▴" : "▾"}
+        </button>
+      ) : (
+        toFaDigits("0")
+      )}
+    </td>
+  );
+}
 
 const METRICS = [
   { key: "files" as const, label: "فایل ثبت‌شده", color: "bg-[var(--sea)]" },
@@ -85,8 +173,10 @@ export default function ReportsPage() {
   const [data, setData] = useState<PerfData | null>(null);
   const [loading, setLoading] = useState(true);
   const [loadError, setLoadError] = useState<string | null>(null);
-  /** مشاوری که لیست فایل‌های آگهی‌شده‌اش باز است (فقط یکی هم‌زمان) */
-  const [expandedAdvertised, setExpandedAdvertised] = useState<string | null>(null);
+  /** ستون و مشاوری که لیست مواردش باز است (فقط یکی هم‌زمان) */
+  const [expanded, setExpanded] = useState<{ metric: MetricKey; agentId: string } | null>(null);
+  const toggleExpanded = (metric: MetricKey, agentId: string) =>
+    setExpanded((cur) => (cur?.metric === metric && cur?.agentId === agentId ? null : { metric, agentId }));
 
   const load = useCallback(async (r: number) => {
     setLoading(true);
@@ -177,50 +267,34 @@ export default function ReportsPage() {
                   <Fragment key={u.id}>
                     <tr className="border-b last:border-0">
                       <td className="py-2.5 pr-2 font-medium text-right">{u.name} {u.role === "OWNER" ? "(مدیر)" : ""}{u.active === false ? " (غیرفعال)" : ""}</td>
-                      <td className="text-center">{toFaDigits(String(u.files))}</td>
-                      <td className="text-center font-bold text-[var(--sea)]">{toFaDigits(String(u.appraisals))}</td>
-                      <td className="text-center font-bold text-violet-700">
-                        {u.advertised > 0 ? (
-                          <button
-                            type="button"
-                            onClick={() => setExpandedAdvertised(expandedAdvertised === u.id ? null : u.id)}
-                            aria-expanded={expandedAdvertised === u.id}
-                            title="نمایش فایل‌های آگهی‌شده"
-                            className="underline decoration-dotted underline-offset-4 hover:text-violet-900"
-                          >
-                            {toFaDigits(String(u.advertised))} {expandedAdvertised === u.id ? "▴" : "▾"}
-                          </button>
-                        ) : (
-                          toFaDigits("0")
-                        )}
-                      </td>
-                      <td className="text-center font-bold text-teal-700">{toFaDigits(String(u.sessionCards))}</td>
-                      <td className="text-center">{toFaDigits(String(u.fileFindings))}</td>
-                      <td className="text-center">{toFaDigits(String(u.viewings))}</td>
-                      <td className="text-center font-bold">{toFaDigits(String(u.deals))}</td>
-                      <td className="text-center">
-                        <span className={u.overdue > 0 ? "text-red-600 font-bold" : ""}>{toFaDigits(String(u.overdue))}</span>
-                      </td>
+                      <MetricCell value={u.files} metric="files" agentId={u.id} expanded={expanded} onToggle={toggleExpanded} />
+                      <MetricCell value={u.appraisals} metric="appraisals" agentId={u.id} expanded={expanded} onToggle={toggleExpanded} className="font-bold text-[var(--sea)]" />
+                      <MetricCell value={u.advertised} metric="advertised" agentId={u.id} expanded={expanded} onToggle={toggleExpanded} className="font-bold text-violet-700" />
+                      <MetricCell value={u.sessionCards} metric="sessionCards" agentId={u.id} expanded={expanded} onToggle={toggleExpanded} className="font-bold text-teal-700" />
+                      <MetricCell value={u.fileFindings} metric="fileFindings" agentId={u.id} expanded={expanded} onToggle={toggleExpanded} />
+                      <MetricCell value={u.viewings} metric="viewings" agentId={u.id} expanded={expanded} onToggle={toggleExpanded} />
+                      <MetricCell value={u.deals} metric="deals" agentId={u.id} expanded={expanded} onToggle={toggleExpanded} className="font-bold" />
+                      <MetricCell value={u.overdue} metric="overdue" agentId={u.id} expanded={expanded} onToggle={toggleExpanded} className={u.overdue > 0 ? "text-red-600 font-bold" : ""} />
                     </tr>
-                    {expandedAdvertised === u.id && (
-                      <tr className="border-b bg-violet-50/70">
+                    {expanded?.agentId === u.id && (
+                      <tr className="border-b bg-[var(--paper-2)]">
                         <td colSpan={9} className="py-2 pr-2">
-                          <div className="text-[12px] font-medium text-violet-900">فایل‌های آگهی‌شده در این بازه:</div>
-                          {(data.advertisedItems ?? []).filter((it) => it.agentId === u.id).length === 0 ? (
+                          <div className="text-[12px] font-medium">{METRIC_EXPAND_TITLE[expanded.metric]}</div>
+                          {itemsForMetric(data, expanded.metric).filter((it) => it.agentId === u.id).length === 0 ? (
                             <p className="mt-1 text-[12px] text-[var(--ink-3)]">موردی ثبت نشده است.</p>
                           ) : (
                             <ul className="mt-1 space-y-1">
-                              {(data.advertisedItems ?? [])
+                              {itemsForMetric(data, expanded.metric)
                                 .filter((it) => it.agentId === u.id)
                                 .map((it, i) => (
-                                  <li key={`${it.propertyId ?? "?"}-${it.date}-${i}`} className="flex flex-wrap items-center gap-2 text-[13px]">
-                                    <DateText value={it.date} />
-                                    {it.propertyId ? (
-                                      <Link href={`/properties/${it.propertyId}`} className="font-medium text-[var(--sea)] hover:underline">
-                                        {it.code ? `${it.code} — ${it.title ?? "بدون عنوان"}` : (it.title ?? "فایل")}
+                                  <li key={`${it.id}-${it.date ?? ""}-${i}`} className="flex flex-wrap items-center gap-2 text-[13px]">
+                                    <DateText value={it.date} withTime={expanded.metric === "overdue"} />
+                                    {it.href ? (
+                                      <Link href={it.href} className="font-medium text-[var(--sea)] hover:underline">
+                                        {it.code ? `${it.code} — ${it.title ?? "بدون عنوان"}` : (it.title ?? "بدون عنوان")}
                                       </Link>
                                     ) : (
-                                      <span>{it.title ?? "فایل حذف‌شده"}</span>
+                                      <span>{it.title ?? "بدون عنوان"}</span>
                                     )}
                                   </li>
                                 ))}
@@ -246,7 +320,7 @@ export default function ReportsPage() {
             </table>
           </div>
           <p className="mt-3 text-[12px] text-[var(--ink-3)]">
-            «قرارداد» یعنی معامله قطعی‌شده؛ «بازدید» بازدیدهای لغونشده در بازه است؛ «پیگیری عقب‌افتاده» وضعیت امروز است، نه مربوط به بازه. «آگهی» تعداد دفعاتی است که مشاور در بازه فایلی را آگهی کرده است (هر فایل در هر روز یک بار) — روی عدد ستون «آگهی» بزنید تا فایل‌های آگهی‌شده همان مشاور در بازه دیده شود. «کارت جلسه» تعداد کارت‌های جلسه‌ای است که مشاور در بازه ثبت کرده است (به نام سازندهٔ کارت).
+            «قرارداد» یعنی معامله قطعی‌شده؛ «بازدید» بازدیدهای لغونشده در بازه است؛ «پیگیری عقب‌افتاده» وضعیت امروز است، نه مربوط به بازه. «آگهی» تعداد دفعاتی است که مشاور در بازه فایلی را آگهی کرده است (هر فایل در هر روز یک بار). «کارت جلسه» تعداد کارت‌های جلسه‌ای است که مشاور در بازه ثبت کرده است (به نام سازندهٔ کارت). روی عدد هر ستون بزنید تا موارد همان مشاور دیده شود — برای «پیگیری عقب‌افتاده»، پیگیری‌های عقب‌افتادهٔ امروز همان مشاور با تاریخ سررسید نشان داده می‌شود.
           </p>
         </Card>
       </div>

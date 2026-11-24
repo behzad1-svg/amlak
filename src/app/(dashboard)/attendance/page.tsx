@@ -23,6 +23,8 @@ interface SessionView {
   status: SessionStatus;
   checkInAt: string | null;
   checkOutAt: string | null;
+  /** ورود ثبت شده ولی خروج نه، و مهلت خروج گذشته — «مشاور خروج نزده» */
+  checkoutMissed: boolean;
   lateMinutes: number | null;
   lateReason: string | null;
   checkOutReason: string | null;
@@ -100,7 +102,13 @@ function ShiftCell({ s }: { s: SessionView }) {
       <div>
         ورود {timeHHMM(s.checkInAt)}
         {(s.lateMinutes ?? 0) > 0 ? <span className="font-bold text-amber-700"> ({toFaDigits(String(s.lateMinutes))} دقیقه دیر)</span> : ""}
-        {" · "}خروج {timeHHMM(s.checkOutAt)}
+        {s.checkOutAt ? (
+          <>{" · "}خروج {timeHHMM(s.checkOutAt)}</>
+        ) : s.checkoutMissed ? (
+          <>{" · "}<span className="font-bold text-[var(--pomegranate)]">مشاور خروج نزده</span></>
+        ) : (
+          <>{" · "}خروج —</>
+        )}
       </div>
       <div className={statusClass(s.status)}>{SESSION_STATUS_LABELS[s.status]}</div>
     </div>

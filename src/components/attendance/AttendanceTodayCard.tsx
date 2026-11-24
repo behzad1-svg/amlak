@@ -31,6 +31,8 @@ interface SessionView {
   status: SessionStatus;
   checkInAt: string | null;
   checkOutAt: string | null;
+  /** ورود ثبت شده ولی خروج نه، و مهلت خروج گذشته — «مشاور خروج نزده» */
+  checkoutMissed: boolean;
   lateMinutes: number | null;
   lateReason: string | null;
   checkInDistanceM: number | null;
@@ -156,6 +158,12 @@ export function AttendanceTodayCard() {
   useEffect(() => {
     void (async () => { await load(); await loadLeaves(); })();
   }, [load, loadLeaves]);
+
+  // به‌روزرسانی دوره‌ای تا دکمهٔ خروج پس از مهلت، بدون رفرش دستی ناپدید شود.
+  useEffect(() => {
+    const t = setInterval(() => void load(), 60_000);
+    return () => clearInterval(t);
+  }, [load]);
 
   function flash(ok: string, bad?: string) {
     setMsg(ok);
@@ -343,10 +351,13 @@ export function AttendanceTodayCard() {
                       {busy === s.session ? "در حال ثبت…" : "ثبت ورود"}
                     </Button>
                   )}
-                  {s.checkInAt && !s.checkOutAt && (
+                  {s.checkInAt && !s.checkOutAt && !s.checkoutMissed && (
                     <Button size="sm" variant="outline" disabled={busy !== null} onClick={() => void onCheckOut(s.session)}>
                       {busy === s.session ? "در حال ثبت…" : "ثبت خروج"}
                     </Button>
+                  )}
+                  {s.checkInAt && !s.checkOutAt && s.checkoutMissed && (
+                    <span className="text-[12px] font-bold text-[var(--pomegranate)]">مشاور خروج نزده</span>
                   )}
                   {s.checkOutAt && <span className="text-[12px] font-bold text-[var(--sea)]">✓ ثبت شد</span>}
                 </div>

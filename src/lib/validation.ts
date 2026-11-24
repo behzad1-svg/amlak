@@ -83,6 +83,24 @@ export const changePasswordSchema = z.object({
   newPassword: passwordSchema,
 });
 
+/// بازیابی رمز با پیامک — درخواست کد برای شمارهٔ ثبت‌شده.
+export const forgotPasswordRequestSchema = z.object({
+  phone: phoneSchema,
+});
+
+/// بازیابی رمز با پیامک — بررسی کد ۶ رقمی.
+export const forgotPasswordVerifySchema = z.object({
+  phone: phoneSchema,
+  code: z.string().regex(/^\d{6}$/, "کد باید ۶ رقم باشد"),
+});
+
+/// بازیابی رمز با پیامک — تنظیم رمز تازه با کد تاییدشده.
+export const forgotPasswordResetSchema = z.object({
+  phone: phoneSchema,
+  code: z.string().regex(/^\d{6}$/, "کد باید ۶ رقم باشد"),
+  newPassword: passwordSchema,
+});
+
 /// رشتهٔ بودجه: خالی یا null یعنی بدون بودجه؛ در غیر این صورت باید عدد صحیح مثبت باشد.
 /// «0» قبول نیست — در تطبیق، سقف صفر باعث تقسیم بر صفر می‌شود.
 const positiveBudgetString = z

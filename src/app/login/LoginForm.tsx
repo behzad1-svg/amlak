@@ -53,6 +53,9 @@ export function LoginForm() {
         </div>
         <Button type="submit" disabled={loading} className="w-full mt-2">{loading ? "در حال ورود..." : "ورود"}</Button>
       </form>
+      <p className="mt-4 text-center">
+        <a href="/forgot-password" className="text-[12px] text-[var(--sea)] hover:underline">فراموشی رمز</a>
+      </p>
     </>
   );
 }

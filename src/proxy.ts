@@ -15,8 +15,8 @@ import { isForeignOrigin, needsOriginCheck, KNOWN_SITE_ORIGIN } from "./lib/csrf
 // /api/cron/reminders اینجا عمومی است چون خودش با CRON_SECRET احراز هویت می‌کند.
 // /api/admin/backup-log هم عمومی است چون POST آن با CRON_SECRET احراز هویت می‌کند (ثبت پشتیبان شبانه)؛ GET آن خودش نشست OWNER می‌خواهد.
 // (با startsWith، مسیر /loginXYZ هم عمومی محسوب می‌شد).
-const PUBLIC_EXACT = new Set(["/login", "/api/health", "/robots.txt", "/api/cron/reminders", "/api/admin/backup-log", "/saj-logo.png", "/saj-logo-mark.png", "/icon.png", "/apple-touch-icon.png", "/sw.js", "/manifest.webmanifest", "/icons/icon-192.png", "/icons/icon-512.png", "/icons/icon-maskable-512.png"]);
-const PUBLIC_API_PREFIXES = ["/api/auth/login"];
+const PUBLIC_EXACT = new Set(["/login", "/forgot-password", "/api/health", "/robots.txt", "/api/cron/reminders", "/api/admin/backup-log", "/saj-logo.png", "/saj-logo-mark.png", "/icon.png", "/apple-touch-icon.png", "/sw.js", "/manifest.webmanifest", "/icons/icon-192.png", "/icons/icon-512.png", "/icons/icon-maskable-512.png"]);
+const PUBLIC_API_PREFIXES = ["/api/auth/login", "/api/auth/forgot-password"];
 
 function isPublic(pathname: string): boolean {
   if (PUBLIC_EXACT.has(pathname)) return true;

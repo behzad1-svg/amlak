@@ -791,6 +791,19 @@ model ApiErrorLog {
   @@index([route, createdAt])
 }
 
+/// کد بازیابی رمز با پیامک — یک کد فعال برای هر شماره؛ کد فقط به‌صورت هش
+/// ذخیره می‌شود، ۱۰ دقیقه اعتبار دارد، یک بار مصرف است و پس از ۵ تلاش
+/// ناموفق باطل می‌شود.
+model PasswordResetCode {
+  phone      String   @id
+  codeHash   String
+  expiresAt  DateTime
+  attempts   Int      @default(0)
+  verifiedAt DateTime?
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
+}
+
 /// شمارندهٔ محدودیت نرخ ورود (نقد ۱۳) — جایگزین دیتابیسیِ محدودیت درون‌حافظه‌ای.
 /// اگر جدول نباشد، rateLimitDb به حافظه برمی‌گردد.
 model RateLimitHit {

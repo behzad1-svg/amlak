@@ -27,7 +27,7 @@ export async function GET(req: NextRequest) {
   const since = new Date(Date.now() - range * 24 * 60 * 60 * 1000);
   const now = new Date();
 
-  const [activeUsers, files, appraisals, advertised, sessionCards, fileFindings, viewings, deals, dealShares, overdue, advertisedItems] = await Promise.all([
+  const [activeUsers, files, appraisals, advertised, sessionCards, fileFindings, viewings, deals, dealShares, overdue, advertisedItems, filesDetail, appraisalsDetail, sessionCardsDetail, fileFindingsDetail, viewingsDetail, overdueDetail] = await Promise.all([
     prisma.user.findMany({ where: { active: true }, select: { id: true, name: true, role: true }, orderBy: { name: "asc" } }),
     prisma.property.groupBy({
       by: ["listedById"],
@@ -64,7 +64,7 @@ export async function GET(req: NextRequest) {
     prisma.deal.findMany({
       // تاریخ قرارداد ملاک است؛ معامله‌های قدیمیِ بدون contractAt با createdAt می‌آیند
       where: { status: "COMPLETED", OR: [{ contractAt: { gte: since } }, { contractAt: null, createdAt: { gte: since } }] },
-      select: { id: true, agentId: true },
+      select: { id: true, agentId: true, contractAt: true, createdAt: true, customer: { select: { name: true } }, property: { select: { code: true, title: true } } },
     }),
     // سهم مشاور همکار در معامله های قطعی بازه - همکار بیرونی (userId خالی) کاربر نیست
     prisma.dealShare.findMany({
@@ -85,6 +85,50 @@ export async function GET(req: NextRequest) {
       where: { type: "ADVERTISED", createdAt: { gte: since } },
       select: { agentId: true, propertyId: true, createdAt: true },
       orderBy: { createdAt: "desc" },
+    }),
+    // جزئیات هر ستون — ردیف‌های زیرینِ همان شمارش‌های بالا، برای بازکردن
+    // لیست هر مشاور با زدن روی عدد ستون
+    prisma.property.findMany({
+      where: { deletedAt: null, createdAt: { gte: since } },
+      select: { id: true, code: true, title: true, listedById: true, createdAt: true },
+      orderBy: { createdAt: "desc" },
+    }),
+    prisma.property.findMany({
+      where: { deletedAt: null, isAppraised: true, appraisedById: { not: null }, appraisedAt: { gte: since } },
+      select: { id: true, code: true, title: true, appraisedById: true, appraisedAt: true },
+      orderBy: { appraisedAt: "desc" },
+    }),
+    prisma.sessionCard.findMany({
+      where: { createdAt: { gte: since } },
+      select: {
+        id: true,
+        advisorId: true,
+        createdAt: true,
+        customer: { select: { name: true } },
+        property: { select: { code: true, title: true } },
+      },
+      orderBy: { createdAt: "desc" },
+    }),
+    prisma.customer.findMany({
+      where: { deletedAt: null, source: "FILE_FINDING", createdAt: { gte: since } },
+      select: { id: true, name: true, assignedAgentId: true, createdAt: true },
+      orderBy: { createdAt: "desc" },
+    }),
+    prisma.viewing.findMany({
+      where: { startAt: { gte: since, lte: now }, status: { not: "CANCELED" } },
+      select: {
+        id: true,
+        agentId: true,
+        startAt: true,
+        customer: { select: { name: true } },
+        property: { select: { code: true, title: true } },
+      },
+      orderBy: { startAt: "desc" },
+    }),
+    prisma.customer.findMany({
+      where: { deletedAt: null, stage: { notIn: ["LOST", "FAILED", "WON", "CONTRACT"] }, nextFollowUpAt: { lt: now } },
+      select: { id: true, name: true, assignedAgentId: true, nextFollowUpAt: true },
+      orderBy: { nextFollowUpAt: "asc" },
     }),
   ]);
 
@@ -154,6 +198,69 @@ export async function GET(req: NextRequest) {
     return { agentId: a.agentId, propertyId: a.propertyId, code: p?.code ?? null, title: p?.title ?? null, date: a.createdAt };
   });
 
+  // جزئیات ستون‌ها — همان ردیف‌های شمارش، فقط برای کاربرانِ دیده‌شده؛
+  // مشاور فقط ردیف‌های خودش را می‌بیند، چون users برای او فقط خودش است.
+  type ReportItem = { agentId: string; id: string; code: string | null; title: string | null; date: Date | null; href: string };
+  const onlyVisible = (
+    items: { agentId: string | null; id: string; code: string | null; title: string | null; date: Date | null; href: string }[]
+  ): ReportItem[] => items.filter((it): it is ReportItem => !!it.agentId && visibleIds.has(it.agentId));
+  const withPropertyTitle = (customerName: string, property: { code: string | null; title: string } | null) =>
+    property ? `${customerName} — ${property.code ? `${property.code} — ` : ""}${property.title}` : customerName;
+  const fileItems = onlyVisible(
+    filesDetail.map((p) => ({ agentId: p.listedById, id: p.id, code: p.code, title: p.title, date: p.createdAt, href: `/properties/${p.id}` }))
+  );
+  const appraisalItems = onlyVisible(
+    appraisalsDetail.map((p) => ({ agentId: p.appraisedById, id: p.id, code: p.code, title: p.title, date: p.appraisedAt, href: `/properties/${p.id}` }))
+  );
+  const sessionCardItems = onlyVisible(
+    sessionCardsDetail.map((c) => ({
+      agentId: c.advisorId,
+      id: c.id,
+      code: c.property?.code ?? null,
+      title: withPropertyTitle(c.customer.name, c.property),
+      date: c.createdAt,
+      href: "/session-cards",
+    }))
+  );
+  const fileFindingItems = onlyVisible(
+    fileFindingsDetail.map((c) => ({ agentId: c.assignedAgentId, id: c.id, code: null, title: c.name, date: c.createdAt, href: `/customers/${c.id}` }))
+  );
+  const viewingItems = onlyVisible(
+    viewingsDetail.map((v) => ({
+      agentId: v.agentId,
+      id: v.id,
+      code: v.property?.code ?? null,
+      title: withPropertyTitle(v.customer.name, v.property),
+      date: v.startAt,
+      href: "/viewings",
+    }))
+  );
+  // قرارداد — مشاورِ معامله و مشاورِ همکارِ سهم‌دار، هر معامله یک بار برای هر نفر (مثل شمارش).
+  const dealById = new Map(deals.map((d) => [d.id, d]));
+  const dealItemsByUser = new Map<string, ReportItem[]>();
+  const addDealItem = (userId: string, dealId: string) => {
+    if (!visibleIds.has(userId)) return;
+    const d = dealById.get(dealId);
+    if (!d) return;
+    const list = dealItemsByUser.get(userId) ?? [];
+    if (list.some((it) => it.id === dealId)) return;
+    list.push({
+      agentId: userId,
+      id: d.id,
+      code: d.property?.code ?? null,
+      title: withPropertyTitle(d.customer.name, d.property),
+      date: d.contractAt ?? d.createdAt,
+      href: "/deals",
+    });
+    dealItemsByUser.set(userId, list);
+  };
+  for (const d of deals) addDealItem(d.agentId, d.id);
+  for (const s of dealShares) if (s.userId) addDealItem(s.userId, s.dealId);
+  const dealItems = [...dealItemsByUser.values()].flat();
+  const overdueItems = onlyVisible(
+    overdueDetail.map((c) => ({ agentId: c.assignedAgentId, id: c.id, code: null, title: c.name, date: c.nextFollowUpAt, href: `/customers/${c.id}` }))
+  );
+
   const rows = users.map((u) => ({
     id: u.id,
     name: u.name,
@@ -183,5 +290,20 @@ export async function GET(req: NextRequest) {
     { files: 0, appraisals: 0, advertised: 0, sessionCards: 0, fileFindings: 0, viewings: 0, deals: 0, overdue: 0 }
   );
 
-  return NextResponse.json(serializeBigInt({ range, since, users: rows, totals, advertisedItems: advertisedDetail }));
+  return NextResponse.json(
+    serializeBigInt({
+      range,
+      since,
+      users: rows,
+      totals,
+      advertisedItems: advertisedDetail,
+      fileItems,
+      appraisalItems,
+      sessionCardItems,
+      fileFindingItems,
+      viewingItems,
+      dealItems,
+      overdueItems,
+    })
+  );
 }

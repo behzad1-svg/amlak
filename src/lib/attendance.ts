@@ -29,6 +29,9 @@ export const EARLY_CHECKIN_MINUTES = 60;
 /** ۲۰ دقیقهٔ اول پس از شروع شیفت دیرکرد حساب نمی‌شود. */
 export const LATE_GRACE_MINUTES = 20;
 
+/** مهلت ثبت خروج: یک ساعت پس از پایان شیفت — صبح تا ۱۴:۰۰، عصر تا ۲۲:۰۰. */
+export const CHECKOUT_DEADLINE_MINUTES = 60;
+
 /** مرخصی — صبح، عصر یا روز کامل؛ بدون تایید مدیر (قانون بهزاد). */
 export type LeaveScope = "MORNING" | "EVENING" | "FULL_DAY";
 
@@ -190,6 +193,36 @@ export function resolveSession(now: Date, settings: AttendanceSettings): Session
     return { session: null, message: `الان بین دو شیفت است — ورود عصر از ساعت ${settings.eveningStart}.` };
   }
   return { session: null, message: "شیفت امروز تمام شده است." };
+}
+
+/** دقیقهٔ مهلت خروج یک شیفت: پایان شیفت + یک ساعت (صبح ۱۳:۰۰ → ۱۴:۰۰، عصر ۲۱:۰۰ → ۲۲:۰۰)؛ تنظیمات نامعتبر یعنی null. */
+export function checkoutDeadlineMin(session: AttendanceSessionKey, settings: AttendanceSettings): number | null {
+  const end = parseHHMM(session === "MORNING" ? settings.morningEnd : settings.eveningEnd);
+  return end === null ? null : end + CHECKOUT_DEADLINE_MINUTES;
+}
+
+/** آیا هنوز می‌توان برای این شیفت خروج زد؟ پس از مهلت (یک ساعت پس از پایان شیفت)، خروج بسته است. */
+export function isCheckoutOpen(
+  now: Date,
+  session: AttendanceSessionKey,
+  settings: AttendanceSettings
+): { ok: true } | { ok: false; message: string } {
+  const deadline = checkoutDeadlineMin(session, settings);
+  if (deadline === null) return { ok: false, message: "ساعت‌های کاری تنظیم نشده‌اند." };
+  const { hour, minute } = tehranParts(now);
+  if (hour * 60 + minute <= deadline) return { ok: true };
+  return {
+    ok: false,
+    message: `مهلت ثبت خروج شیفت ${SESSION_LABELS[session]} تمام شده است — خروج فقط تا ساعت ${formatMinutes(deadline)} ممکن بود.`,
+  };
+}
+
+/** آیا مهلت خروج این شیفت گذشته است؟ (برای نمایش «مشاور خروج نزده» وقتی خروج ثبت نشده) */
+export function isCheckoutMissed(now: Date, session: AttendanceSessionKey, settings: AttendanceSettings): boolean {
+  const deadline = checkoutDeadlineMin(session, settings);
+  if (deadline === null) return false;
+  const { hour, minute } = tehranParts(now);
+  return hour * 60 + minute > deadline;
 }
 
 /** آیا این روز شمسی روز کاری است؟ جمعه با fridayOff غیرکاری است. */
