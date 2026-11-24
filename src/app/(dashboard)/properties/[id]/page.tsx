@@ -376,7 +376,19 @@ export default function PropertyDetailPage() {
   }
 
   if (loading && !p) return <PageSkeleton rows={4} />;
-  if (loadError && !p) return <PageError message={loadError} onRetry={load} />;
+  if (loadError && !p) {
+    // ÙØ§ÛÙ Ø­Ø°ÙØ´Ø¯Ù: API Ø®Ø·Ø§Û Â«Ø§ÛÙ ÙØ§ÛÙ Ø­Ø¯Ù Ø´Ø¯Ù Ø§Ø³ØªÂ» ÙÛØ¯ÙØ¯Ø Ø³Ø±Ø®Ø· ØµÙØ­Ù Ø¨Ø§ÛØ¯
+    // ÙÙÛÙ Ø±Ø§ Ø¨Ú¯ÙÛØ¯Ø ÙÙ Â«Ø¯Ø§Ø¯Ù Ø¨Ø§Ø±Ú¯Ø°Ø§Ø±Û ÙØ´Ø¯Â» â Ù ØªÙØ§Ø´ Ø¯ÙØ¨Ø§Ø±Ù Ø¨ÛÙØ§ÛØ¯Ù Ø§Ø³Øª.
+    if (loadError === "Ø§ÛÙ ÙØ§ÛÙ Ø­Ø°Ù Ø´Ø¯Ù Ø§Ø³Øª") {
+      return (
+        <PageError
+          title="Ø§ÛÙ ÙØ§ÛÙ Ø­Ø°Ù Ø´Ø¯Ù Ø§Ø³Øª"
+          message="Ø§ÛÙ ÙØ§ÛÙ Ø§Ø² Ø³Ø§ÙØ§ÙÙ Ø­Ø°Ù Ø´Ø¯Ù Ø§Ø³Øª Ù Ø¯ÛÚ¯Ø± ÙØ§Ø¨Ù ÙØ´Ø§ÙØ¯Ù ÙÛØ³Øª. Ø¨Ø±Ø§Û ÙØ´Ø§ÙØ¯ÙÙ ÙØ§ÛÙÙØ§Û ÙØ¹Ø§Ù Ø¨Ù ÙÙØ±Ø³Øª ÙØ§ÛÙÙØ§ Ø¨Ø±Ú¯Ø±Ø¯ÛØ¯."
+        />
+      );
+    }
+    return <PageError message={loadError} onRetry={load} />;
+  }
   if (!p) return <PageSkeleton rows={4} />;
 
   const isSale = p.dealType === "SALE";

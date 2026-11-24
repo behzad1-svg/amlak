@@ -6,15 +6,26 @@ import { PageSkeleton } from "./Skeleton";
 
 export { PageSkeleton };
 
-export function PageError({ message, onRetry }: { message: string; onRetry: () => void }) {
+export function PageError({
+  message,
+  onRetry,
+  title,
+}: {
+  message: string;
+  onRetry?: () => void;
+  /** سرخط کارت خطا؛ پیشفرض «داده بارگذاری نشد». */
+  title?: string;
+}) {
   return (
     <div className="p-4 sm:p-6" role="alert">
       <div className="max-w-[560px] rounded-[16px] border border-[var(--pomegranate-line)] bg-[var(--pomegranate-soft)] p-5">
-        <div className="text-[14px] font-extrabold text-[var(--pomegranate)]">داده بارگذاری نشد</div>
+        <div className="text-[14px] font-extrabold text-[var(--pomegranate)]">{title ?? "داده بارگذاری نشد"}</div>
         <p className="mt-1 text-[13px] leading-6 text-[var(--ink-2)]">{message}</p>
-        <Button className="mt-3" onClick={onRetry}>
-          تلاش دوباره
-        </Button>
+        {onRetry ? (
+          <Button className="mt-3" onClick={onRetry}>
+            تلاش دوباره
+          </Button>
+        ) : null}
       </div>
     </div>
   );
