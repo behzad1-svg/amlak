@@ -29,6 +29,62 @@ export const EARLY_CHECKIN_MINUTES = 60;
 /** ۲۰ دقیقهٔ اول پس از شروع شیفت دیرکرد حساب نمی‌شود. */
 export const LATE_GRACE_MINUTES = 20;
 
+/** مرخصی — صبح، عصر یا روز کامل؛ بدون تایید مدیر (قانون بهزاد). */
+export type LeaveScope = "MORNING" | "EVENING" | "FULL_DAY";
+
+export const LEAVE_SCOPE_LABELS: Record<LeaveScope, string> = {
+  MORNING: "صبح",
+  EVENING: "عصر",
+  FULL_DAY: "روز کامل",
+};
+
+/** بیشینهٔ طول دلیل مرخصی که مشاور خودش می‌نویسد. */
+export const LEAVE_REASON_MAX = 200;
+
+/** مهلت ثبت مرخصی در همان روز: یک ساعت پس از شروع شیفت. */
+export const LEAVE_REQUEST_WINDOW_MINUTES = 60;
+
+/** آیا این مرخصی آن شیفت را پوشش می‌دهد؟ */
+export function leaveCoversSession(scope: LeaveScope, session: AttendanceSessionKey): boolean {
+  return scope === "FULL_DAY" || scope === session;
+}
+
+/** آیا دو مرخصیِ یک روز با هم تداخل دارند؟ روز کامل با هر دو شیفت تداخل دارد. */
+export function leaveScopesOverlap(a: LeaveScope, b: LeaveScope): boolean {
+  return a === "FULL_DAY" || b === "FULL_DAY" || a === b;
+}
+
+/**
+ * مهلت درخواست مرخصی — قانون بهزاد:
+ * - روز قبل (یا زودتر) همیشه مجاز است؛
+ * - در خودِ روز مرخصی فقط تا یک ساعت پس از شروع شیفت مربوطه
+ *   (روز کامل = شروع شیفت صبح)؛ پس از آن سیستم اجازه نمی‌دهد.
+ * leaveDate تاریخِ میلادیِ روز مرخصی است (نیمه‌شب UTC).
+ */
+export function canRequestLeave(
+  now: Date,
+  settings: AttendanceSettings,
+  leaveDate: Date,
+  scope: LeaveScope
+): { ok: true } | { ok: false; message: string } {
+  const today = tehranDateOnly(now);
+  const leave = new Date(Date.UTC(leaveDate.getUTCFullYear(), leaveDate.getUTCMonth(), leaveDate.getUTCDate()));
+  if (leave.getTime() < today.getTime()) {
+    return { ok: false, message: "مرخصی برای روز گذشته قابل ثبت نیست." };
+  }
+  if (leave.getTime() > today.getTime()) return { ok: true };
+  const startStr = scope === "EVENING" ? settings.eveningStart : settings.morningStart;
+  const startMin = parseHHMM(startStr);
+  if (startMin === null) return { ok: false, message: "ساعت‌های کاری تنظیم نشده‌اند." };
+  const { hour, minute } = tehranParts(now);
+  const nowMin = hour * 60 + minute;
+  if (nowMin <= startMin + LEAVE_REQUEST_WINDOW_MINUTES) return { ok: true };
+  return {
+    ok: false,
+    message: `مهلت ثبت مرخصی ${LEAVE_SCOPE_LABELS[scope]} امروز تمام شده است — مرخصی را باید روز قبل ثبت می‌کردی یا حداکثر تا یک ساعت پس از شروع شیفت.`,
+  };
+}
+
 const EARTH_RADIUS_M = 6_371_000;
 
 /** فاصلهٔ دو نقطهٔ جغرافیایی به متر (هاورسین). */
@@ -157,7 +213,7 @@ export function sessionLabel(s: AttendanceSessionKey): string {
 }
 
 /** برچسب وضعیت یک شیفت در جدول امروز. */
-export type SessionStatus = "done" | "working" | "late" | "absent" | "open" | "upcoming" | "off";
+export type SessionStatus = "done" | "working" | "late" | "absent" | "open" | "upcoming" | "off" | "leave";
 
 export const SESSION_STATUS_LABELS: Record<SessionStatus, string> = {
   done: "حاضر",
@@ -167,4 +223,5 @@ export const SESSION_STATUS_LABELS: Record<SessionStatus, string> = {
   open: "در انتظار ورود",
   upcoming: "شروع نشده",
   off: "تعطیل",
+  leave: "مرخصی",
 };

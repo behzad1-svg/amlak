@@ -9,11 +9,13 @@ import {
   toPersianDigits,
 } from "@/lib/jalali";
 import {
+  leaveCoversSession,
   tehranDateOnly,
   tehranParts,
   isWorkingDay,
   parseHHMM,
   type AttendanceSessionKey,
+  type LeaveScope,
   type SessionStatus,
 } from "@/lib/attendance";
 
@@ -43,6 +45,13 @@ export async function GET() {
     where: { date, userId: { in: ids } },
   });
   const byKey = new Map(records.map((r) => [`${r.userId}:${r.session}`, r]));
+  const leaves = await prisma.leave.findMany({ where: { date, userId: { in: ids } } });
+  const leaveByUser = new Map<string, { scope: LeaveScope; reason: string | null }[]>();
+  for (const l of leaves) {
+    const arr = leaveByUser.get(l.userId) ?? [];
+    arr.push({ scope: l.scope as LeaveScope, reason: l.reason });
+    leaveByUser.set(l.userId, arr);
+  }
 
   const windowOf = (s: AttendanceSessionKey) =>
     s === "MORNING"
@@ -56,8 +65,11 @@ export async function GET() {
       const startMin = parseHHMM(w.start) ?? 0;
       const endMin = parseHHMM(w.end) ?? 0;
       const rec = byKey.get(`${u.id}:${s}`);
+      const myLeaves = leaveByUser.get(u.id) ?? [];
+      const leave = myLeaves.find((l) => leaveCoversSession(l.scope, s));
       let status: SessionStatus;
       if (!working) status = "off";
+      else if (leave) status = "leave";
       else if (rec) status = rec.checkOutAt ? "done" : (rec.lateMinutes ?? 0) > 0 ? "late" : "working";
       else if (nowMin > endMin) status = "absent";
       else if (nowMin >= startMin - 60) status = "open";
@@ -74,6 +86,7 @@ export async function GET() {
         checkInDistanceM: rec?.checkInDistanceM ?? null,
         checkOutReason: rec?.checkOutReason ?? null,
         checkOutDistanceM: rec?.checkOutDistanceM ?? null,
+        leaveReason: leave?.reason ?? null,
       };
     }
     return { id: u.id, name: u.name, role: u.role, sessions };

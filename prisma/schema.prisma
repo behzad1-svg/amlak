@@ -189,6 +189,7 @@ model User {
   contractManagedSessionCards SessionCard[] @relation("SessionCardContractManager")
   phonebookContacts PhonebookContact[] @relation("PhonebookOwner")
   attendances    Attendance[]
+  leaves         Leave[]
 }
 
 model Customer {
@@ -300,6 +301,30 @@ model AppSetting {
   key       String   @unique
   value     String
   updatedAt DateTime @updatedAt
+}
+
+/// مرخصی حضور و غیاب — بدون تایید مدیر؛ مشاور خودش ثبت می‌کند.
+/// قانون بهزاد: یا روز قبل (یا زودتر)، یا در خودِ روز حداکثر تا یک ساعت
+/// پس از شروع شیفت؛ پس از آن سیستم اجازه نمی‌دهد. date روزِ تهران است.
+enum LeaveScope {
+  MORNING
+  EVENING
+  FULL_DAY
+}
+
+model Leave {
+  id        String     @id @default(cuid())
+  userId    String
+  user      User       @relation(fields: [userId], references: [id], onDelete: Cascade)
+  date      DateTime   @db.Date
+  scope     LeaveScope
+  /// دلیل مرخصی — متن آزاد اختیاری که خود مشاور می‌نویسد
+  reason    String?
+  createdAt DateTime   @default(now())
+
+  @@unique([userId, date, scope])
+  @@index([date])
+  @@index([userId, date])
 }
 
 /// یک رکورد حضور و غیاب برای یک مشاور، یک روز و یک شیفت — بدون عکس و بدون تشخیص چهره؛

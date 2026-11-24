@@ -10,6 +10,7 @@ import {
   haversineMeters,
   isWorkingDay,
   LATE_REASON_MAX,
+  leaveCoversSession,
   resolveSession,
   sessionLabel,
   tehranDateOnly,
@@ -58,6 +59,10 @@ export async function POST(req: NextRequest) {
   }
 
   const date = tehranDateOnly(now);
+  const onLeave = await prisma.leave.findMany({ where: { userId: session.user.id, date } });
+  if (onLeave.some((l) => leaveCoversSession(l.scope as "MORNING" | "EVENING" | "FULL_DAY", sessionKey))) {
+    return NextResponse.json({ error: `برای شیفت ${sessionLabel(sessionKey)} امروز مرخصی ثبت کرده‌اید.` }, { status: 400 });
+  }
   const existing = await prisma.attendance.findUnique({
     where: { userId_date_session: { userId: session.user.id, date, session: sessionKey } },
   });

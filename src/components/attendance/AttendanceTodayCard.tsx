@@ -7,13 +7,22 @@ import { useCallback, useEffect, useState } from "react";
 import { Clock3 } from "lucide-react";
 import { Card, CardHeader, CardTitle } from "@/components/ui/Card";
 import { Button } from "@/components/ui/Button";
-import { Input, Label } from "@/components/ui/Input";
+import { Input, Label, Select } from "@/components/ui/Input";
+import { JalaliDatePicker } from "@/components/ui/JalaliDatePicker";
 import { apiJson, ApiError, errorMessage } from "@/lib/api";
 import { toFaDigits } from "@/lib/utils";
-import { CHECKOUT_REASON_MAX, LATE_GRACE_MINUTES, LATE_REASON_MAX } from "@/lib/attendance";
+import { formatJalali } from "@/lib/jalali";
+import {
+  CHECKOUT_REASON_MAX,
+  LATE_GRACE_MINUTES,
+  LATE_REASON_MAX,
+  LEAVE_REASON_MAX,
+  LEAVE_SCOPE_LABELS,
+  type LeaveScope,
+} from "@/lib/attendance";
 
 type SessionKey = "MORNING" | "EVENING";
-type SessionStatus = "done" | "working" | "late" | "absent" | "open" | "upcoming" | "off";
+type SessionStatus = "done" | "working" | "late" | "absent" | "open" | "upcoming" | "off" | "leave";
 
 interface SessionView {
   session: SessionKey;
@@ -27,6 +36,15 @@ interface SessionView {
   checkInDistanceM: number | null;
   checkOutReason: string | null;
   checkOutDistanceM: number | null;
+  leaveReason: string | null;
+}
+
+interface LeaveItem {
+  id: string;
+  date: string;
+  scope: LeaveScope;
+  scopeLabel: string;
+  reason: string | null;
 }
 
 interface TodayData {
@@ -44,6 +62,7 @@ const STATUS_LABEL: Record<SessionStatus, string> = {
   open: "در انتظار ورود",
   upcoming: "شروع نشده",
   off: "تعطیل",
+  leave: "مرخصی",
 };
 
 function timeHHMM(iso: string | null): string {
@@ -106,6 +125,21 @@ export function AttendanceTodayCard() {
   const [outReason, setOutReason] = useState("");
   const [pendingPos, setPendingPos] = useState<{ lat: number; lng: number } | null>(null);
   const [outDistanceM, setOutDistanceM] = useState<number | null>(null);
+  // مرخصی — بدون تایید مدیر؛ مهلت: روز قبل، یا در خودِ روز تا یک ساعت پس از شروع شیفت
+  const [myLeaves, setMyLeaves] = useState<LeaveItem[]>([]);
+  const [leaveDate, setLeaveDate] = useState<string | null>(null);
+  const [leaveScope, setLeaveScope] = useState<LeaveScope>("FULL_DAY");
+  const [leaveReason, setLeaveReason] = useState("");
+  const [leaveBusy, setLeaveBusy] = useState(false);
+
+  const loadLeaves = useCallback(async () => {
+    try {
+      const d = await apiJson<{ leaves: LeaveItem[] }>("/api/attendance/leave");
+      setMyLeaves(d.leaves);
+    } catch {
+      // فهرست مرخصی فرعی است؛ خطایش کارت حضور را خراب نمی‌کند
+    }
+  }, []);
 
   const load = useCallback(async () => {
     try {
@@ -120,8 +154,8 @@ export function AttendanceTodayCard() {
   }, []);
 
   useEffect(() => {
-    void (async () => { await load(); })();
-  }, [load]);
+    void (async () => { await load(); await loadLeaves(); })();
+  }, [load, loadLeaves]);
 
   function flash(ok: string, bad?: string) {
     setMsg(ok);
@@ -223,6 +257,50 @@ export function AttendanceTodayCard() {
     }
   }
 
+  async function submitLeave() {
+    if (!leaveDate) {
+      flash("", "اول روز مرخصی را انتخاب کن.");
+      return;
+    }
+    setLeaveBusy(true);
+    setErr("");
+    try {
+      await apiJson("/api/attendance/leave", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          dateIso: leaveDate,
+          scope: leaveScope,
+          reason: leaveReason.trim() || undefined,
+        }),
+      });
+      setLeaveDate(null);
+      setLeaveReason("");
+      flash("مرخصی ثبت شد.");
+      await loadLeaves();
+      await load();
+    } catch (e) {
+      flash("", errorMessage(e));
+    } finally {
+      setLeaveBusy(false);
+    }
+  }
+
+  async function cancelLeave(id: string) {
+    setLeaveBusy(true);
+    setErr("");
+    try {
+      await apiJson(`/api/attendance/leave?id=${encodeURIComponent(id)}`, { method: "DELETE" });
+      flash("مرخصی لغو شد.");
+      await loadLeaves();
+      await load();
+    } catch (e) {
+      flash("", errorMessage(e));
+    } finally {
+      setLeaveBusy(false);
+    }
+  }
+
   if (loading) return null;
   if (loadError || !data) return null;
   const me = data.users[0];
@@ -256,6 +334,7 @@ export function AttendanceTodayCard() {
                     {(s.lateMinutes ?? 0) > 0 ? ` · تاخیر ${toFaDigits(String(s.lateMinutes ?? 0))} دقیقه` : ""}
                     {s.lateReason ? ` · دلیل: ${s.lateReason}` : ""}
                     {s.checkOutReason ? ` · دلیل خروج: ${s.checkOutReason}` : ""}
+                    {s.status === "leave" && s.leaveReason ? ` · ${s.leaveReason}` : ""}
                   </div>
                 </div>
                 <div className="flex shrink-0 gap-2">
@@ -324,6 +403,58 @@ export function AttendanceTodayCard() {
         <p className="text-[11px] text-[var(--ink-3)]">
           ورود فقط داخل شعاع {toFaDigits(String(data.settings.radiusM))} متری دفتر ثبت می‌شود؛ موقعیت گوشی باید روشن باشد.
         </p>
+
+        {/* ثبت مرخصی — بدون تایید مدیر */}
+        <div className="space-y-2 rounded-[12px] border border-[var(--line)] bg-[var(--paper-2)] p-3">
+          <div className="text-[13px] font-bold">ثبت مرخصی</div>
+          <p className="text-[11px] text-[var(--ink-3)]">
+            مرخصی را باید روز قبل ثبت کنی، یا در خودِ روز حداکثر تا یک ساعت پس از شروع شیفت؛ بعد از آن سیستم اجازه نمی‌دهد.
+          </p>
+          <div className="grid gap-2 sm:grid-cols-2">
+            <div>
+              <Label htmlFor="leave-date">روز مرخصی</Label>
+              <JalaliDatePicker id="leave-date" value={leaveDate} onChange={setLeaveDate} placeholder="انتخاب روز" />
+            </div>
+            <div>
+              <Label htmlFor="leave-scope">بازه</Label>
+              <Select id="leave-scope" value={leaveScope} onChange={(e) => setLeaveScope(e.target.value as LeaveScope)}>
+                {(Object.keys(LEAVE_SCOPE_LABELS) as LeaveScope[]).map((k) => (
+                  <option key={k} value={k}>{LEAVE_SCOPE_LABELS[k]}</option>
+                ))}
+              </Select>
+            </div>
+          </div>
+          <div>
+            <Label htmlFor="leave-reason">دلیل (اختیاری)</Label>
+            <Input
+              id="leave-reason"
+              value={leaveReason}
+              maxLength={LEAVE_REASON_MAX}
+              onChange={(e) => setLeaveReason(e.target.value)}
+              placeholder="مثلا کار شخصی"
+            />
+          </div>
+          <div>
+            <Button size="sm" disabled={leaveBusy || !leaveDate} onClick={() => void submitLeave()}>
+              {leaveBusy ? "در حال ثبت…" : "ثبت مرخصی"}
+            </Button>
+          </div>
+          {myLeaves.length > 0 && (
+            <ul className="space-y-1 pt-1 text-[12.5px]">
+              {myLeaves.map((l) => (
+                <li key={l.id} className="flex items-center justify-between gap-2">
+                  <span>
+                    {formatJalali(l.date)} · {l.scopeLabel}
+                    {l.reason ? ` · ${l.reason}` : ""}
+                  </span>
+                  <Button size="sm" variant="ghost" disabled={leaveBusy} onClick={() => void cancelLeave(l.id)}>
+                    لغو
+                  </Button>
+                </li>
+              ))}
+            </ul>
+          )}
+        </div>
       </div>
     </Card>
   );

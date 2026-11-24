@@ -63,17 +63,30 @@ export async function GET(req: NextRequest) {
     where: { userId: { in: ids }, date: { gte: monthStartDate, lte: monthEndDate }, checkInAt: { not: null } },
     select: { userId: true, date: true, lateMinutes: true },
   });
+  // مرخصی‌های ماه — روز مرخصیِ گذشته که ورودی ندارد، غایب حساب نمی‌شود
+  const leaves = await prisma.leave.findMany({
+    where: { userId: { in: ids }, date: { gte: monthStartDate, lte: monthEndDate } },
+    select: { userId: true, date: true },
+  });
+  const todayStr = tehranToday.toISOString().slice(0, 10);
 
   const usersOut = users.map((u) => {
     const mine = records.filter((r) => r.userId === u.id);
     const presentDates = new Set(mine.map((r) => r.date.toISOString().slice(0, 10)));
-    const presentPastDays = [...presentDates].filter((d) => d < tehranToday.toISOString().slice(0, 10)).length;
+    const presentPastDays = [...presentDates].filter((d) => d < todayStr).length;
+    const leavePastDays = new Set(
+      leaves
+        .filter((l) => l.userId === u.id)
+        .map((l) => l.date.toISOString().slice(0, 10))
+        .filter((d) => d < todayStr && !presentDates.has(d))
+    ).size;
     return {
       id: u.id,
       name: u.name,
       presentDays: presentDates.size,
       lateSessions: mine.filter((r) => (r.lateMinutes ?? 0) > 0).length,
-      absentDays: Math.max(0, pastWorkingDays - presentPastDays),
+      leaveDays: leavePastDays,
+      absentDays: Math.max(0, pastWorkingDays - presentPastDays - leavePastDays),
     };
   });
 

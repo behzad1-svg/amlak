@@ -11,7 +11,7 @@ import { PageError, PageSkeleton } from "@/components/ui/LoadState";
 import { useRole } from "@/hooks/useRole";
 import { apiJson, errorMessage } from "@/lib/api";
 import { toFaDigits } from "@/lib/utils";
-import { getTodayJalali, MONTH_NAMES } from "@/lib/jalali";
+import { formatJalali, getTodayJalali, MONTH_NAMES } from "@/lib/jalali";
 import { SESSION_STATUS_LABELS, type SessionStatus } from "@/lib/attendance";
 
 type SessionKey = "MORNING" | "EVENING";
@@ -25,9 +25,8 @@ interface SessionView {
   checkOutAt: string | null;
   lateMinutes: number | null;
   lateReason: string | null;
-  checkInDistanceM: number | null;
   checkOutReason: string | null;
-  checkOutDistanceM: number | null;
+  leaveReason: string | null;
 }
 
 interface TodayData {
@@ -41,7 +40,17 @@ interface ReportData {
   month: string;
   monthLabel: string;
   workingDays: number;
-  users: { id: string; name: string; presentDays: number; lateSessions: number; absentDays: number }[];
+  users: { id: string; name: string; presentDays: number; lateSessions: number; leaveDays: number; absentDays: number }[];
+}
+
+interface LeaveItem {
+  id: string;
+  userId: string;
+  userName: string;
+  date: string;
+  scope: string;
+  scopeLabel: string;
+  reason: string | null;
 }
 
 interface AttendanceSettings {
@@ -63,6 +72,39 @@ function timeHHMM(iso: string | null): string {
     minute: "2-digit",
     hourCycle: "h23",
   }).format(new Date(iso));
+}
+
+/** رنگ برچسب وضعیت یک شیفت — حاضر سبز، دیرکرد نارنجی، غایب قرمز، مرخصی آبی. */
+function statusClass(status: SessionStatus): string {
+  if (status === "done" || status === "working") return "font-bold text-[var(--sea)]";
+  if (status === "late") return "font-bold text-amber-700";
+  if (status === "absent") return "font-bold text-[var(--pomegranate)]";
+  if (status === "leave") return "font-bold text-sky-700";
+  return "text-[var(--ink-3)]";
+}
+
+/** یک شیفت در یک سلول: ساعت ورود/خروج و وضعیت — بدون ستون‌های جدا. */
+function ShiftCell({ s }: { s: SessionView }) {
+  if (s.status === "leave") {
+    return (
+      <div>
+        <span className={statusClass(s.status)}>{SESSION_STATUS_LABELS[s.status]}</span>
+      </div>
+    );
+  }
+  if (!s.checkInAt && (s.status === "open" || s.status === "upcoming" || s.status === "off")) {
+    return <span className={statusClass(s.status)}>{SESSION_STATUS_LABELS[s.status]}</span>;
+  }
+  return (
+    <div>
+      <div>
+        ورود {timeHHMM(s.checkInAt)}
+        {(s.lateMinutes ?? 0) > 0 ? <span className="font-bold text-amber-700"> ({toFaDigits(String(s.lateMinutes))} دقیقه دیر)</span> : ""}
+        {" · "}خروج {timeHHMM(s.checkOutAt)}
+      </div>
+      <div className={statusClass(s.status)}>{SESSION_STATUS_LABELS[s.status]}</div>
+    </div>
+  );
 }
 
 /** ماه‌های شمسی برای انتخاب گزارش: ماه جاری و ۵ ماه پیش. */
@@ -89,6 +131,7 @@ export default function AttendancePage() {
   const { role, loading: roleLoading } = useRole();
   const [today, setToday] = useState<TodayData | null>(null);
   const [report, setReport] = useState<ReportData | null>(null);
+  const [leaves, setLeaves] = useState<LeaveItem[]>([]);
   const [settings, setSettings] = useState<AttendanceSettings | null>(null);
   const [settingsDraft, setSettingsDraft] = useState<AttendanceSettings | null>(null);
   const [month, setMonth] = useState(() => {
@@ -100,6 +143,7 @@ export default function AttendancePage() {
   const [err, setErr] = useState("");
   const [saving, setSaving] = useState(false);
   const [locating, setLocating] = useState(false);
+  const [showSettings, setShowSettings] = useState(false);
 
   const loadToday = useCallback(async () => {
     const d = await apiJson<TodayData>("/api/attendance/today");
@@ -109,6 +153,10 @@ export default function AttendancePage() {
     const d = await apiJson<ReportData>(`/api/attendance/report?month=${m}`);
     setReport(d);
   }, []);
+  const loadLeaves = useCallback(async () => {
+    const d = await apiJson<{ leaves: LeaveItem[] }>("/api/attendance/leave");
+    setLeaves(d.leaves);
+  }, []);
   const loadSettings = useCallback(async () => {
     const d = await apiJson<AttendanceSettings>("/api/attendance/settings");
     setSettings(d);
@@ -116,8 +164,8 @@ export default function AttendancePage() {
   }, []);
 
   const loadAll = useCallback(async () => {
-    await Promise.all([loadToday(), loadReport(month), loadSettings()]);
-  }, [loadToday, loadReport, loadSettings, month]);
+    await Promise.all([loadToday(), loadReport(month), loadSettings(), loadLeaves()]);
+  }, [loadToday, loadReport, loadSettings, loadLeaves, month]);
 
   // در حال بارگذاری = نقش هنوز معلوم نیست، یا داده‌های امروز/تنظیمات هنوز
   // نرسیده‌اند (بدون setState در افکت — مقدار در رندر محاسبه می‌شود).
@@ -227,43 +275,60 @@ export default function AttendancePage() {
               <thead>
                 <tr className="bg-[var(--paper-2)] text-[11px] text-[var(--ink-3)]">
                   <th className="py-2.5 pr-4 text-right font-medium">مشاور</th>
-                  <th className="py-2.5 text-right font-medium">شیفت</th>
-                  <th className="py-2.5 text-center font-medium">ورود</th>
-                  <th className="py-2.5 text-center font-medium">خروج</th>
-                  <th className="py-2.5 text-center font-medium">تاخیر</th>
-                  <th className="py-2.5 text-right font-medium">دلیل تاخیر</th>
-                  <th className="py-2.5 text-right font-medium">دلیل خروج</th>
-                  <th className="py-2.5 text-center font-medium">فاصله</th>
-                  <th className="py-2.5 text-center font-medium">وضعیت</th>
+                  <th className="py-2.5 text-right font-medium">صبح · {today ? toFaDigits(today.settings.morningStart) : ""}–{today ? toFaDigits(today.settings.morningEnd) : ""}</th>
+                  <th className="py-2.5 text-right font-medium">عصر · {today ? toFaDigits(today.settings.eveningStart) : ""}–{today ? toFaDigits(today.settings.eveningEnd) : ""}</th>
+                  <th className="py-2.5 text-right font-medium">توضیحات</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-[var(--line)]">
-                {(today?.users ?? []).flatMap((u) =>
-                  (["MORNING", "EVENING"] as SessionKey[]).map((k) => {
-                    const s = u.sessions[k];
-                    return (
-                      <tr key={`${u.id}:${k}`} className="hover:bg-[var(--paper-2)]/60">
-                        <td className="py-3 pr-4 font-medium">{u.name}</td>
-                        <td>{k === "MORNING" ? "صبح" : "عصر"} · {toFaDigits(s.start)}–{toFaDigits(s.end)}</td>
-                        <td className="text-center">{timeHHMM(s.checkInAt)}</td>
-                        <td className="text-center">{timeHHMM(s.checkOutAt)}</td>
-                        <td className="text-center">{(s.lateMinutes ?? 0) > 0 ? `${toFaDigits(String(s.lateMinutes))} دقیقه` : "—"}</td>
-                        <td className="max-w-[180px] truncate">{s.lateReason ?? "—"}</td>
-                        <td className="max-w-[180px] truncate">{s.checkOutReason ?? "—"}</td>
-                        <td className="text-center">{s.checkInDistanceM !== null ? `${toFaDigits(String(s.checkInDistanceM))} متر` : "—"}</td>
-                        <td className="text-center">
-                          <span className={s.status === "absent" ? "font-bold text-[var(--pomegranate)]" : s.status === "late" ? "font-bold text-amber-700" : ""}>
-                            {SESSION_STATUS_LABELS[s.status]}
-                          </span>
-                        </td>
-                      </tr>
-                    );
-                  })
-                )}
+                {(today?.users ?? []).map((u) => {
+                  const notes = [u.sessions.MORNING, u.sessions.EVENING]
+                    .flatMap((s) => [s.lateReason, s.checkOutReason, s.leaveReason])
+                    .filter((x): x is string => !!x);
+                  return (
+                    <tr key={u.id} className="hover:bg-[var(--paper-2)]/60">
+                      <td className="py-3 pr-4 font-medium">{u.name}</td>
+                      <td className="py-3"><ShiftCell s={u.sessions.MORNING} /></td>
+                      <td className="py-3"><ShiftCell s={u.sessions.EVENING} /></td>
+                      <td className="max-w-[220px] truncate py-3">{notes.length > 0 ? notes.join(" · ") : "—"}</td>
+                    </tr>
+                  );
+                })}
               </tbody>
             </table>
           </div>
         </Card>
+
+        {/* مرخصی‌های پیش‌رو */}
+        {leaves.length > 0 && (
+          <Card className="p-0 overflow-hidden">
+            <CardHeader className="px-4 pt-4">
+              <CardTitle>مرخصی‌های پیش‌رو</CardTitle>
+            </CardHeader>
+            <div className="overflow-x-auto">
+              <table className="w-full text-[13px]">
+                <thead>
+                  <tr className="bg-[var(--paper-2)] text-[11px] text-[var(--ink-3)]">
+                    <th className="py-2.5 pr-4 text-right font-medium">مشاور</th>
+                    <th className="py-2.5 text-right font-medium">روز</th>
+                    <th className="py-2.5 text-right font-medium">بازه</th>
+                    <th className="py-2.5 text-right font-medium">دلیل</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-[var(--line)]">
+                  {leaves.map((l) => (
+                    <tr key={l.id} className="hover:bg-[var(--paper-2)]/60">
+                      <td className="py-3 pr-4 font-medium">{l.userName}</td>
+                      <td className="py-3">{formatJalali(l.date)}</td>
+                      <td className="py-3">{l.scopeLabel}</td>
+                      <td className="max-w-[220px] truncate py-3">{l.reason ?? "—"}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          </Card>
+        )}
 
         {/* گزارش ماهانه */}
         <Card className="p-0 overflow-hidden">
@@ -280,9 +345,9 @@ export default function AttendancePage() {
               <thead>
                 <tr className="bg-[var(--paper-2)] text-[11px] text-[var(--ink-3)]">
                   <th className="py-2.5 pr-4 text-right font-medium">مشاور</th>
-                  <th className="py-2.5 text-center font-medium">روزهای کاری</th>
                   <th className="py-2.5 text-center font-medium">حاضر</th>
                   <th className="py-2.5 text-center font-medium">دیرکرد (شیفت)</th>
+                  <th className="py-2.5 text-center font-medium">مرخصی</th>
                   <th className="py-2.5 text-center font-medium">غایب</th>
                 </tr>
               </thead>
@@ -290,9 +355,9 @@ export default function AttendancePage() {
                 {(report?.users ?? []).map((u) => (
                   <tr key={u.id} className="hover:bg-[var(--paper-2)]/60">
                     <td className="py-3 pr-4 font-medium">{u.name}</td>
-                    <td className="text-center">{toFaDigits(String(report?.workingDays ?? 0))}</td>
                     <td className="text-center">{toFaDigits(String(u.presentDays))}</td>
                     <td className="text-center">{toFaDigits(String(u.lateSessions))}</td>
+                    <td className="text-center">{u.leaveDays > 0 ? <span className="font-bold text-sky-700">{toFaDigits(String(u.leaveDays))}</span> : "۰"}</td>
                     <td className="text-center">{u.absentDays > 0 ? <span className="font-bold text-[var(--pomegranate)]">{toFaDigits(String(u.absentDays))}</span> : "۰"}</td>
                   </tr>
                 ))}
@@ -301,13 +366,18 @@ export default function AttendancePage() {
           </div>
           {report && (
             <p className="px-4 pb-3 text-[11px] text-[var(--ink-3)]">
-              {toFaDigits(report.monthLabel)} · غایب فقط روزهای کاریِ گذشته شمرده می‌شود؛ امروز غایب حساب نمی‌شود.
+              {toFaDigits(report.monthLabel)} · {toFaDigits(String(report.workingDays))} روز کاری · غایب فقط روزهای کاریِ گذشته شمرده می‌شود؛ امروز غایب حساب نمی‌شود؛ روز مرخصی غایب نیست.
             </p>
           )}
         </Card>
 
-        {/* تنظیمات */}
+        {/* تنظیمات — جمع‌شونده؛ کم تغییر می‌کند */}
         {settingsDraft && (
+          <>
+            <Button variant="outline" size="sm" onClick={() => setShowSettings((v) => !v)}>
+              {showSettings ? "بستن تنظیمات" : "تنظیمات حضور و غیاب"}
+            </Button>
+            {showSettings && (
           <Card className="p-4 space-y-4">
             <h3 className="font-bold text-[14px]">تنظیمات حضور و غیاب</h3>
             <div className="grid gap-4 sm:grid-cols-2">
@@ -360,6 +430,8 @@ export default function AttendancePage() {
               )}
             </div>
           </Card>
+            )}
+          </>
         )}
       </div>
     </div>
