@@ -21,8 +21,9 @@ function HeaderClock() {
   }, []);
   if (!now) return null;
   return (
-    <span className="hidden sm:inline text-[12px] text-[var(--ink-3)]">
-      {getTehranWeekdayLong(now)} {formatJalaliDayMonth(now)} · {formatTehranTime(now)}
+    <span className="text-[12px] text-[var(--ink-3)]">
+      <span className="hidden sm:inline">{getTehranWeekdayLong(now)} {formatJalaliDayMonth(now)} · </span>
+      {formatTehranTime(now)}
     </span>
   );
 }
