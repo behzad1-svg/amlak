@@ -201,7 +201,8 @@ export function NotesCard() {
   }
 
   return (
-    <Card className="p-0 overflow-hidden">
+    <Card className="p-0">
+      {/* بدون overflow-hidden: پاپ‌آور تقویم باید از کارت بیرون بزند، وگرنه روزهای پایین تقویم بریده می‌شوند */}
       <CardHeader className="px-4 pt-4">
         <CardTitle className="flex items-center gap-2">
           <span className="flex h-7 w-7 items-center justify-center rounded-[10px] bg-[var(--ink)] text-white">
