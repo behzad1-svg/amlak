@@ -57,6 +57,7 @@ type SessionCardRow = {
   coAdvisors: { user: { id: string; name: string } }[];
   contractManager: { id: string; name: string } | null;
   depositPaid: boolean | null;
+  depositMethod: string | null;
   depositAmountToman: string | null;
   rentAmountToman: string | null;
   paymentTerms: string | null;
@@ -108,6 +109,7 @@ export default function SessionCardsPage() {
   const [intentOther, setIntentOther] = useState("");
   const [shirini, setShirini] = useState("");
   const [depositPaid, setDepositPaid] = useState("");
+  const [depositMethod, setDepositMethod] = useState("");
   const [cooperatingAdvisorIds, setCooperatingAdvisorIds] = useState<string[]>([]);
   const [contractManagerId, setContractManagerId] = useState("");
   const [paymentTerms, setPaymentTerms] = useState("");
@@ -261,6 +263,7 @@ export default function SessionCardsPage() {
     }
     setShirini(card.sellerShiriniToman ?? "");
     setDepositPaid(card.depositPaid === true ? "paid" : card.depositPaid === false ? "unpaid" : "");
+    setDepositMethod(card.depositMethod ?? "");
     setCooperatingAdvisorIds(card.coAdvisors.map((a) => a.user.id));
     setContractManagerId(card.contractManager?.id ?? "");
     setPaymentTerms(card.paymentTerms ?? "");
@@ -299,6 +302,7 @@ export default function SessionCardsPage() {
     setIntentOther("");
     setShirini("");
     setDepositPaid("");
+    setDepositMethod("");
     setCooperatingAdvisorIds([]);
     setContractManagerId("");
     setPaymentTerms("");
@@ -333,6 +337,7 @@ export default function SessionCardsPage() {
       cooperatingAdvisorIds,
       contractManagerId: contractManagerId || null,
       depositPaid: depositPaid === "paid" ? true : depositPaid === "unpaid" ? false : null,
+      depositMethod: depositPaid === "paid" ? (depositMethod || null) : null,
       paymentTerms: paymentTerms.trim() || null,
       notes: notes.trim() || null,
     };
@@ -539,6 +544,16 @@ export default function SessionCardsPage() {
                   </Select>
                 </div>
               </div>
+              {depositPaid === "paid" && (
+                <div>
+                  <Label htmlFor="sc-deposit-method">روش دریافت بیعانه</Label>
+                  <Select id="sc-deposit-method" value={depositMethod} onChange={(e) => setDepositMethod(e.target.value)} className="mt-1">
+                    <option value="">انتخاب کنید</option>
+                    <option value="POS">پوز</option>
+                    <option value="CARD">کارت به کارت</option>
+                  </Select>
+                </div>
+              )}
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                 <div>
                   <Label htmlFor="sc-coop">مشاور همکار (تعاون)</Label>
@@ -622,7 +637,7 @@ export default function SessionCardsPage() {
                     {c.depositAmountToman && <p>مبلغ رهن: <b>{formatToman(c.depositAmountToman)}</b></p>}
                     {c.rentAmountToman && <p>اجاره ماهانه: <b>{formatToman(c.rentAmountToman)}</b></p>}
                     {c.sellerShiriniToman && <p>شیرینی مالک: <b>{formatToman(c.sellerShiriniToman)}</b></p>}
-                    {c.depositPaid !== null && c.depositPaid !== undefined && <p>بیعانه: <b>{c.depositPaid ? "پرداخت شده" : "پرداخت نشده"}</b></p>}
+                    {c.depositPaid !== null && c.depositPaid !== undefined && <p>بیعانه: <b>{c.depositPaid ? "پرداخت شده" : "پرداخت نشده"}{c.depositPaid && c.depositMethod ? ` (${c.depositMethod === "POS" ? "پوز" : "کارت به کارت"})` : ""}</b></p>}
                     {c.coAdvisors.length > 0 && <p>تعاون با: <b>{c.coAdvisors.map((a) => a.user.name).join("، ")}</b></p>}
                     {c.contractManager && <p>مدیر قرارداد: <b>{c.contractManager.name}</b></p>}
                     {c.paymentTerms && <p>شرایط پرداخت: {c.paymentTerms}</p>}

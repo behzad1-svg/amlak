@@ -152,6 +152,53 @@ describe("POST /api/session-cards — two SMS: main manager + contract manager",
     expect(smsMock.sendSms).toHaveBeenCalledTimes(2);
   });
 
+  it("stores the deposit method when the deposit is paid", async () => {
+    const res = await POST(
+      postReq({
+        customerId: "c1",
+        scheduledAt: "2026-11-25T10:00:00",
+        depositPaid: true,
+        depositMethod: "POS",
+      }),
+    );
+    expect(res.status).toBe(201);
+    expect(prismaMock.sessionCard.create).toHaveBeenCalledWith(
+      expect.objectContaining({
+        data: expect.objectContaining({ depositPaid: true, depositMethod: "POS" }),
+      }),
+    );
+  });
+
+  it("stores null for the deposit method when the deposit is not paid", async () => {
+    const res = await POST(
+      postReq({
+        customerId: "c1",
+        scheduledAt: "2026-11-25T10:00:00",
+        depositPaid: false,
+        depositMethod: "CARD",
+      }),
+    );
+    expect(res.status).toBe(201);
+    expect(prismaMock.sessionCard.create).toHaveBeenCalledWith(
+      expect.objectContaining({
+        data: expect.objectContaining({ depositPaid: false, depositMethod: null }),
+      }),
+    );
+  });
+
+  it("rejects an invalid deposit method", async () => {
+    const res = await POST(
+      postReq({
+        customerId: "c1",
+        scheduledAt: "2026-11-25T10:00:00",
+        depositPaid: true,
+        depositMethod: "CASH",
+      }),
+    );
+    expect(res.status).toBe(400);
+    expect(prismaMock.sessionCard.create).not.toHaveBeenCalled();
+  });
+
   it("401 without a session", async () => {
     authSession.current = null;
     const res = await POST(postReq({ customerId: "c1", scheduledAt: "2026-11-25T10:00:00" }));

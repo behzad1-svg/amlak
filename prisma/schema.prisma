@@ -526,6 +526,7 @@ model SessionCard {
   intent             String?
   sellerShiriniToman BigInt?
   depositPaid        Boolean?
+  depositMethod      String?
   commissionToman    BigInt?
   paymentTerms       String?
   notes              String?

@@ -16,6 +16,7 @@ import {
   propertyUpdateSchema,
   safeBigInt,
   sessionCardCreateSchema,
+  sessionCardUpdateSchema,
   userCreateSchema,
   viewingCreateSchema,
 } from "./validation";
@@ -322,6 +323,21 @@ describe("sessionCardCreateSchema", () => {
         depositPaid: true,
       }).success,
     ).toBe(true);
+  });
+
+  it("accepts POS/CARD deposit method with a paid deposit and rejects an invalid method", () => {
+    const base = { customerId: "c1", scheduledAt: "2026-11-16T10:00", depositPaid: true };
+    expect(sessionCardCreateSchema.safeParse({ ...base, depositMethod: "POS" }).success).toBe(
+      true,
+    );
+    expect(sessionCardCreateSchema.safeParse({ ...base, depositMethod: "CARD" }).success).toBe(
+      true,
+    );
+    expect(sessionCardCreateSchema.safeParse({ ...base, depositMethod: "CASH" }).success).toBe(
+      false,
+    );
+    expect(sessionCardUpdateSchema.safeParse({ depositMethod: "POS" }).success).toBe(true);
+    expect(sessionCardUpdateSchema.safeParse({ depositMethod: "CASH" }).success).toBe(false);
   });
 
   it("rejects a missing date and a non-numeric cash amount", () => {

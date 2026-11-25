@@ -115,6 +115,7 @@ export async function POST(req: NextRequest) {
       intent: d.intent || null,
       sellerShiriniToman: d.sellerShiriniToman ? BigInt(d.sellerShiriniToman) : null,
       depositPaid: d.depositPaid ?? null,
+      depositMethod: d.depositPaid === true ? (d.depositMethod ?? null) : null,
       paymentTerms: d.paymentTerms || null,
       notes: d.notes || null,
     },

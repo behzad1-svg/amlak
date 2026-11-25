@@ -249,6 +249,7 @@ export const sessionCardCreateSchema = z.object({
   cooperatingAdvisorIds: z.array(z.string().min(1)).max(3, "حداکثر ۳ مشاور همکار").optional(),
   contractManagerId: z.string().optional().nullable(),
   depositPaid: z.boolean().optional().nullable(),
+  depositMethod: z.enum(["POS", "CARD"]).optional().nullable(),
   paymentTerms: z.string().max(2000).optional().nullable(),
   notes: z.string().max(5000).optional().nullable(),
 });
@@ -269,6 +270,7 @@ export const sessionCardUpdateSchema = z.object({
   cooperatingAdvisorIds: z.array(z.string().min(1)).max(3, "حداکثر ۳ مشاور همکار").optional(),
   contractManagerId: z.string().optional().nullable(),
   depositPaid: z.boolean().optional().nullable(),
+  depositMethod: z.enum(["POS", "CARD"]).optional().nullable(),
   paymentTerms: z.string().max(2000).optional().nullable(),
   notes: z.string().max(5000).optional().nullable(),
 });

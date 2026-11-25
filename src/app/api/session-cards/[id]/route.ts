@@ -41,6 +41,7 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
     "cooperatingAdvisorIds",
     "contractManagerId",
     "depositPaid",
+    "depositMethod",
     "paymentTerms",
     "notes",
   ] as const;
@@ -113,6 +114,13 @@ export async function PATCH(req: NextRequest, { params }: { params: Promise<{ id
       data.coAdvisors = { deleteMany: {}, create: cooperatingAdvisorIds.map((userId) => ({ userId })) };
     if (d.contractManagerId !== undefined) data.contractManagerId = d.contractManagerId || null;
     if (d.depositPaid !== undefined) data.depositPaid = d.depositPaid ?? null;
+    if (d.depositPaid === false || d.depositPaid === null) {
+      data.depositMethod = null;
+    } else if (d.depositPaid === true && d.depositMethod !== undefined) {
+      data.depositMethod = d.depositMethod ?? null;
+    } else if (d.depositMethod !== undefined && existing.depositPaid === true) {
+      data.depositMethod = d.depositMethod ?? null;
+    }
     if (d.paymentTerms !== undefined) data.paymentTerms = d.paymentTerms || null;
     if (d.notes !== undefined) data.notes = d.notes || null;
     if (Object.keys(data).length === 0) return NextResponse.json({ error: "تغییری نفرستاده‌اید" }, { status: 400 });
