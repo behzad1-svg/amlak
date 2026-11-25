@@ -58,6 +58,14 @@ function combineDateTime(dateIso: string | null, time: string): string | null {
   return at.toISOString();
 }
 
+/** ساعت HH:mm از یک تاریخ ISO (به وقت محلی مرورگر) — همان الگوی دفترچه یادداشت. */
+function timeFromIso(iso: string | null): string {
+  if (!iso) return "12:00";
+  const d = new Date(iso);
+  if (Number.isNaN(d.getTime())) return "12:00";
+  return `${String(d.getHours()).padStart(2, "0")}:${String(d.getMinutes()).padStart(2, "0")}`;
+}
+
 /** ثبت سریع نتیجه تماس: برچسب فعالیت، روزهای تا پیگیری بعدی، مرحله جدید (در صورت نیاز) */
 const QUICK_CALLS = [
   { key: "answered", label: "جواب داد", days: 1, desc: "تماس: جواب داد", stage: null as string | null },
@@ -150,8 +158,10 @@ export default function CustomerDetailPage() {
   const [activityType, setActivityType] = useState("NOTE");
   const [savingActivity, setSavingActivity] = useState(false);
   const [followUpSaving, setFollowUpSaving] = useState<string | null>(null);
+  const [followUpSavingTime, setFollowUpSavingTime] = useState("12:00");
   const [followUps, setFollowUps] = useState<FollowUp[]>([]);
   const [newFollowUpDate, setNewFollowUpDate] = useState<string | null>(null);
+  const [newFollowUpTime, setNewFollowUpTime] = useState("12:00");
   const [newFollowUpNote, setNewFollowUpNote] = useState("");
   const [regions, setRegions] = useState<string[]>([]);
   const [propertyTypes, setPropertyTypes] = useState<{ value: string; label: string }[]>([]);
@@ -839,6 +849,7 @@ export default function CustomerDetailPage() {
                           {followUpSaving !== null ? (
                             <>
                               <JalaliDatePicker value={followUpSaving} onChange={(v) => setFollowUpSaving(v)} />
+                              <Input type="time" value={followUpSavingTime} onChange={(e) => setFollowUpSavingTime(e.target.value)} className="w-32 shrink-0" dir="ltr" aria-label="ساعت پیگیری" />
                               <Button
                                 size="sm"
                                 disabled={!followUpSaving}
@@ -848,7 +859,7 @@ export default function CustomerDetailPage() {
                                     await apiFetch(`/api/follow-ups/${f.id}`, {
                                       method: "PATCH",
                                       headers: { "Content-Type": "application/json" },
-                                      body: JSON.stringify({ dueAt: followUpSaving }),
+                                      body: JSON.stringify({ dueAt: combineDateTime(followUpSaving, followUpSavingTime) }),
                                     });
                                     setFollowUpSaving(null);
                                     await refreshFollowUps();
@@ -864,7 +875,7 @@ export default function CustomerDetailPage() {
                             </>
                           ) : (
                             <button
-                              onClick={() => setFollowUpSaving(f.dueAt)}
+                              onClick={() => { setFollowUpSaving(f.dueAt); setFollowUpSavingTime(timeFromIso(f.dueAt)); }}
                               className="inline-flex items-center gap-1 rounded-[10px] border border-[var(--line)] bg-white px-3 py-1.5 text-[12px] font-medium hover:bg-[var(--paper-2)]"
                             >
                               تغییر تاریخ
@@ -899,6 +910,9 @@ export default function CustomerDetailPage() {
               <div className="flex-1">
                 <JalaliDatePicker value={newFollowUpDate} onChange={setNewFollowUpDate} placeholder="تاریخ پیگیری جدید" />
               </div>
+              <div className="w-full sm:w-32 sm:shrink-0">
+                <Input type="time" value={newFollowUpTime} onChange={(e) => setNewFollowUpTime(e.target.value)} className="w-full" dir="ltr" aria-label="ساعت پیگیری" />
+              </div>
               <Input
                 value={newFollowUpNote}
                 onChange={(e) => setNewFollowUpNote(e.target.value)}
@@ -914,9 +928,10 @@ export default function CustomerDetailPage() {
                     await apiFetch(`/api/customers/${id}/follow-ups`, {
                       method: "POST",
                       headers: { "Content-Type": "application/json" },
-                      body: JSON.stringify({ dueAt: newFollowUpDate, note: newFollowUpNote || undefined }),
+                      body: JSON.stringify({ dueAt: combineDateTime(newFollowUpDate, newFollowUpTime), note: newFollowUpNote || undefined }),
                     });
                     setNewFollowUpDate(null);
+                    setNewFollowUpTime("12:00");
                     setNewFollowUpNote("");
                     await refreshFollowUps();
                     load();
