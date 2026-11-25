@@ -10,7 +10,7 @@ import { Card } from "@/components/ui/Card";
 import { Badge } from "@/components/ui/Badge";
 import { DateText } from "@/components/ui/DateText";
 import dynamic from "next/dynamic";
-import { formatDate, toFaDigits } from "@/lib/utils";
+import { formatDate, formatDateTime, toFaDigits } from "@/lib/utils";
 import { MoneyText } from "@/components/ui/MoneyText";
 import { MoneyInput } from "@/components/ui/MoneyInput";
 import { SearchSelect, type SearchOption } from "@/components/ui/SearchSelect";
@@ -47,6 +47,15 @@ import { useRole } from "@/hooks/useRole";
 /** تاریخ ISO برای N روز بعد — همان فرمتی که JalaliDatePicker برمی‌گرداند */
 function isoInDays(n: number): string {
   return new Date(Date.now() + n * 86_400_000).toISOString();
+}
+
+/** ترکیب تاریخ انتخاب‌شده با ساعت — همان الگوی دفترچه یادداشت و کارت جلسه. */
+function combineDateTime(dateIso: string | null, time: string): string | null {
+  if (!dateIso) return null;
+  const [hh, mm] = time.split(":").map((v) => parseInt(v, 10));
+  const at = new Date(dateIso);
+  at.setHours(Number.isNaN(hh) ? 12 : hh, Number.isNaN(mm) ? 0 : mm, 0, 0);
+  return at.toISOString();
 }
 
 /** ثبت سریع نتیجه تماس: برچسب فعالیت، روزهای تا پیگیری بعدی، مرحله جدید (در صورت نیاز) */
@@ -152,7 +161,7 @@ export default function CustomerDetailPage() {
   const [dupConfirmOpen, setDupConfirmOpen] = useState(false);
   const [outcome, setOutcome] = useState<OutcomeKind | null>(null);
   const [outcomeMsg, setOutcomeMsg] = useState("");
-  const [nextPrompt, setNextPrompt] = useState<{ type: string; date: string | null; note: string } | null>(null);
+  const [nextPrompt, setNextPrompt] = useState<{ type: string; date: string | null; note: string; time: string } | null>(null);
   const [nextSaving, setNextSaving] = useState(false);
   const [quickSaving, setQuickSaving] = useState<string | null>(null);
   const [agents, setAgents] = useState<{ id: string; name: string; role: string; active?: boolean }[]>([]);
@@ -395,7 +404,7 @@ export default function CustomerDetailPage() {
       setActivityText("");
       load();
       // قدم بعدی را همان‌جا بپرس — مشتری بدون «فعالیت بعدی» نماند
-      setNextPrompt({ type: "CALL", date: isoInDays(1), note: "" });
+      setNextPrompt({ type: "CALL", date: isoInDays(1), note: "", time: "12:00" });
     } catch (e) {
       setError(errorMessage(e));
     } finally {
@@ -1239,6 +1248,9 @@ export default function CustomerDetailPage() {
                 <div className="flex-1">
                   <JalaliDatePicker value={nextPrompt.date} onChange={(v) => setNextPrompt({ ...nextPrompt, date: v })} placeholder="تاریخ فعالیت بعدی" />
                 </div>
+                <div className="w-full sm:w-32 sm:shrink-0">
+                  <Input type="time" value={nextPrompt.time} onChange={(e) => setNextPrompt({ ...nextPrompt, time: e.target.value })} className="w-full" dir="ltr" aria-label="ساعت فعالیت بعدی" />
+                </div>
                 <Input
                   value={nextPrompt.note}
                   onChange={(e) => setNextPrompt({ ...nextPrompt, note: e.target.value })}
@@ -1257,7 +1269,7 @@ export default function CustomerDetailPage() {
                       const note = [ACTIVITY_TYPE_LABELS[nextPrompt.type] ?? nextPrompt.type, nextPrompt.note.trim()].filter(Boolean).join(" — ");
                       await apiFetch(`/api/customers/${id}/follow-ups`, {
                         method: "POST", headers: { "Content-Type": "application/json" },
-                        body: JSON.stringify({ dueAt: nextPrompt.date, note: note || undefined }),
+                        body: JSON.stringify({ dueAt: combineDateTime(nextPrompt.date, nextPrompt.time), note: note || undefined }),
                       });
                       setNextPrompt(null);
                       await refreshFollowUps();
@@ -1304,7 +1316,7 @@ export default function CustomerDetailPage() {
                         <div className="flex flex-wrap items-center gap-2">
                           <span className="rounded-full border border-[var(--line)] bg-[var(--paper-2)] px-2 py-0.5 text-[11px] font-bold">{ACTIVITY_TYPE_LABELS[a.type] ?? a.type}</span>
                           <span className="text-[11px] text-[var(--ink-3)]">{a.agent?.name}</span>
-                          <span className="mr-auto text-[11px] text-[var(--ink-3)]">{formatDate(a.createdAt)}</span>
+                          <span className="mr-auto text-[11px] text-[var(--ink-3)]">{formatDateTime(a.createdAt)}</span>
                         </div>
                         {a.description && <p className="mt-2 text-[13px] leading-6 text-[var(--ink-2)] whitespace-pre-wrap">{a.description}</p>}
                       </div>
