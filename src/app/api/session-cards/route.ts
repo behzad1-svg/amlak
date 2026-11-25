@@ -17,6 +17,10 @@ const CARD_INCLUDE = {
   contractManager: { select: { id: true, name: true } },
 };
 
+/** شمارهٔ مدیر اصلی (محمد ادیم) — پیامک کارت جلسه همیشه به او هم می‌رود.
+ *  کاربر با شماره پیدا می‌شود تا شناسه‌اش در کد قفل نشود. */
+const MAIN_MANAGER_PHONE = "09173700135";
+
 export async function GET(req: NextRequest) {
   const session = await getSessionFromCookies();
   if (!session) return NextResponse.json({ error: "وارد نشده‌اید" }, { status: 401 });
@@ -150,11 +154,24 @@ export async function POST(req: NextRequest) {
       })),
     });
   }
-  // پیامک به مدیر قرارداد انتخاب‌شده — بعد از ذخیرهٔ کارت، و هرگز مانع
-  // ثبت کارت نمی‌شود: خطا فقط در لاگ سرور می‌ماند.
-  if (contractManager?.phone) {
+  // پیامک کارت جلسه — به مدیر اصلی (محمد ادیم) و مدیر قرارداد
+  // انتخاب‌شده؛ بعد از ذخیرهٔ کارت، و هرگز مانع ثبت کارت نمی‌شود:
+  // خطای هر پیامک فقط در لاگ سرور می‌ماند. اگر مدیر قرارداد همان
+  // مدیر اصلی باشد (یک شماره)، فقط یک پیامک می‌رود.
+  const smsRecipients = new Set<string>();
+  try {
+    const mainManager = await prisma.user.findUnique({
+      where: { phone: MAIN_MANAGER_PHONE },
+      select: { phone: true, active: true },
+    });
+    if (mainManager?.active && mainManager.phone) smsRecipients.add(mainManager.phone);
+  } catch (e) {
+    console.error("[session-card-sms] failed:", e instanceof Error ? e.message : "");
+  }
+  if (contractManager?.phone) smsRecipients.add(contractManager.phone);
+  for (const mobile of smsRecipients) {
     try {
-      await sendSms(contractManager.phone, sessionCardSmsText(session.user.name));
+      await sendSms(mobile, sessionCardSmsText(session.user.name));
     } catch (e) {
       console.error("[session-card-sms] failed:", e instanceof Error ? e.message : "");
     }

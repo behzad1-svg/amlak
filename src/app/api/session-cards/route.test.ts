@@ -1,5 +1,7 @@
-// ثبت کارت جلسه — پیامک به مدیر قرارداد انتخاب‌شده (بعد از ذخیرهٔ کارت،
- // و هرگز مانع ثبت کارت نمی‌شود: خطای پیامک فقط در لاگ سرور می‌ماند).
+// ثبت کارت جلسه — دو پیامک: به مدیر اصلی (محمد ادیم، با شماره‌اش پیدا
+// می‌شود) و مدیر قرارداد انتخاب‌شده (بعد از ذخیرهٔ کارت، و هرگز مانع
+// ثبت کارت نمی‌شود: خطای هر پیامک فقط در لاگ سرور می‌ماند؛ اگر مدیر
+// قرارداد همان مدیر اصلی باشد فقط یک پیامک می‌رود).
 import { describe, it, expect, vi, beforeEach } from "vitest";
 import { NextRequest } from "next/server";
 import { POST } from "./route";
@@ -44,6 +46,8 @@ vi.mock("@/lib/prisma", () => ({ prisma: prismaMock }));
 
 const OWNER = { id: "u-owner", name: "مدیر ساج", role: "OWNER" };
 const MANAGER = { id: "u-mgr", name: "مدیر قرارداد", active: true, isContractManager: true, phone: "09170000001" };
+const ADIM = { id: "u-adim", name: "محمد ادیم", active: true, isContractManager: true, phone: "09173700135" };
+const SMS_TEXT = "مدیر ساج کارت جلسه ثبت کرد لطفا سایت رو چک کنید — املاک ساج";
 
 function setSession() {
   authSession.current = {
@@ -60,7 +64,7 @@ function postReq(body: unknown) {
   });
 }
 
-describe("POST /api/session-cards — SMS to the contract manager", () => {
+describe("POST /api/session-cards — two SMS: main manager + contract manager", () => {
   beforeEach(() => {
     vi.clearAllMocks();
     setSession();
@@ -68,7 +72,12 @@ describe("POST /api/session-cards — SMS to the contract manager", () => {
     prismaMock.customer.findUnique.mockResolvedValue({
       id: "c1", name: "مشتری یک", deletedAt: null, assignedAgentId: OWNER.id,
     });
-    prismaMock.user.findUnique.mockResolvedValue(MANAGER);
+    prismaMock.user.findUnique.mockImplementation(async ({ where }: { where?: { id?: string; phone?: string } }) => {
+      if (where?.phone === ADIM.phone) return ADIM;
+      if (where?.id === ADIM.id) return ADIM;
+      if (where?.id === MANAGER.id) return MANAGER;
+      return null;
+    });
     prismaMock.user.findMany.mockResolvedValue([{ id: OWNER.id }]);
     prismaMock.sessionCard.create.mockResolvedValue({
       id: "sc1", customerId: "c1", advisorId: OWNER.id, contractManagerId: MANAGER.id,
@@ -78,34 +87,69 @@ describe("POST /api/session-cards — SMS to the contract manager", () => {
     prismaMock.notification.createMany.mockResolvedValue({});
   });
 
-  it("sends the exact SMS text to the selected contract manager", async () => {
+  it("sends two SMS with the exact text — to the main manager and the selected contract manager", async () => {
+    const res = await POST(postReq({ customerId: "c1", scheduledAt: "2026-11-25T10:00:00", contractManagerId: MANAGER.id }));
+    expect(res.status).toBe(201);
+    expect(smsMock.sendSms).toHaveBeenCalledTimes(2);
+    expect(smsMock.sendSms).toHaveBeenCalledWith(ADIM.phone, SMS_TEXT);
+    expect(smsMock.sendSms).toHaveBeenCalledWith(MANAGER.phone, SMS_TEXT);
+  });
+
+  it("sends only the main-manager SMS when no contract manager is selected", async () => {
+    const res = await POST(postReq({ customerId: "c1", scheduledAt: "2026-11-25T10:00:00" }));
+    expect(res.status).toBe(201);
+    expect(smsMock.sendSms).toHaveBeenCalledTimes(1);
+    expect(smsMock.sendSms).toHaveBeenCalledWith(ADIM.phone, SMS_TEXT);
+  });
+
+  it("sends only to the main manager when the contract manager has no phone", async () => {
+    prismaMock.user.findUnique.mockImplementation(async ({ where }: { where?: { id?: string; phone?: string } }) => {
+      if (where?.phone === ADIM.phone) return ADIM;
+      if (where?.id === MANAGER.id) return { ...MANAGER, phone: null };
+      return null;
+    });
     const res = await POST(postReq({ customerId: "c1", scheduledAt: "2026-11-25T10:00:00", contractManagerId: MANAGER.id }));
     expect(res.status).toBe(201);
     expect(smsMock.sendSms).toHaveBeenCalledTimes(1);
-    expect(smsMock.sendSms).toHaveBeenCalledWith(
-      "09170000001",
-      "مدیر ساج کارت جلسه ثبت کرد لطفا سایت رو چک کنید — املاک ساج"
-    );
+    expect(smsMock.sendSms).toHaveBeenCalledWith(ADIM.phone, SMS_TEXT);
   });
 
-  it("sends nothing when no contract manager is selected", async () => {
-    const res = await POST(postReq({ customerId: "c1", scheduledAt: "2026-11-25T10:00:00" }));
+  it("sends only once when the contract manager is the main manager", async () => {
+    const res = await POST(postReq({ customerId: "c1", scheduledAt: "2026-11-25T10:00:00", contractManagerId: ADIM.id }));
     expect(res.status).toBe(201);
-    expect(smsMock.sendSms).not.toHaveBeenCalled();
+    expect(smsMock.sendSms).toHaveBeenCalledTimes(1);
+    expect(smsMock.sendSms).toHaveBeenCalledWith(ADIM.phone, SMS_TEXT);
   });
 
-  it("sends nothing when the contract manager has no phone", async () => {
-    prismaMock.user.findUnique.mockResolvedValue({ ...MANAGER, phone: null });
+  it("sends only to the contract manager when the main manager is not found", async () => {
+    prismaMock.user.findUnique.mockImplementation(async ({ where }: { where?: { id?: string; phone?: string } }) => {
+      if (where?.id === MANAGER.id) return MANAGER;
+      return null;
+    });
     const res = await POST(postReq({ customerId: "c1", scheduledAt: "2026-11-25T10:00:00", contractManagerId: MANAGER.id }));
     expect(res.status).toBe(201);
-    expect(smsMock.sendSms).not.toHaveBeenCalled();
+    expect(smsMock.sendSms).toHaveBeenCalledTimes(1);
+    expect(smsMock.sendSms).toHaveBeenCalledWith(MANAGER.phone, SMS_TEXT);
   });
 
-  it("card is still created (201) when the SMS send fails", async () => {
+  it("sends only to the contract manager when the main manager is inactive", async () => {
+    prismaMock.user.findUnique.mockImplementation(async ({ where }: { where?: { id?: string; phone?: string } }) => {
+      if (where?.phone === ADIM.phone) return { ...ADIM, active: false };
+      if (where?.id === MANAGER.id) return MANAGER;
+      return null;
+    });
+    const res = await POST(postReq({ customerId: "c1", scheduledAt: "2026-11-25T10:00:00", contractManagerId: MANAGER.id }));
+    expect(res.status).toBe(201);
+    expect(smsMock.sendSms).toHaveBeenCalledTimes(1);
+    expect(smsMock.sendSms).toHaveBeenCalledWith(MANAGER.phone, SMS_TEXT);
+  });
+
+  it("card is still created (201) and the other SMS still goes out when one SMS send fails", async () => {
     smsMock.sendSms.mockRejectedValueOnce(new Error("sms.ir down"));
     const res = await POST(postReq({ customerId: "c1", scheduledAt: "2026-11-25T10:00:00", contractManagerId: MANAGER.id }));
     expect(res.status).toBe(201);
     expect(prismaMock.sessionCard.create).toHaveBeenCalled();
+    expect(smsMock.sendSms).toHaveBeenCalledTimes(2);
   });
 
   it("401 without a session", async () => {
