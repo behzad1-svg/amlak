@@ -94,7 +94,7 @@ function ShiftCell({ s }: { s: SessionView }) {
       </div>
     );
   }
-  if (!s.checkInAt && (s.status === "open" || s.status === "upcoming" || s.status === "off")) {
+  if (!s.checkInAt && (s.status === "open" || s.status === "upcoming" || s.status === "off" || s.status === "optional")) {
     return <span className={statusClass(s.status)}>{SESSION_STATUS_LABELS[s.status]}</span>;
   }
   return (

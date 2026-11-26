@@ -41,6 +41,11 @@ export function isFriday(jy: number, jm: number, jd: number): boolean {
   return jalaliToGregorian(jy, jm, jd).getDay() === 5;
 }
 
+/** پنجشنبه است؟ (روز هفتهٔ میلادی ۴) — برای شیفت عصرِ دل‌بخواهِ پنجشنبه. */
+export function isThursday(jy: number, jm: number, jd: number): boolean {
+  return jalaliToGregorian(jy, jm, jd).getDay() === 4;
+}
+
 export function isJalaliHoliday(jy: number, jm: number, jd: number): boolean {
   if (isFriday(jy, jm, jd)) return true;
   const year = OFFICIAL_HOLIDAYS[jy];

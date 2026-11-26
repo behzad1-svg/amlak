@@ -22,7 +22,7 @@ import {
 } from "@/lib/attendance";
 
 type SessionKey = "MORNING" | "EVENING";
-type SessionStatus = "done" | "working" | "late" | "absent" | "open" | "upcoming" | "off" | "leave";
+type SessionStatus = "done" | "working" | "late" | "absent" | "open" | "upcoming" | "off" | "leave" | "optional";
 
 interface SessionView {
   session: SessionKey;
@@ -65,6 +65,7 @@ const STATUS_LABEL: Record<SessionStatus, string> = {
   upcoming: "شروع نشده",
   off: "تعطیل",
   leave: "مرخصی",
+  optional: "دل‌بخواه",
 };
 
 function timeHHMM(iso: string | null): string {

@@ -10,6 +10,7 @@ import {
 } from "@/lib/jalali";
 import {
   isCheckoutMissed,
+  isOptionalSession,
   leaveCoversSession,
   tehranDateOnly,
   tehranParts,
@@ -72,7 +73,8 @@ export async function GET() {
       if (!working) status = "off";
       else if (leave) status = "leave";
       else if (rec) status = rec.checkOutAt ? "done" : (rec.lateMinutes ?? 0) > 0 ? "late" : "working";
-      else if (nowMin > endMin) status = "absent";
+      // عصر پنجشنبه دل‌بخواه است: اگر ورودی ثبت نشده غایب حساب نمی‌شود.
+      else if (nowMin > endMin) status = isOptionalSession(todayJ, s) ? "optional" : "absent";
       else if (nowMin >= startMin - 60) status = "open";
       else status = "upcoming";
       sessions[s] = {

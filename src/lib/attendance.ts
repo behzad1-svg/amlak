@@ -2,7 +2,7 @@
 // تشخیص شیفت جاری و تاخیر. همهٔ زمان‌ها به وقت تهران حساب می‌شوند و
 // وابسته به منطقهٔ زمانی سرور نیستند (Intl با timeZone صریح).
 import { getTodayJalali, type JalaliDate } from "./jalali";
-import { isFriday as isJalaliFriday } from "./holidays";
+import { isFriday as isJalaliFriday, isThursday as isJalaliThursday } from "./holidays";
 
 export type AttendanceSessionKey = "MORNING" | "EVENING";
 
@@ -236,6 +236,15 @@ export function isTodayWorkingDay(now: Date, settings: AttendanceSettings): bool
   return isWorkingDay(getTodayJalali(now), settings);
 }
 
+/**
+ * آیا این شیفت دل‌بخواه است؟ فقط عصر پنجشنبه — قانون بهزاد (۵ آذر ۱۴۰۵):
+ * اگر مشاور عصر پنجشنبه نیاید غایب حساب نمی‌شود؛ اگر بیاید ورود/خروج
+ * عادی ثبت می‌شود. صبح پنجشنبه مثل بقیهٔ روزها اجباری است.
+ */
+export function isOptionalSession(j: JalaliDate, session: AttendanceSessionKey): boolean {
+  return session === "EVENING" && isJalaliThursday(j.jy, j.jm, j.jd);
+}
+
 export const SESSION_LABELS: Record<AttendanceSessionKey, string> = {
   MORNING: "صبح",
   EVENING: "عصر",
@@ -246,7 +255,7 @@ export function sessionLabel(s: AttendanceSessionKey): string {
 }
 
 /** برچسب وضعیت یک شیفت در جدول امروز. */
-export type SessionStatus = "done" | "working" | "late" | "absent" | "open" | "upcoming" | "off" | "leave";
+export type SessionStatus = "done" | "working" | "late" | "absent" | "open" | "upcoming" | "off" | "leave" | "optional";
 
 export const SESSION_STATUS_LABELS: Record<SessionStatus, string> = {
   done: "حاضر",
@@ -257,4 +266,5 @@ export const SESSION_STATUS_LABELS: Record<SessionStatus, string> = {
   upcoming: "شروع نشده",
   off: "تعطیل",
   leave: "مرخصی",
+  optional: "دل‌بخواه",
 };

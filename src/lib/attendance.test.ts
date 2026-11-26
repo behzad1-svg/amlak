@@ -6,6 +6,7 @@ import {
   haversineMeters,
   isCheckoutMissed,
   isCheckoutOpen,
+  isOptionalSession,
   isWorkingDay,
   leaveCoversSession,
   parseHHMM,
@@ -166,6 +167,24 @@ describe("isWorkingDay", () => {
   });
   it("Friday is working when fridayOff is false", () => {
     expect(isWorkingDay({ jy: 1405, jm: 9, jd: 6 }, { ...SETTINGS, fridayOff: false })).toBe(true);
+  });
+});
+
+describe("isOptionalSession — عصر پنجشنبه دل‌بخواه (قانون بهزاد، ۵ آذر ۱۴۰۵)", () => {
+  it("Thursday 5 Azar 1405: evening is optional, morning is not", () => {
+    // ۵ آذر ۱۴۰۵ پنجشنبه است (۲۶ نوامبر ۲۰۲۶)
+    expect(isOptionalSession({ jy: 1405, jm: 9, jd: 5 }, "EVENING")).toBe(true);
+    expect(isOptionalSession({ jy: 1405, jm: 9, jd: 5 }, "MORNING")).toBe(false);
+  });
+  it("the next Thursday 12 Azar 1405: evening is optional", () => {
+    expect(isOptionalSession({ jy: 1405, jm: 9, jd: 12 }, "EVENING")).toBe(true);
+    expect(isOptionalSession({ jy: 1405, jm: 9, jd: 12 }, "MORNING")).toBe(false);
+  });
+  it("Friday 6 Azar and Saturday 7 Azar: no session is optional", () => {
+    expect(isOptionalSession({ jy: 1405, jm: 9, jd: 6 }, "EVENING")).toBe(false);
+    expect(isOptionalSession({ jy: 1405, jm: 9, jd: 6 }, "MORNING")).toBe(false);
+    expect(isOptionalSession({ jy: 1405, jm: 9, jd: 7 }, "EVENING")).toBe(false);
+    expect(isOptionalSession({ jy: 1405, jm: 9, jd: 7 }, "MORNING")).toBe(false);
   });
 });
 
