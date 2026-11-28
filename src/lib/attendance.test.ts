@@ -6,6 +6,7 @@ import {
   haversineMeters,
   isCheckoutMissed,
   isCheckoutOpen,
+  isOfficeIp,
   isOptionalSession,
   isWorkingDay,
   leaveCoversSession,
@@ -20,6 +21,7 @@ const SETTINGS: AttendanceSettings = {
   officeLat: 28.96246,
   officeLng: 50.838971,
   radiusM: 100,
+  officeIp: "2.183.32.111",
   morningStart: "09:00",
   morningEnd: "13:00",
   eveningStart: "17:00",
@@ -77,6 +79,34 @@ describe("distanceToOffice", () => {
     const r = distanceToOffice(35.68, 51.41, SETTINGS);
     expect(r.outside).toBe(true);
     expect(r.distanceM).toBeGreaterThan(700_000);
+  });
+});
+
+describe("isOfficeIp — ورود با وای‌فای دفتر (آی‌پی استاتیک)", () => {
+  it("exact match is in-office", () => {
+    expect(isOfficeIp("2.183.32.111", SETTINGS)).toBe(true);
+  });
+  it("a different IP is not in-office", () => {
+    expect(isOfficeIp("2.183.32.112", SETTINGS)).toBe(false);
+    expect(isOfficeIp("185.10.20.30", SETTINGS)).toBe(false);
+  });
+  it("no stored office IP means GPS only — never in-office by IP", () => {
+    expect(isOfficeIp("2.183.32.111", { ...SETTINGS, officeIp: null })).toBe(false);
+    expect(isOfficeIp("2.183.32.111", { ...SETTINGS, officeIp: "" })).toBe(false);
+  });
+  it("empty or unknown client IP never counts as in-office", () => {
+    expect(isOfficeIp(null, SETTINGS)).toBe(false);
+    expect(isOfficeIp(undefined, SETTINGS)).toBe(false);
+    expect(isOfficeIp("", SETTINGS)).toBe(false);
+    expect(isOfficeIp("   ", SETTINGS)).toBe(false);
+  });
+  it("surrounding whitespace is ignored", () => {
+    expect(isOfficeIp("  2.183.32.111  ", SETTINGS)).toBe(true);
+  });
+  it("IPv6 hex case does not matter", () => {
+    const v6 = { ...SETTINGS, officeIp: "2001:DB8::1" };
+    expect(isOfficeIp("2001:db8::1", v6)).toBe(true);
+    expect(isOfficeIp("2001:db8::2", v6)).toBe(false);
   });
 });
 

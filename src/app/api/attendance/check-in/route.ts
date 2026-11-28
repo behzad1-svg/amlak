@@ -1,13 +1,15 @@
-// ثبت ورود — فقط با GPS داخل شعاع دفتر. تاخیر خودکار حساب می‌شود و
-// دلیلش را مشاور خودش در یک فیلد آزاد می‌نویسد («دلیل تاخیر:») —
-// هیچ گزینهٔ آماده‌ای نیست.
+// ثبت ورود — با GPS داخل شعاع دفتر، یا با وای‌فای دفتر (آی‌پی استاتیک دفتر)
+// وقتی GPS گوشی خطا می‌دهد. تاخیر خودکار حساب می‌شود و دلیلش را مشاور
+// خودش در یک فیلد آزاد می‌نویسد («دلیل تاخیر:») — هیچ گزینهٔ آماده‌ای نیست.
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { getSessionFromCookies } from "@/lib/auth";
 import { getAttendanceSettings } from "@/lib/settings";
 import { getTodayJalali } from "@/lib/jalali";
+import { clientIpFromHeaders } from "@/lib/clientIp";
 import {
   haversineMeters,
+  isOfficeIp,
   isWorkingDay,
   LATE_REASON_MAX,
   leaveCoversSession,
@@ -18,9 +20,11 @@ import {
 import { toFaDigits } from "@/lib/utils";
 import { z } from "zod";
 
+// مختصات اختیاری است: وقتی GPS در دسترس نیست، ورود فقط با آی‌پی دفتر
+// (وای‌فای دفتر) هم ممکن است — سرور آی‌پی را خودش می‌خواند.
 const checkInSchema = z.object({
-  lat: z.number({ error: "موقعیت معتبر نیست" }).min(-90, "موقعیت معتبر نیست").max(90, "موقعیت معتبر نیست"),
-  lng: z.number({ error: "موقعیت معتبر نیست" }).min(-180, "موقعیت معتبر نیست").max(180, "موقعیت معتبر نیست"),
+  lat: z.number({ error: "موقعیت معتبر نیست" }).min(-90, "موقعیت معتبر نیست").max(90, "موقعیت معتبر نیست").optional(),
+  lng: z.number({ error: "موقعیت معتبر نیست" }).min(-180, "موقعیت معتبر نیست").max(180, "موقعیت معتبر نیست").optional(),
   reason: z.string().trim().max(LATE_REASON_MAX, "دلیل تاخیر خیلی طولانی است").optional(),
 });
 
@@ -39,7 +43,7 @@ export async function POST(req: NextRequest) {
   if (!parsed.success) {
     return NextResponse.json({ error: parsed.error.issues[0].message }, { status: 400 });
   }
-  const { lat, lng, reason } = parsed.data;
+  const { reason } = parsed.data;
 
   const resolved = resolveSession(now, settings);
   if (!resolved.session) {
@@ -47,15 +51,34 @@ export async function POST(req: NextRequest) {
   }
   const { session: sessionKey, lateMinutes } = resolved;
 
-  const distance = Math.round(haversineMeters(lat, lng, settings.officeLat, settings.officeLng));
-  if (distance > settings.radiusM) {
-    return NextResponse.json(
-      {
-        error: `خارج از محدوده دفتر هستی — فاصله‌ات ${toFaDigits(String(distance))} متر است (حد مجاز ${toFaDigits(String(settings.radiusM))} متر).`,
-        distanceM: distance,
-      },
-      { status: 400 }
-    );
+  // وای‌فای دفتر (آی‌پی استاتیک) یعنی داخل دفتر — بدون نیاز به GPS؛
+  // در غیر این صورت GPS باید داخل شعاع باشد. ورود صبح هم با آی‌پی دفتر
+  // قبول است (همان سخت‌گیری «حتماً داخل دفتر»).
+  const viaOfficeIp = isOfficeIp(clientIpFromHeaders(req.headers), settings);
+  let distance: number;
+  let lat: number | null = null;
+  let lng: number | null = null;
+  if (viaOfficeIp) {
+    distance = 0;
+  } else {
+    if (typeof parsed.data.lat !== "number" || typeof parsed.data.lng !== "number") {
+      return NextResponse.json(
+        { error: "موقعیت در دسترس نیست — GPS گوشی را روشن کنید، یا به وای‌فای دفتر وصل شوید و دوباره تلاش کنید." },
+        { status: 400 }
+      );
+    }
+    lat = parsed.data.lat;
+    lng = parsed.data.lng;
+    distance = Math.round(haversineMeters(lat, lng, settings.officeLat, settings.officeLng));
+    if (distance > settings.radiusM) {
+      return NextResponse.json(
+        {
+          error: `خارج از محدوده دفتر هستی — فاصله‌ات ${toFaDigits(String(distance))} متر است (حد مجاز ${toFaDigits(String(settings.radiusM))} متر).`,
+          distanceM: distance,
+        },
+        { status: 400 }
+      );
+    }
   }
 
   const date = tehranDateOnly(now);

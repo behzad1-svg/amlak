@@ -59,6 +59,7 @@ interface AttendanceSettings {
   officeLat: number;
   officeLng: number;
   radiusM: number;
+  officeIp: string | null;
   morningStart: string;
   morningEnd: string;
   eveningStart: string;
@@ -151,6 +152,7 @@ export default function AttendancePage() {
   const [err, setErr] = useState("");
   const [saving, setSaving] = useState(false);
   const [locating, setLocating] = useState(false);
+  const [registeringIp, setRegisteringIp] = useState(false);
   const [showSettings, setShowSettings] = useState(false);
 
   const loadToday = useCallback(async () => {
@@ -227,6 +229,20 @@ export default function AttendancePage() {
       },
       { enableHighAccuracy: true, timeout: 15000, maximumAge: 0 }
     );
+  }
+
+  async function registerOfficeIp() {
+    setRegisteringIp(true);
+    setErr("");
+    try {
+      const d = await apiJson<{ officeIp: string }>("/api/attendance/settings/register-office-ip", { method: "POST" });
+      setSettingsDraft((draft) => (draft ? { ...draft, officeIp: d.officeIp } : draft));
+      flash(`آی‌پی فعلی (${d.officeIp}) گرفته شد — برای اعمال، ذخیره را بزنید.`);
+    } catch (e) {
+      flash("", errorMessage(e));
+    } finally {
+      setRegisteringIp(false);
+    }
   }
 
   async function saveSettings() {
@@ -404,6 +420,16 @@ export default function AttendancePage() {
               <div className="flex items-end">
                 <Button variant="outline" disabled={locating} onClick={() => void captureOfficeLocation()}>
                   {locating ? "در حال گرفتن موقعیت…" : "ثبت موقعیت فعلی به‌عنوان دفتر"}
+                </Button>
+              </div>
+              <div>
+                <Label htmlFor="att-ip">آی‌پی استاتیک دفتر</Label>
+                <Input id="att-ip" dir="ltr" inputMode="decimal" value={settingsDraft.officeIp ?? ""} onChange={(e) => setSettingsDraft({ ...settingsDraft, officeIp: e.target.value || null })} placeholder="مثلا 2.183.32.111" />
+                <p className="mt-1 text-[11px] text-[var(--ink-3)]">ورود با وای‌فای دفتر بدون GPS؛ خالی یعنی ورود با IP خاموش است.</p>
+              </div>
+              <div className="flex items-end">
+                <Button variant="outline" disabled={registeringIp} onClick={() => void registerOfficeIp()}>
+                  {registeringIp ? "در حال گرفتن آی‌پی…" : "ثبت IP فعلی"}
                 </Button>
               </div>
               <div>

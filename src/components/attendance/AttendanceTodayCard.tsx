@@ -1,5 +1,6 @@
 // کارت «حضور امروز» در داشبورد — برای همهٔ کاربران واردشده.
-// ورود/خروج با GPS گوشی ثبت می‌شود؛ بدون عکس و بدون تشخیص چهره.
+// ورود/خروج با GPS گوشی ثبت می‌شود؛ اگر GPS در دسترس نباشد، ورود با
+// وای‌فای دفتر (آی‌پی استاتیک دفتر) هم ثبت می‌شود. بدون عکس و بدون تشخیص چهره.
 // اگر ورود دیر باشد، یک فیلد آزاد «دلیل تاخیر:» نشان داده می‌شود و
 // مشاور دلیلش را خودش می‌نویسد — هیچ گزینهٔ آماده‌ای نیست.
 "use client";
@@ -176,13 +177,22 @@ export function AttendanceTodayCard() {
     setBusy(sessionKey);
     setErr("");
     try {
-      const pos = await getPosition();
+      // اول GPS؛ اگر موقعیت در دسترس نبود، بدون مختصات می‌فرستیم و سرور
+      // از روی آی‌پی دفتر (وای‌فای دفتر) بررسی می‌کند.
+      let lat: number | undefined;
+      let lng: number | undefined;
+      try {
+        const pos = await getPosition();
+        lat = pos.coords.latitude;
+        lng = pos.coords.longitude;
+      } catch {
+        // بدون GPS ادامه بده — سرور آی‌پی را چک می‌کند
+      }
       await apiJson("/api/attendance/check-in", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          lat: pos.coords.latitude,
-          lng: pos.coords.longitude,
+          ...(lat !== undefined && lng !== undefined ? { lat, lng } : {}),
           reason: reasonText.trim() || undefined,
         }),
       });
@@ -413,7 +423,7 @@ export function AttendanceTodayCard() {
         {msg && <p className="text-[12.5px] font-medium text-[var(--sea)]">{msg}</p>}
         {err && <p className="text-[12.5px] font-medium text-red-700">{err}</p>}
         <p className="text-[11px] text-[var(--ink-3)]">
-          ورود فقط داخل شعاع {toFaDigits(String(data.settings.radiusM))} متری دفتر ثبت می‌شود؛ موقعیت گوشی باید روشن باشد.
+          ورود فقط داخل شعاع {toFaDigits(String(data.settings.radiusM))} متری دفتر ثبت می‌شود؛ اگر به وای‌فای دفتر وصل باشید، ورود حتی بدون GPS هم ثبت می‌شود.
         </p>
 
         {/* ثبت مرخصی — بدون تایید مدیر */}

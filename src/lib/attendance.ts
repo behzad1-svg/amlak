@@ -10,6 +10,8 @@ export interface AttendanceSettings {
   officeLat: number;
   officeLng: number;
   radiusM: number;
+  /** آی‌پی استاتیک دفتر — ورود با وای‌فای دفتر بدون GPS؛ null یعنی ورود با IP خاموش است. */
+  officeIp: string | null;
   morningStart: string; // "HH:MM"
   morningEnd: string;
   eveningStart: string;
@@ -112,6 +114,19 @@ export function distanceToOffice(
 ): { distanceM: number; outside: boolean } {
   const distanceM = Math.round(haversineMeters(lat, lng, settings.officeLat, settings.officeLng));
   return { distanceM, outside: distanceM > settings.radiusM };
+}
+
+/**
+ * آیا این درخواست از وای‌فای دفتر آمده است؟ تطبیق دقیق با آی‌پی استاتیک
+ * دفتر — آی‌پی نامشخص، خالی یا ذخیره‌نشده هرگز «داخل دفتر» حساب نمی‌شود.
+ * (مقایسه بدون حساسیت به بزرگی/کوچکی حروف، برای IPv6.)
+ */
+export function isOfficeIp(clientIp: string | null | undefined, settings: AttendanceSettings): boolean {
+  if (!clientIp || !settings.officeIp) return false;
+  const a = clientIp.trim().toLowerCase();
+  const b = settings.officeIp.trim().toLowerCase();
+  if (!a || !b) return false;
+  return a === b;
 }
 
 /** اجزای تاریخ و ساعت تهران برای یک لحظه: تاریخ میلادی، ساعت و دقیقه، نام روز هفته. */

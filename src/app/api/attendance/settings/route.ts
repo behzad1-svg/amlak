@@ -1,4 +1,5 @@
 // تنظیمات حضور و غیاب — خواندن برای همهٔ کاربران واردشده، تغییر فقط مدیر.
+import { isIP } from "node:net";
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { getSessionFromCookies } from "@/lib/auth";
@@ -15,6 +16,8 @@ const settingsSchema = z
     officeLat: z.number().min(-90, "عرض جغرافیایی معتبر نیست").max(90, "عرض جغرافیایی معتبر نیست").optional(),
     officeLng: z.number().min(-180, "طول جغرافیایی معتبر نیست").max(180, "طول جغرافیایی معتبر نیست").optional(),
     radiusM: z.number().int("شعاع باید عدد صحیح باشد").min(10, "شعاع حداقل ۱۰ متر است").max(2000, "شعاع حداکثر ۲۰۰۰ متر است").optional(),
+    // آی‌پی استاتیک دفتر — رشتهٔ خالی یا null یعنی ورود با IP خاموش است.
+    officeIp: z.string().trim().max(45, "آی‌پی معتبر نیست").nullable().optional(),
     morningStart: timeField.optional(),
     morningEnd: timeField.optional(),
     eveningStart: timeField.optional(),
@@ -51,8 +54,16 @@ export async function PATCH(req: NextRequest) {
   if (!parsed.success) {
     return NextResponse.json({ error: parsed.error.issues[0].message }, { status: 400 });
   }
+  // آی‌پی دفتر را جداگانه اعتبارسنجی کن: خالی یعنی خاموش، غیرخالی باید IP معتبر باشد.
+  let officeIp: string | null | undefined;
+  if (parsed.data.officeIp !== undefined) {
+    if (parsed.data.officeIp === null || parsed.data.officeIp === "") officeIp = null;
+    else if (isIP(parsed.data.officeIp) === 0) {
+      return NextResponse.json({ error: "آی‌پی دفتر معتبر نیست." }, { status: 400 });
+    } else officeIp = parsed.data.officeIp;
+  }
   const current = await getAttendanceSettings();
-  const merged = { ...current, ...parsed.data };
+  const merged = { ...current, ...parsed.data, ...(officeIp !== undefined ? { officeIp } : {}) };
   // اعتبارسنجی ترکیب نهایی (مثلاً شروع صبح جدید با پایان قدیمی)
   if (parseHHMM(merged.morningEnd)! <= parseHHMM(merged.morningStart)!) {
     return NextResponse.json({ error: "پایان شیفت صبح باید بعد از شروع آن باشد." }, { status: 400 });

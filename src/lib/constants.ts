@@ -34,6 +34,9 @@ export const DEFAULT_ATTENDANCE_SETTINGS = {
   officeLat: 28.96246,
   officeLng: 50.838971,
   radiusM: 100,
+  // آی‌پی استاتیک دفتر در تنظیمات ذخیره‌شده (AppSetting) می‌نشیند، نه اینجا؛
+  // null یعنی ورود با IP خاموش است تا وقتی مدیر آن را ثبت کند.
+  officeIp: null,
   morningStart: "09:00",
   morningEnd: "13:00",
   eveningStart: "17:00",

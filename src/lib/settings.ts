@@ -1,3 +1,4 @@
+import { isIP } from "node:net";
 import { prisma } from "./prisma";
 import { DEFAULT_BUSHEHR_REGIONS, DEFAULT_PROPERTY_TYPES, DEFAULT_CUSTOMER_TAGS, DEFAULT_TAX_RATE_PCT, DEFAULT_ATTENDANCE_SETTINGS } from "./constants";
 import { parseHHMM, type AttendanceSettings } from "./attendance";
@@ -48,6 +49,13 @@ export async function getAttendanceSettings(): Promise<AttendanceSettings> {
     if (typeof v.officeLat === "number" && Number.isFinite(v.officeLat) && Math.abs(v.officeLat) <= 90) d.officeLat = v.officeLat;
     if (typeof v.officeLng === "number" && Number.isFinite(v.officeLng) && Math.abs(v.officeLng) <= 180) d.officeLng = v.officeLng;
     if (typeof v.radiusM === "number" && Number.isFinite(v.radiusM) && v.radiusM >= 10 && v.radiusM <= 2000) d.radiusM = Math.round(v.radiusM);
+    // آی‌پی استاتیک دفتر — فقط یک IP معتبر (v4 یا v6)؛ خالی یعنی خاموش، نامعتبر یعنی پیش‌فرض.
+    if (v.officeIp === null) d.officeIp = null;
+    else if (typeof v.officeIp === "string") {
+      const ip = v.officeIp.trim();
+      if (ip === "") d.officeIp = null;
+      else if (isIP(ip) !== 0) d.officeIp = ip;
+    }
     if (typeof v.morningStart === "string" && parseHHMM(v.morningStart) !== null) d.morningStart = v.morningStart;
     if (typeof v.morningEnd === "string" && parseHHMM(v.morningEnd) !== null) d.morningEnd = v.morningEnd;
     if (typeof v.eveningStart === "string" && parseHHMM(v.eveningStart) !== null) d.eveningStart = v.eveningStart;
